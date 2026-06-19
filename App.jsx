@@ -1044,6 +1044,7 @@ function exportAccountPDF(acc, d) {
 }
 function AccountModal(props) {
   var acc = props.acc;
+  var onNav = props.onNav;
   var d = acc.data || {};
   var fit = (d.fit && d.fit.score) || acc.fit;
   var fc = FIT_CONFIG[fit] || FIT_CONFIG.ALTO;
@@ -1187,6 +1188,12 @@ function AccountModal(props) {
           )}
           {activeTab==="stakeholders"&&(
             <div>
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}>
+                <button onClick={function(){if(onNav){props.onClose();onNav("contacts");}}} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.25)"}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                  {"Ver contatos mapeados"}
+                </button>
+              </div>
               {enrichedContacts.length>0&&(
                 <div style={{marginBottom:20}}>
                   <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,color:"#a5b4fc",textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
@@ -1545,25 +1552,47 @@ function ContactsView(props) {
   var _st_addModal = useState(false); var addModal = _st_addModal[0]; var setAddModal = _st_addModal[1];
   var _st_newNome = useState(""); var newNome = _st_newNome[0]; var setNewNome = _st_newNome[1];
   var _st_newCargo = useState(""); var newCargo = _st_newCargo[0]; var setNewCargo = _st_newCargo[1];
-  var _st_newEmpresa = useState(""); var newEmpresa = _st_newEmpresa[0]; var setNewEmpresa = _st_newEmpresa[1];
   var _st_newEmail = useState(""); var newEmail = _st_newEmail[0]; var setNewEmail = _st_newEmail[1];
   var _st_newLinkedin = useState(""); var newLinkedin = _st_newLinkedin[0]; var setNewLinkedin = _st_newLinkedin[1];
   var _st_newDomain = useState(""); var newDomain = _st_newDomain[0]; var setNewDomain = _st_newDomain[1];
   var _st_saving = useState(false); var saving = _st_saving[0]; var setSaving = _st_saving[1];
+  // Account picker state
+  var _st_accMode = useState("existing"); var accMode = _st_accMode[0]; var setAccMode = _st_accMode[1];
+  var _st_selAccId = useState(""); var selAccId = _st_selAccId[0]; var setSelAccId = _st_selAccId[1];
+  var _st_newAccNome = useState(""); var newAccNome = _st_newAccNome[0]; var setNewAccNome = _st_newAccNome[1];
+  var _st_accSearch = useState(""); var accSearch = _st_accSearch[0]; var setAccSearch = _st_accSearch[1];
+
+  var accounts = props.accounts || [];
+
+  function resetModal() {
+    setNewNome(""); setNewCargo(""); setNewEmail(""); setNewLinkedin(""); setNewDomain("");
+    setAccMode("existing"); setSelAccId(""); setNewAccNome(""); setAccSearch("");
+    setAddModal(false);
+  }
 
   function toggleGroup(empresa) {
     setExpandedGroups(function(prev) { var n=Object.assign({},prev); n[empresa]=!prev[empresa]; return n; });
   }
 
   function addContactManual() {
-    if (!newNome && !newCargo) return;
+    var empresaNome = "";
+    if (accMode === "existing" && selAccId) {
+      var found = accounts.find(function(a){ return a.id === selAccId; });
+      empresaNome = found ? found.nome : "";
+    } else if (accMode === "new" && newAccNome.trim()) {
+      empresaNome = newAccNome.trim();
+      if (props.onCreateAccount) props.onCreateAccount(empresaNome);
+    }
     setSaving(true);
     var cid = "contact:" + Date.now() + "-" + Math.random().toString(36).slice(2,7);
-    var c = { id:cid, nome:newNome||(newCargo||""), cargo:newCargo||"", empresa:newEmpresa||"", email:newEmail||"", emailValidated:false, linkedin:newLinkedin||"", domain:newDomain||"", savedAt:Date.now() };
+    var c = {
+      id:cid, nome:newNome||(newCargo||"Contato"), cargo:newCargo||"",
+      empresa:empresaNome, email:newEmail||"", emailValidated:false,
+      linkedin:newLinkedin||"", domain:newDomain||"", savedAt:Date.now(), manual:true
+    };
     storageSet(cid, c).then(function() {
       setContacts(function(prev){ return [c].concat(prev); });
-      setAddModal(false);
-      setNewNome(""); setNewCargo(""); setNewEmpresa(""); setNewEmail(""); setNewLinkedin(""); setNewDomain("");
+      resetModal();
       showToastC("Contato adicionado!", "#10b981");
     }).finally(function(){ setSaving(false); });
   }
@@ -1642,14 +1671,57 @@ function ContactsView(props) {
         </div>
       </div>
       {addModal && (
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.32)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={function(e){if(e.target===e.currentTarget)setAddModal(false);}}>
-          <div style={{background:"#ffffff",backdropFilter:"blur(32px)",WebkitBackdropFilter:"blur(32px)",border:"1px solid #dde1e8",borderRadius:20,width:"100%",maxWidth:440,padding:"24px",boxShadow:"0 24px 80px rgba(15,23,42,.12)"}} onClick={function(e){e.stopPropagation();}}>
-            <div style={{fontSize:16,fontWeight:800,color:"#0f172a",marginBottom:16}}>{"Adicionar Contato"}</div>
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.32)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={function(e){if(e.target===e.currentTarget)resetModal();}}>
+          <div style={{background:"#ffffff",border:"1px solid #dde1e8",borderRadius:20,width:"100%",maxWidth:460,padding:"24px",boxShadow:"0 24px 80px rgba(15,23,42,.12)",maxHeight:"90vh",overflowY:"auto"}} onClick={function(e){e.stopPropagation();}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+              <div style={{fontSize:16,fontWeight:800,color:"#0f172a"}}>{"Novo Contato"}</div>
+              <button onClick={resetModal} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:20,fontWeight:300,lineHeight:1,padding:4}} onMouseEnter={function(e){e.currentTarget.style.color="#0f172a";}} onMouseLeave={function(e){e.currentTarget.style.color="#94a3b8";}}>{"✕"}</button>
+            </div>
+
+            {/* Account picker */}
+            <div style={{marginBottom:16,background:"#f8fafc",borderRadius:12,padding:"14px 16px",border:"1px solid #e8edf4"}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>{"Empresa / Conta"}</div>
+              <div style={{display:"flex",gap:6,marginBottom:12}}>
+                <button onClick={function(){setAccMode("existing");setNewAccNome("");}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid "+(accMode==="existing"?"#6366f1":"#e2e8f0"),background:accMode==="existing"?"rgba(99,102,241,.08)":"#fff",color:accMode==="existing"?"#4f46e5":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{"Conta existente"}</button>
+                <button onClick={function(){setAccMode("new");setSelAccId("");setAccSearch("");}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid "+(accMode==="new"?"#6366f1":"#e2e8f0"),background:accMode==="new"?"rgba(99,102,241,.08)":"#fff",color:accMode==="new"?"#4f46e5":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{"Criar conta nova"}</button>
+                <button onClick={function(){setAccMode("none");setSelAccId("");setNewAccNome("");setAccSearch("");}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid "+(accMode==="none"?"#6366f1":"#e2e8f0"),background:accMode==="none"?"rgba(99,102,241,.08)":"#fff",color:accMode==="none"?"#4f46e5":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{"Sem empresa"}</button>
+              </div>
+              {accMode==="existing" && (
+                <div>
+                  <input value={accSearch} onChange={function(e){setAccSearch(e.target.value);}} placeholder={"Buscar conta..."} style={{width:"100%",boxSizing:"border-box",background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#0f172a",fontFamily:"inherit",outline:"none",marginBottom:6}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+                  <div style={{maxHeight:140,overflowY:"auto",border:"1px solid #e8edf4",borderRadius:8,background:"#fff"}}>
+                    {(accSearch ? accounts.filter(function(a){return (a.nome||"").toLowerCase().includes(accSearch.toLowerCase());}) : accounts).map(function(a){
+                      var isSel = selAccId === a.id;
+                      return (
+                        <div key={a.id} onClick={function(){setSelAccId(a.id);}} style={{padding:"8px 12px",cursor:"pointer",background:isSel?"rgba(99,102,241,.08)":"transparent",borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"center",gap:8}} onMouseEnter={function(e){if(!isSel)e.currentTarget.style.background="#f8fafc";}} onMouseLeave={function(e){if(!isSel)e.currentTarget.style.background="transparent";}}>
+                          {isSel && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                          <span style={{fontSize:12,fontWeight:isSel?700:500,color:isSel?"#4f46e5":"#0f172a",flex:1}}>{a.nome}</span>
+                          {a.manualOnly && <span style={{fontSize:8,color:"#94a3b8",background:"#f1f5f9",borderRadius:4,padding:"1px 5px"}}>{"manual"}</span>}
+                          {a.mapped && <span style={{fontSize:8,color:"#4f46e5",background:"rgba(99,102,241,.08)",borderRadius:4,padding:"1px 5px"}}>{"mapeada"}</span>}
+                        </div>
+                      );
+                    })}
+                    {accounts.length === 0 && <div style={{padding:"12px",fontSize:11,color:"#94a3b8",textAlign:"center"}}>{"Nenhuma conta ainda. Use 'Criar conta nova'."}</div>}
+                  </div>
+                </div>
+              )}
+              {accMode==="new" && (
+                <div>
+                  <input value={newAccNome} onChange={function(e){setNewAccNome(e.target.value);}} placeholder={"Nome da empresa..."} style={{width:"100%",boxSizing:"border-box",background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#0f172a",fontFamily:"inherit",outline:"none"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.5}}>{"A conta será criada como manual. Ao fazer um Account Mapping futuro com esse nome, as informações serão somadas."}</div>
+                </div>
+              )}
+              {accMode==="none" && (
+                <div style={{fontSize:11,color:"#94a3b8"}}>{"Contato salvo sem vínculo com conta."}</div>
+              )}
+            </div>
+
+            {/* Contact fields — all optional */}
+            <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{"Dados do contato"}<span style={{color:"#94a3b8",fontWeight:400,marginLeft:6,textTransform:"none",letterSpacing:0}}>{"(todos opcionais)"}</span></div>
             {[
               {label:"Nome completo", val:newNome, set:setNewNome, ph:"Ex: Ana Lima"},
-              {label:"Cargo", val:newCargo, set:setNewCargo, ph:"Ex: VP de Operacoes"},
-              {label:"Empresa", val:newEmpresa, set:setNewEmpresa, ph:"Ex: Nubank"},
-              {label:"Dominio (melhora busca de e-mail)", val:newDomain, set:setNewDomain, ph:"Ex: nubank.com.br"},
+              {label:"Cargo", val:newCargo, set:setNewCargo, ph:"Ex: VP de Operações"},
+              {label:"Domínio (melhora busca de e-mail)", val:newDomain, set:setNewDomain, ph:"Ex: nubank.com.br"},
               {label:"E-mail", val:newEmail, set:setNewEmail, ph:"Ex: ana@nubank.com"},
               {label:"LinkedIn URL", val:newLinkedin, set:setNewLinkedin, ph:"Ex: linkedin.com/in/analima"},
             ].map(function(f) {
@@ -1660,9 +1732,9 @@ function ContactsView(props) {
                 </div>
               );
             })}
-            <div style={{display:"flex",gap:8,marginTop:16}}>
-              <button onClick={function(){setAddModal(false);}} style={{flex:1,background:"#fbfbfd",border:"1px solid #e6e9ef",color:"#52617a",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Cancelar"}</button>
-              <button onClick={addContactManual} disabled={saving||(!newNome&&!newCargo)} style={{flex:2,background:(saving||(!newNome&&!newCargo))?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:(saving||(!newNome&&!newCargo))?"#94a3b8":"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:600,cursor:(saving||(!newNome&&!newCargo))?"default":"pointer",fontFamily:"inherit"}}>
+            <div style={{display:"flex",gap:8,marginTop:18}}>
+              <button onClick={resetModal} style={{flex:1,background:"#fbfbfd",border:"1px solid #e6e9ef",color:"#52617a",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Cancelar"}</button>
+              <button onClick={addContactManual} disabled={saving} style={{flex:2,background:saving?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:saving?"#94a3b8":"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer",fontFamily:"inherit",transition:"all .2s"}}>
                 {saving ? "Salvando..." : "Salvar contato"}
               </button>
             </div>
@@ -2208,32 +2280,46 @@ function SearchView(props) {
     var nomeLower = nome.toLowerCase().trim();
     if (props.accounts) {
       var dup = props.accounts.find(function(a){ return a.nome && a.nome.toLowerCase().trim() === nomeLower; });
-      if (dup) { setDuplicate(dup); setInputVal(""); return; }
+      if (dup) {
+        // Conta criada manualmente: não bloqueia, faz o mapping e soma as infos
+        if (dup.manualOnly) {
+          if (props.onRequestCredit) {
+            props.onRequestCredit().then(function(ok){
+              if (!ok) return;
+              runSearch(nome, domain, dup);
+            });
+          } else {
+            runSearch(nome, domain, dup);
+          }
+          return;
+        }
+        // Conta já mapeada pelo sistema: avisa
+        setDuplicate(dup); setInputVal(""); return;
+      }
     }
-    // Consome 1 crédito ANTES de mapear. Se estourou o limite, bloqueia.
     if (props.onRequestCredit) {
       props.onRequestCredit().then(function(ok){
-        if (!ok) return; // limite atingido -> toast ja exibido pelo App
-        runSearch(nome, domain);
+        if (!ok) return;
+        runSearch(nome, domain, null);
       });
     } else {
-      runSearch(nome, domain);
+      runSearch(nome, domain, null);
     }
   }
-  function runSearch(nome, domain) {
+  function runSearch(nome, domain, existingAcc) {
     setLoading(true); setDone(null); setDoneAcc(null); setSearchError("");
     fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,context:""})})
       .then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.error||"HTTP "+r.status);}); return r.json();})
       .then(function(resp){
         var data = buildData(nome, resp.results);
-        props.onSave(nome, data, true, attachment, attachName, function(acc){ setDoneAcc(acc); });
+        props.onSave(nome, data, true, attachment, attachName, function(acc){ setDoneAcc(acc); }, existingAcc);
         setAttachment(null); setAttachName("");
         doEnrich(nome, domain);
         setLoading(false); setDone(nome); setInputVal("");
       })
       .catch(function(){
         var data = buildData(nome, null);
-        props.onSave(nome, data, false, attachment, attachName, function(acc){ setDoneAcc(acc); });
+        props.onSave(nome, data, false, attachment, attachName, function(acc){ setDoneAcc(acc); }, existingAcc);
         setAttachment(null); setAttachName("");
         doEnrich(nome, domain);
         setLoading(false); setDone(nome); setInputVal("");
@@ -3180,7 +3266,27 @@ export default function App() {
       });
     }).catch(function(){setLoading(false);});
   }, []);
-  function saveAccount(nome, data, liveMode, attachData, attachFileName, onCreated) {
+  function saveAccount(nome, data, liveMode, attachData, attachFileName, onCreated, existingAcc) {
+    // Se é uma conta manual sendo mapeada pela primeira vez — atualiza em vez de criar
+    if (existingAcc && existingAcc.manualOnly) {
+      var merged = Object.assign({}, existingAcc, {
+        setor: (data.empresa&&data.empresa.setor) || existingAcc.setor || "Empresa",
+        fit:   (data.fit&&data.fit.score) || existingAcc.fit || "ALTO",
+        tier:  (data.estratégia&&data.estratégia.tier) || existingAcc.tier || "Tier 2",
+        mapped: true,
+        manualOnly: false,
+        liveMode: liveMode||false,
+        mappedAt: Date.now(),
+        data: data,
+        attachData: attachData||existingAcc.attachData||null,
+        attachFileName: attachFileName||existingAcc.attachFileName||""
+      });
+      storageSet(existingAcc.id, merged).then(function() {
+        setAccounts(function(prev){ return prev.map(function(a){ return a.id===existingAcc.id ? merged : a; }); });
+        if (onCreated) onCreated(merged);
+      });
+      return;
+    }
     var id = "acc:" + Date.now() + "-" + Math.random().toString(36).slice(2,7);
     var acc = { id:id, nome:nome, setor:(data.empresa&&data.empresa.setor)||"Empresa", fit:(data.fit&&data.fit.score)||"ALTO", tier:(data.estratégia&&data.estratégia.tier)||"Tier 2", status:"prospecting", mapped:true, liveMode:liveMode||false, savedAt:Date.now(), data:data, attachData:attachData||null, attachFileName:attachFileName||"" };
     storageSet(id, acc).then(function() {
@@ -3415,7 +3521,12 @@ export default function App() {
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts}/>}
               {nav==="biblioteca" && <BibliotecaView showToast={showToast} onCountChange={setSeqCount} onOpenSeq={setOpenSeq}/>}
-              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact}/>}
+              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} onCreateAccount={function(nome){
+                var id="acc:"+Date.now()+"-"+Math.random().toString(36).slice(2,7);
+                var acc={id:id,nome:nome,setor:"Criada manualmente",fit:"-",tier:"-",status:"prospecting",mapped:false,manualOnly:true,savedAt:Date.now(),data:null};
+                storageSet(id,acc).then(function(){setAccounts(function(prev){return [acc].concat(prev);});});
+                return acc;
+              }}/>}
               {nav==="integracoes" && <IntegrationsView/>}
               {nav==="pipeline"  && (
                 <div>
@@ -3428,7 +3539,7 @@ export default function App() {
           )}
         </div>
       </div>
-      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus}/>}
+      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav}/>}
       {openSeq && <SequenceModal seq={openSeq} onClose={function(){setOpenSeq(null);}}/>}
       {toast && (
         <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:340,display:"flex",alignItems:"center",gap:10}}>
