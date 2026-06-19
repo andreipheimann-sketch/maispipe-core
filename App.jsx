@@ -1140,8 +1140,8 @@ function AccountModal(props) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.32)",zIndex:200,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px 16px",overflowY:"auto",backdropFilter:"blur(10px)"}}>
       <div className="modal-box" style={{background:"rgba(255,255,255,.99)",borderRadius:24,width:"100%",maxWidth:820,boxShadow:"0 32px 100px rgba(15,23,42,.3)"}}>
-        <div style={{padding:"22px 28px 0",borderBottom:"1px solid #f1f5f9"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16}}>
+        <div style={{padding:"22px 28px 0",borderBottom:"1px solid #f1f5f9",position:"relative"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16,paddingRight:32}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
                 <div style={{fontSize:21,fontWeight:800,color:"#0f172a",lineHeight:1.2}}>{acc.nome}</div>
@@ -1164,8 +1164,8 @@ function AccountModal(props) {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                   {"PDF"}
                 </button>
-                <button onClick={props.onClose} style={{background:"#fbfbfd",border:"1px solid #e6e9ef",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"#52617a",fontSize:12,fontWeight:600,fontFamily:"inherit"}}>{"Fechar"}</button>
               </div>
+              <button onClick={props.onClose} title="Fechar" style={{position:"absolute",top:16,right:20,background:"none",border:"none",cursor:"pointer",color:"#94a3b8",padding:4,lineHeight:1,fontSize:20,fontWeight:300,fontFamily:"inherit"}} onMouseEnter={function(e){e.currentTarget.style.color="#0f172a";}} onMouseLeave={function(e){e.currentTarget.style.color="#94a3b8";}}>{"✕"}</button>
             </div>
           </div>
           <div className="modal-tabs" style={{display:"flex",gap:0,overflowX:"auto"}}>
@@ -2109,6 +2109,7 @@ function SearchView(props) {
   var _st_inputVal = useState(""); var inputVal = _st_inputVal[0]; var setInputVal = _st_inputVal[1];
   var _st_loading = useState(false); var loading = _st_loading[0]; var setLoading = _st_loading[1];
   var _st_done = useState(null); var done = _st_done[0]; var setDone = _st_done[1];
+  var _st_doneAcc = useState(null); var doneAcc = _st_doneAcc[0]; var setDoneAcc = _st_doneAcc[1];
   var _st_searchError = useState(""); var searchError = _st_searchError[0]; var setSearchError = _st_searchError[1];
   var _st_duplicate = useState(null); var duplicate = _st_duplicate[0]; var setDuplicate = _st_duplicate[1];
   var _st_attachment = useState(null); var attachment = _st_attachment[0]; var setAttachment = _st_attachment[1];
@@ -2220,19 +2221,19 @@ function SearchView(props) {
     }
   }
   function runSearch(nome, domain) {
-    setLoading(true); setDone(null); setSearchError("");
+    setLoading(true); setDone(null); setDoneAcc(null); setSearchError("");
     fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,context:""})})
       .then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.error||"HTTP "+r.status);}); return r.json();})
       .then(function(resp){
         var data = buildData(nome, resp.results);
-        props.onSave(nome, data, true, attachment, attachName);
+        props.onSave(nome, data, true, attachment, attachName, function(acc){ setDoneAcc(acc); });
         setAttachment(null); setAttachName("");
         doEnrich(nome, domain);
         setLoading(false); setDone(nome); setInputVal("");
       })
       .catch(function(){
         var data = buildData(nome, null);
-        props.onSave(nome, data, false, attachment, attachName);
+        props.onSave(nome, data, false, attachment, attachName, function(acc){ setDoneAcc(acc); });
         setAttachment(null); setAttachName("");
         doEnrich(nome, domain);
         setLoading(false); setDone(nome); setInputVal("");
@@ -2397,9 +2398,21 @@ function SearchView(props) {
           </div>
         )}
         {done && (
-          <div style={{marginTop:14,display:"flex",alignItems:"center",gap:10,background:"rgba(99,102,241,.1)",border:"1px solid rgba(52,211,153,.35)",borderRadius:12,padding:"12px 16px",fontSize:13,color:"#4f46e5",fontWeight:600}}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            {done + " mapeado e salvo em Contas!"}
+          <div style={{marginTop:14,background:"rgba(99,102,241,.08)",border:"1px solid rgba(52,211,153,.35)",borderRadius:14,padding:"14px 18px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span style={{fontSize:13,color:"#0f172a",fontWeight:700}}>{done + " mapeado e salvo em Contas!"}</span>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {doneAcc && (
+                <button onClick={function(){ if(props.onOpenAccount) props.onOpenAccount(doneAcc); }} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
+                  {"Ver mapeamento"}
+                </button>
+              )}
+              <button onClick={function(){ if(props.onNav) props.onNav("contacts"); }} style={{background:"#fff",color:"#4f46e5",border:"1.5px solid rgba(99,102,241,.4)",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                {"Ver contatos mapeados"}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -3167,11 +3180,12 @@ export default function App() {
       });
     }).catch(function(){setLoading(false);});
   }, []);
-  function saveAccount(nome, data, liveMode, attachData, attachFileName) {
+  function saveAccount(nome, data, liveMode, attachData, attachFileName, onCreated) {
     var id = "acc:" + Date.now() + "-" + Math.random().toString(36).slice(2,7);
     var acc = { id:id, nome:nome, setor:(data.empresa&&data.empresa.setor)||"Empresa", fit:(data.fit&&data.fit.score)||"ALTO", tier:(data.estratégia&&data.estratégia.tier)||"Tier 2", status:"prospecting", mapped:true, liveMode:liveMode||false, savedAt:Date.now(), data:data, attachData:attachData||null, attachFileName:attachFileName||"" };
     storageSet(id, acc).then(function() {
       setAccounts(function(prev){return [acc].concat(prev);});
+      if (onCreated) onCreated(acc);
     });
     var enriched = (data.enriched && data.enriched.contacts && Array.isArray(data.enriched.contacts)) ? data.enriched.contacts : [];
     enriched.forEach(function(s) {
@@ -3396,7 +3410,7 @@ export default function App() {
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav}/>}
-              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan}/>}
+              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts}/>}
