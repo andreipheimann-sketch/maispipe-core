@@ -1,33 +1,34 @@
 // api/search.js — Vercel serverless
-// Calls Tavily server-side (solves CORS) with PT-BR filtering.
-// The Tavily `answer` field comes in English regardless of language param,
-// so we build our own PT-BR summary from Brazilian sources.
+// Busca informacoes institucionais da empresa via Tavily.
+// Foca em perfil da empresa, nao em noticias recentes.
 
 function isPtBr(text) {
   if (!text) return false;
-  // Simple heuristic: common Portuguese words
-  return /\b(do|da|de|em|com|que|para|por|são|está|foi|tem|uma|seu|sua|não|mais|anos?|bilhões?|milhões?|empresa|banco|mercado|clientes?|produtos?|serviços?|fundad|receita|faturamento)\b/i.test(text);
+  return /\b(do|da|de|em|com|que|para|por|são|está|foi|tem|uma|seu|sua|não|mais|anos?|bilhões?|milhões?|empresa|banco|mercado|clientes?|produtos?|serviços?|fundad|receita|faturamento|sede|brasil|brasileira)\b/i.test(text);
 }
 
 function cleanText(text) {
   if (!text) return "";
-  // Remove excess whitespace
   return text.replace(/\s+/g, " ").trim();
 }
 
+// Descarta snippets que sao claramente noticias/releases/eventos
+function isNewsSnippet(text) {
+  if (!text) return false;
+  return /\b(lança|anuncia|divulga|reporta|apontam|aponta|cresce|queda|alta de \d|baixa de \d|2024|2025|2026|janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|Dia das Mães|Black Friday|Natal|release|comunicado|IR\b|RI\b)\b/i.test(text);
+}
+
 function extractPtContent(results) {
-  // Prefer .com.br and known PT-BR domains
   const ptDomains = /\.com\.br|\.org\.br|\.net\.br|folha|globo|estadao|valor|exame|infomoney|startups|canaltech|tecmundo|segs|neofeed|novatech|convergencia|gazetadopovo|correio|uol\.com|terra\.com|r7\.com|g1\.globo/i;
   const ptSources = results.filter(s => ptDomains.test(s.url || ""));
   const allSources = ptSources.length >= 2 ? ptSources : results;
 
-  // Build a PT-BR summary from source content
   const snippets = allSources
-    .map(s => cleanText(s.content || "").slice(0, 300))
-    .filter(s => isPtBr(s))
-    .slice(0, 3);
+    .map(s => cleanText(s.content || "").slice(0, 400))
+    .filter(s => isPtBr(s) && !isNewsSnippet(s))
+    .slice(0, 4);
 
-  return snippets.join(" ").slice(0, 600) || null;
+  return snippets.join(" ").slice(0, 800) || null;
 }
 
 export default async function handler(req, res) {
@@ -42,13 +43,19 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: "TAVILY_API_KEY nao configurada no servidor." });
 
   try {
-    const { company, context } = req.body || {};
+    const { company, domain, context } = req.body || {};
     if (!company?.trim()) return res.status(400).json({ error: "Nome da empresa nao informado." });
 
+    // Queries focadas em perfil institucional, evitando noticias
     const queries = [
-      `${company} empresa Brasil noticias`,
-      `${company} faturamento funcionarios sede fundacao`,
-      `${company} diretoria CEO lideranca executivos`,
+      // 1. Perfil geral da empresa — sobre, missao, o que faz
+      domain
+        ? `site:${domain} sobre empresa historia missao`
+        : `"${company}" empresa Brasil sobre história fundação missão`,
+      // 2. Dados estruturais — porte, faturamento, colaboradores
+      `"${company}" Brasil faturamento receita colaboradores funcionarios sede fundacao`,
+      // 3. Liderança executiva brasileira
+      `"${company}" Brasil CEO CFO CTO diretoria executivos lideranca`,
     ];
 
     const results = [];
@@ -65,6 +72,13 @@ export default async function handler(req, res) {
           include_answer: true,
           language: "pt",
           country: "Brazil",
+          // Excluir dominios de noticias e RI para focar em conteudo institucional
+          exclude_domains: [
+            "ri.itau.com.br", "relacionamento.itau.com.br",
+            "infomoney.com.br", "valor.com.br", "estadao.com.br",
+            "folha.com.br", "globo.com", "g1.globo.com",
+            "exame.com", "startups.com.br",
+          ],
         }),
       });
 
@@ -81,16 +95,13 @@ export default async function handler(req, res) {
         url: s.url,
       }));
 
-      // Use PT-BR answer if available, otherwise build from PT-BR sources
       let answer = "";
-      if (isPtBr(rawAnswer)) {
+      if (isPtBr(rawAnswer) && !isNewsSnippet(rawAnswer)) {
         answer = rawAnswer;
       } else {
-        // Tavily answered in English — build from Brazilian sources instead
         const ptContent = extractPtContent(sources);
         answer = ptContent || "";
-        // If still empty, keep the English but flag it
-        if (!answer && rawAnswer) answer = rawAnswer;
+        if (!answer && rawAnswer && !isNewsSnippet(rawAnswer)) answer = rawAnswer;
       }
 
       results.push({ query: q, answer, sources });
