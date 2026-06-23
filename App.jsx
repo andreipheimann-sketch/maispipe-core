@@ -2773,6 +2773,20 @@ function SearchView(props) {
           </button>
         </div>
 
+        {/* Dica: busca por site quando o usuário digitou nome sem domínio */}
+        {inputVal.trim() && !isUrl(inputVal) && !/\.\w{2,}/.test(inputVal) && (
+          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"8px 12px",background:"rgba(99,102,241,.05)",border:"1px solid rgba(99,102,241,.15)",borderRadius:10}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style={{fontSize:11.5,color:"#475569",flex:1}}>{"Buscar pelo site da empresa traz resultados mais precisos."}</span>
+            <button onClick={function(){
+              var sugerido = inputVal.trim().toLowerCase().replace(/\s+/g,"")+".com.br";
+              setInputVal(sugerido);
+            }} style={{background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.25)",color:"#4f46e5",borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+              {"Tentar " + inputVal.trim().toLowerCase().replace(/\s+/g,"") + ".com.br"}
+            </button>
+          </div>
+        )}
+
         <div style={{marginTop:12,background:"#fbfbfd",border:"1.5px dashed #e6e9ef",borderRadius:12,padding:"13px 16px",cursor:"pointer",transition:"all .2s"}}
           onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.background="rgba(99,102,241,.12)";}}
           onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.background="#f1f3f6";}}
