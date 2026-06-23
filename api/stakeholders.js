@@ -116,8 +116,8 @@ export default async function handler(req, res) {
   // ── LAYER 3: Tavily — LinkedIn public profiles ──────────────────────────────
   if (tavilyKey) {
     const queries = [
-      `"${company}" ("CISO" OR "CTO" OR "CEO" OR "DPO" OR "Diretor de Segurança" OR "Head of Security") Brasil site:linkedin.com/in`,
-      `"${company}" (diretor OR head OR gerente OR liderança) segurança OR privacidade OR compliance OR tecnologia Brasil site:linkedin.com/in`,
+      `"${company}" (CEO OR CFO OR CTO OR CISO OR DPO OR "Diretor" OR "VP" OR "Head") site:linkedin.com/in`,
+      `"${company}" (diretor OR presidente OR vice-presidente OR gerente OR fundador OR "head of") site:linkedin.com/in`,
     ];
 
     // Extrai o cargo do titulo do LinkedIn ou, como fallback, do snippet.
@@ -177,7 +177,11 @@ export default async function handler(req, res) {
           const name = (titleParts[0] || "").trim();
           if (!name || name.length < 4 || name.toLowerCase() === company.toLowerCase()) continue;
           const snippet = (result.content || result.snippet || "");
-          if (!snippet.toLowerCase().includes(company.toLowerCase().split(" ")[0])) continue;
+          // Relaxed filter: check first word of company OR domain keyword
+          const companyWords = company.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+          const snippetLower = snippet.toLowerCase();
+          const matchesCompany = companyWords.some(w => snippetLower.includes(w));
+          if (!matchesCompany && !url.includes(company.toLowerCase().split(" ")[0])) continue;
           const role = extractRole(result.title, snippet, name, company);
           addContact({
             nome: name,
