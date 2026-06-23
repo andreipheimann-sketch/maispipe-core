@@ -656,7 +656,7 @@ function AccountCard(props) {
 
   // ── Estado MAPEADO (card completo original) ─────────────────────────────
   return (
-    <div style={{background:"rgba(255,255,255,.95)",border:"1.5px solid rgba(228,235,244,.8)",borderRadius:20,padding:"20px 22px",transition:"all .25s cubic-bezier(.22,1,.36,1)",position:"relative",boxShadow:"0 2px 12px rgba(15,23,42,.06)"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-5px)";e.currentTarget.style.boxShadow="0 16px 48px rgba(15,23,42,.08)";e.currentTarget.style.borderColor="rgba(99,102,241,.3)";}} onMouseLeave={function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 2px 12px rgba(15,23,42,.06)";e.currentTarget.style.borderColor="rgba(228,235,244,.8)";}}>
+    <div onClick={function(){props.onOpen(acc);}} style={{background:"rgba(255,255,255,.95)",border:"1.5px solid rgba(228,235,244,.8)",borderRadius:20,padding:"20px 22px",transition:"all .25s cubic-bezier(.22,1,.36,1)",position:"relative",boxShadow:"0 2px 12px rgba(15,23,42,.06)",cursor:"pointer"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-5px)";e.currentTarget.style.boxShadow="0 16px 48px rgba(15,23,42,.08)";e.currentTarget.style.borderColor="rgba(99,102,241,.3)";}} onMouseLeave={function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 2px 12px rgba(15,23,42,.06)";e.currentTarget.style.borderColor="rgba(228,235,244,.8)";}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:15,fontWeight:700,color:"#0f172a",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{acc.nome}</div>
@@ -691,8 +691,7 @@ function AccountCard(props) {
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <span style={{fontSize:10,color:"#64748b"}}>{fmtDate(acc.savedAt)}</span>
-          <button onClick={function(e){e.stopPropagation();props.onOpen(acc);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"5px 10px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Ver</button>
-          <button onClick={function(e){e.stopPropagation();props.onDelete(acc.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>x</button>
+          <button onClick={function(e){e.stopPropagation();props.onOpen(acc);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"5px 10px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Ver</button>          <button onClick={function(e){e.stopPropagation();props.onDelete(acc.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>x</button>
         </div>
       </div>
     </div>
@@ -1618,6 +1617,15 @@ function ContactsView(props) {
     });
   }
 
+  function deleteAllFromGroup(empresa, group) {
+    if (!window.confirm("Excluir todos os " + group.length + " contatos de " + empresa + "?")) return;
+    Promise.all(group.map(function(c){ return storageDel(c.id); })).then(function() {
+      var ids = new Set(group.map(function(c){ return c.id; }));
+      setContacts(function(prev){ return prev.filter(function(c){ return !ids.has(c.id); }); });
+      showToastC(group.length + " contatos removidos.", "#ef4444");
+    });
+  }
+
   // enrichProgress[contactId] = { hunter:"pending"|"found"|"miss"|"err", apollo:"...", snov:"..." }
   var _st_enrichProgress = useState({}); var enrichProgress = _st_enrichProgress[0]; var setEnrichProgress = _st_enrichProgress[1];
 
@@ -1849,6 +1857,7 @@ function ContactsView(props) {
                     <span style={{fontSize:14}}>{"🏢"}</span>
                     <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{empresa}</span>
                     <span style={{fontSize:10,color:"#64748b",marginLeft:"auto",marginRight:6}}>{group.length + " contato" + (group.length!==1?"s":"")}</span>
+                    <button onClick={function(e){e.stopPropagation();deleteAllFromGroup(empresa,group);}} title={"Excluir todos de "+empresa} style={{background:"none",border:"1px solid rgba(248,113,113,.3)",color:"#ef4444",borderRadius:6,padding:"2px 8px",fontSize:9,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0,marginRight:6}}>{"Excluir todos"}</button>
                     <span style={{fontSize:10,color:"#a5b4fc",fontWeight:700,transition:"transform .2s",display:"inline-block",transform:expandedGroups[empresa]?"rotate(0deg)":"rotate(-90deg)"}}>{"▼"}</span>
                   </div>
                   {expandedGroups[empresa] && <div style={{display:"flex",flexDirection:"column",gap:8,paddingLeft:8,paddingBottom:4,border:"1px solid rgba(99,102,241,.14)",borderTop:"none",borderRadius:"0 0 12px 12px",background:"#fafbff",padding:"10px 8px 10px 12px"}}>
@@ -4002,6 +4011,8 @@ export default function App() {
     "@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}",
     "@keyframes toastIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}",
     "@keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}",
+    "@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}",
+    "@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}",
     "::-webkit-scrollbar{width:8px;height:8px}",
     "::-webkit-scrollbar-track{background:transparent}",
     "::-webkit-scrollbar-thumb{background:#cbd2dc;border-radius:4px}",
