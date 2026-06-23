@@ -1068,6 +1068,26 @@ function StakeholdersFetchBtn(props) {
           });
           storageSet(acc.id, updated);
         });
+        // Save each contact to Contatos (with dedup)
+        storageList("contact:").then(function(ckeys){
+          Promise.all(ckeys.map(storageGet)).then(function(existing){
+            var existingSet = {};
+            existing.filter(Boolean).forEach(function(ec){
+              existingSet[((ec.nome||"")+"|"+(ec.empresa||"")).toLowerCase()] = true;
+            });
+            contacts.forEach(function(s){
+              var nomeReal = s.nome || s.name || "";
+              if (!nomeReal) return;
+              var dedupKey = (nomeReal+"|"+acc.nome).toLowerCase();
+              if (existingSet[dedupKey]) return;
+              existingSet[dedupKey] = true;
+              var cid = "contact:" + Date.now() + "-" + Math.random().toString(36).slice(2,8);
+              var contact = { id:cid, nome:nomeReal, cargo:s.cargo||s.title||"", empresa:acc.nome, email:s.email||"", emailValidated:!!s.email, linkedin:s.linkedin||"", savedAt:Date.now() };
+              storageSet(cid, contact);
+            });
+            if (props.onContactsRefresh) props.onContactsRefresh();
+          });
+        });
         if (props.onDone) props.onDone(data);
       })
       .catch(function(e){ setErr(String(e)); })
@@ -1236,7 +1256,7 @@ function AccountModal(props) {
           {activeTab==="stakeholders"&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8,flexWrap:"wrap"}}>
-                <StakeholdersFetchBtn acc={acc} onDone={function(data){setEnrichedContacts(data.contacts||[]);setEnrichedSources(data.sources||[]);}}/>
+                <StakeholdersFetchBtn acc={acc} onContactsRefresh={props.onContactsRefresh} onDone={function(data){setEnrichedContacts(data.contacts||[]);setEnrichedSources(data.sources||[]);}}/>
                 <button onClick={function(){if(onNav){props.onClose();onNav("contacts");}}} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.25)"}}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                   {"Ver contatos mapeados"}
@@ -1646,16 +1666,16 @@ function ContactsView(props) {
   }
 
   useEffect(function() {
+    setLoadingC(true);
     storageList("contact:").then(function(keys) {
-      if (!keys.length) { setLoadingC(false); return; }
+      if (!keys.length) { setContacts([]); setLoadingC(false); return; }
       Promise.all(keys.map(storageGet)).then(function(items) {
         var valid = items.filter(Boolean);
         setContacts(valid);
-        setExpandedGroups({});
         setLoadingC(false);
       });
     }).catch(function(){ setLoadingC(false); });
-  }, []);
+  }, [props.refreshKey]);
 
   function showToastC(msg, color) {
     setToastC({msg:msg,color:color||"#4f46e5"});
@@ -2430,7 +2450,7 @@ function HomeView(props) {
               )}
 
               <div style={{display:"flex",gap:10,marginTop:20}}>
-                <button onClick={function(){ saveIcp(icpDefaults); }} style={{flex:1,background:"#f8fafc",border:"1px solid #e6e9ef",color:"#64748b",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Restaurar padrão"}</button>
+                <button onClick={function(){ var empty={segmento:"",porte:"",faturamento:"",regiao:"",cargos:"",observacoes:""}; saveIcp(empty); }} style={{flex:1,background:"#fff",border:"1.5px solid rgba(239,68,68,.3)",color:"#ef4444",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Resetar ICP"}</button>
                 <button onClick={function(){setIcpModal(false);}} style={{flex:2,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>{"Salvar e fechar"}</button>
               </div>
             </div>
@@ -2662,6 +2682,8 @@ function SearchView(props) {
               var contact = { id:cid, nome:nomeReal, cargo:s.cargo||s.title||"", empresa:nome, email:s.email||"", emailValidated:!!s.email, linkedin:s.linkedin||"", savedAt:Date.now() };
               storageSet(cid, contact);
             });
+            // Signal ContactsView to reload from storage
+            if (props.onContactsRefresh) props.onContactsRefresh();
           });
         });
         storageList("acc:").then(function(keys){
@@ -3875,6 +3897,11 @@ export default function App() {
   function setProspectLista(empresas){ setProspectListaRaw(empresas); try{localStorage.setItem("pipe_prospect_lista",JSON.stringify(empresas));}catch(e){} }
   var _st_pLoading = useState(false); var prospectLoading = _st_pLoading[0]; var setProspectLoading = _st_pLoading[1];
   var _st_pError   = useState("");    var prospectError   = _st_pError[0];   var setProspectError   = _st_pError[1];
+
+  // refreshKey: incrementado sempre que novos contatos são salvos externamente
+  // (ex: enriquecimento de stakeholders). ContactsView observa esse valor como dep do useEffect.
+  var _st_cRefresh = useState(0); var contactsRefreshKey = _st_cRefresh[0]; var setContactsRefreshKey = _st_cRefresh[1];
+  function triggerContactsRefresh() { setContactsRefreshKey(function(k){ return k+1; }); }
   // Dispara a geração de uma sequência a partir de um contato real (nome + cargo).
   function generateSequenceFromContact(contact) {
     setSeqRequest({
@@ -4185,13 +4212,13 @@ export default function App() {
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav}/>}
-              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav}/>}
+              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts}/>}
               {nav==="biblioteca" && <BibliotecaView showToast={showToast} onCountChange={setSeqCount} onOpenSeq={setOpenSeq}/>}
-              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} onCreateAccount={function(nome){
+              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} onCreateAccount={function(nome){
                 var id="acc:"+Date.now()+"-"+Math.random().toString(36).slice(2,7);
                 var acc={id:id,nome:nome,setor:"Criada manualmente",fit:"-",tier:"-",status:"prospecting",mapped:false,manualOnly:true,savedAt:Date.now(),data:null};
                 storageSet(id,acc).then(function(){setAccounts(function(prev){return [acc].concat(prev);});});
@@ -4209,7 +4236,7 @@ export default function App() {
           )}
         </div>
       </div>
-      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav}/>}
+      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
       {openSeq && <SequenceModal seq={openSeq} onClose={function(){setOpenSeq(null);}}/>}
       {toast && (
         <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:340,display:"flex",alignItems:"center",gap:10}}>
