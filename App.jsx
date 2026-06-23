@@ -3650,15 +3650,21 @@ function ProspectView(props) {
         <div style={{textAlign:"center",padding:"60px 20px",background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:20,marginBottom:24}}>
           <div style={{fontSize:48,marginBottom:16}}>{"🎯"}</div>
           <div style={{fontSize:20,fontWeight:800,color:"#0f172a",marginBottom:8}}>{"Gerar lista de prospecção"}</div>
-          <div style={{fontSize:13,color:"#64748b",maxWidth:440,margin:"0 auto 24px",lineHeight:1.7}}>
+          <div style={{fontSize:13,color:"#64748b",maxWidth:440,margin:"0 auto 16px",lineHeight:1.7}}>
             {icpPreenchido
               ? ("A IA vai gerar 50 empresas reais brasileiras que se encaixam no ICP: " + (icp.segmento||"") + (icp.porte?", "+icp.porte:"") + ".")
               : "A IA vai gerar 50 empresas reais brasileiras com base nos critérios padrão do produto."}
           </div>
-          <button onClick={gerarLista} style={{background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 28px rgba(99,102,241,.4)",display:"inline-flex",alignItems:"center",gap:10}}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            {"Gerar 50 empresas com IA"}
-          </button>
+          <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.3)",borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:700,color:"#047857",marginBottom:24}}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            {"Gratuito — não consome créditos de Account Mapping"}
+          </div>
+          <div>
+            <button onClick={gerarLista} style={{background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 28px rgba(99,102,241,.4)",display:"inline-flex",alignItems:"center",gap:10}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              {"Gerar 50 empresas com IA — grátis"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -3666,14 +3672,16 @@ function ProspectView(props) {
         <div style={{textAlign:"center",padding:"60px 20px"}}>
           <div style={{width:48,height:48,borderRadius:"50%",border:"3px solid rgba(99,102,241,.2)",borderTopColor:"#6366f1",animation:"spin .8s linear infinite",margin:"0 auto 20px"}}/>
           <div style={{fontSize:15,fontWeight:700,color:"#0f172a",marginBottom:6}}>{"Consultando a IA..."}</div>
-          <div style={{fontSize:12,color:"#64748b"}}>{"Gerando 50 empresas com base no ICP. Aguarde alguns segundos."}</div>
+          <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>{"Gerando 50 empresas com base no ICP. Pode levar até 30 segundos."}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>{"Em caso de alta demanda da IA, a lista é gerada automaticamente na segunda tentativa."}</div>
         </div>
       )}
 
       {errorP && (
-        <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.3)",borderRadius:12,padding:"14px 18px",marginBottom:20,color:"#991b1b",fontSize:13}}>
-          {errorP}
-          <button onClick={gerarLista} style={{marginLeft:12,background:"none",border:"1px solid #991b1b",color:"#991b1b",borderRadius:8,padding:"4px 12px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Tentar novamente"}</button>
+        <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.3)",borderRadius:12,padding:"14px 18px",marginBottom:20,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#991b1b" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span style={{flex:1,fontSize:12,color:"#991b1b",lineHeight:1.5}}>{errorP.includes("high demand") || errorP.includes("alta demanda") ? "A IA está com alta demanda no momento. Aguarde alguns segundos e tente novamente — normalmente resolve na segunda tentativa." : errorP}</span>
+          <button onClick={gerarLista} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>{"Tentar novamente"}</button>
         </div>
       )}
 
