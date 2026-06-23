@@ -47,6 +47,53 @@ export const CLIENT_CONFIG = {
   // 3. CLASSIFICACAO DE SETOR (ICP por setor)
   // Tier 1 = prioridade maxima de prospecção
   // ----------------------------------------------------------
+  // ----------------------------------------------------------
+  // 3B. ICP DEFAULT + CRITÉRIOS DE FIT (5 dimensões)
+  // Estes são os valores padrão sugeridos ao usuário no modal
+  // de Configuração de ICP. O usuário pode sobrescrever em localStorage.
+  // ----------------------------------------------------------
+  icpDefault: {
+    segmento:     "Tecnologia / SaaS / Fintech / Saúde",
+    porte:        "50–1000 colaboradores",
+    faturamento:  "R$ 10M – R$ 500M/ano",
+    regiao:       "Brasil",
+    cargos:       "CISO, CTO, CEO, DPO, CFO",
+    observacoes:  "Empresas sem CISO ou DPO dedicado, em crescimento acelerado ou expansão para mercados regulados.",
+  },
+
+  fitCriteria: [
+    {
+      id:    "porte",
+      label: "Porte da empresa",
+      desc:  "Colaboradores ou faturamento dentro da faixa ICP",
+      peso:  2,
+    },
+    {
+      id:    "setor",
+      label: "Setor / Vertical",
+      desc:  "Atua em vertical com alta exposição a risco cibernético (Fintech, Saúde, SaaS, Govtech)",
+      peso:  2,
+    },
+    {
+      id:    "maturidade",
+      label: "Maturidade de Segurança",
+      desc:  "Sem CISO ou DPO dedicado — gestão de segurança pelo time de TI",
+      peso:  2,
+    },
+    {
+      id:    "regulacao",
+      label: "Exposição Regulatória",
+      desc:  "Sujeita a LGPD, ISO 27001, regulações setoriais (BACEN, ANVISA, CFM)",
+      peso:  2,
+    },
+    {
+      id:    "stack",
+      label: "Stack Tecnológica",
+      desc:  "Usa Microsoft 365, cloud pública ou tem pipeline de desenvolvimento ativo",
+      peso:  2,
+    },
+  ],
+
   setorConfig: {
     regexes: [
       { key: "isFintech",   pattern: /nubank|c6|inter|stone|pagseguro|pagbank|picpay|cielo|btg|xp|itau|bradesco|banco|financeira|seguradora|fintec/i,  label: "Financeiro / Fintech",          tier1: true  },
