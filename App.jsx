@@ -2638,7 +2638,7 @@ function SearchView(props) {
   }
   function runSearch(nome, domain, existingAcc) {
     setLoading(true); setDone(null); setDoneAcc(null); setSearchError("");
-    fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,context:""})})
+    fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,domain:domain||"",context:""})})
       .then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.error||"HTTP "+r.status);}); return r.json();})
       .then(function(resp){
         var data = buildData(nome, resp.results);
@@ -3692,7 +3692,7 @@ export default function App() {
         setMappingId(acc.id);
         var nome = acc.nome;
         var domain = acc.site ? extractDomain(acc.site) : extractDomain(nome);
-        fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,context:""})})
+        fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,domain:domain||"",context:""})})
           .then(function(r){ if(!r.ok) throw new Error("http"); return r.json(); })
           .then(function(resp){
             finishMapping(acc, buildData(nome, resp.results), true, domain);
