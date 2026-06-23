@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY nao configurada." });
 
   const { icp, clienteNome, quantidade } = req.body || {};
-  const qtd = Math.min(parseInt(quantidade) || 50, 50);
+  const qtd = Math.min(parseInt(quantidade) || 30, 30);
 
   const segmento    = (icp && icp.segmento)    || "Tecnologia / SaaS / Fintech";
   const porte       = (icp && icp.porte)        || "50–1000 colaboradores";
