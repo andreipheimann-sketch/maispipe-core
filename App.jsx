@@ -1152,14 +1152,10 @@ function AccountModal(props) {
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:8,padding:"4px 12px",fontSize:9,fontWeight:700}}>{"FIT "+fit}</span>
                 <span style={{background:"#fbfbfd",border:"1px solid "+(TIER_COLOR[acc.tier]||"#e2e8f0"),color:TIER_COLOR[acc.tier]||"#94a3b8",borderRadius:8,padding:"4px 12px",fontSize:9,fontWeight:700}}>{acc.tier}</span>
-                <span style={{background:sc.bg,border:"1px solid "+sc.border,color:sc.color,borderRadius:8,padding:"4px 12px",fontSize:9,fontWeight:700}}>{sc.label}</span>
                 <span style={{background:"#fbfbfd",color:"#64748b",borderRadius:8,padding:"4px 12px",fontSize:9}}>{"Salvo "+fmtDate(acc.savedAt)}</span>
               </div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"flex-end"}}>
-              <div style={{display:"flex",gap:4,flexWrap:"wrap",maxWidth:200}}>
-                {STATUS_ORDER.map(function(s){var sc2=STATUS_CONFIG[s];return <button key={s} onClick={function(){props.onStatusChange(acc.id,s);}} style={{background:acc.status===s?sc2.bg:"#f8fafc",border:"1px solid "+(acc.status===s?sc2.border:"#e2e8f0"),color:acc.status===s?sc2.color:"#64748b",borderRadius:6,padding:"3px 8px",fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{sc2.label}</button>;})}
-              </div>
               <div style={{display:"flex",gap:6}}>
                 <button onClick={function(){exportAccountPDF(acc,d);}} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"#0369a1",fontSize:12,fontWeight:600,fontFamily:"inherit"}}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
