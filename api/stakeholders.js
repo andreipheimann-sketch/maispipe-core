@@ -65,9 +65,9 @@ export default async function handler(req, res) {
       const body = {
         api_key: apolloKey,
         person_titles: titles.slice(0,6),
-        person_locations: ["Brazil"],
+        person_locations: ["Brazil", "Brasil", "São Paulo", "Rio de Janeiro", "Brasília", "Belo Horizonte", "Curitiba", "Porto Alegre"],
         page: 1,
-        per_page: 10,
+        per_page: 15,
       };
       if (domain) body.q_organization_domains = [domain];
       else body.q_organization_name = company;
@@ -83,9 +83,14 @@ export default async function handler(req, res) {
           const existingEmails = results.contacts.map(c => c.email).filter(Boolean);
           const email = p.email || "";
           if (email && existingEmails.includes(email)) continue;
-          const country = (p.country || (p.organization && p.organization.country) || "").toLowerCase();
-          const isBrazil = !country || country.includes("brazil") || country.includes("brasil");
+
+          // Strict Brazil filter — must have explicit Brazil indicator OR no country at all
+          const country   = (p.country || (p.organization && p.organization.country) || "").toLowerCase();
+          const city      = (p.city || p.state || "").toLowerCase();
+          const brazilCities = /são paulo|sao paulo|rio de janeiro|belo horizonte|curitiba|brasilia|brasília|porto alegre|salvador|recife|fortaleza|manaus|goiania|goiânia|campinas|guarulhos/i;
+          const isBrazil  = country.includes("brazil") || country.includes("brasil") || brazilCities.test(city) || (!country && !city);
           if (!isBrazil) continue;
+
           addContact({
             nome: p.name || [p.first_name, p.last_name].filter(Boolean).join(" "),
             cargo: p.title || "",
@@ -94,7 +99,7 @@ export default async function handler(req, res) {
             linkedin: p.linkedin_url || "",
             phone: p.sanitized_phone || "",
             cidade: p.city || "",
-            pais: p.country || "",
+            pais: p.country || "Brasil",
             is_senior: true,
             source: "Apollo.io",
           });
@@ -111,8 +116,8 @@ export default async function handler(req, res) {
   // ── LAYER 3: Tavily — LinkedIn public profiles ──────────────────────────────
   if (tavilyKey) {
     const queries = [
-      `"${company}" ("CISO" OR "CTO" OR "CEO" OR "DPO" OR "Diretor de Seguranca" OR "Head of Security") site:linkedin.com/in`,
-      `"${company}" (diretor OR head OR gerente OR lideranca) seguranca OR privacidade OR compliance OR tecnologia site:linkedin.com/in`,
+      `"${company}" ("CISO" OR "CTO" OR "CEO" OR "DPO" OR "Diretor de Segurança" OR "Head of Security") Brasil site:linkedin.com/in`,
+      `"${company}" (diretor OR head OR gerente OR liderança) segurança OR privacidade OR compliance OR tecnologia Brasil site:linkedin.com/in`,
     ];
 
     // Extrai o cargo do titulo do LinkedIn ou, como fallback, do snippet.
