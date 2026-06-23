@@ -71,10 +71,10 @@ export default async function handler(req, res) {
       "EMPRESA: " + (empresa || "a empresa"),
       "SETOR (classificado): " + (setor || "tecnologia"),
       "",
-      "INFORMACOES CRUAS COLETADAS:",
+      "INFORMACOES COLETADAS (podem conter noticias, releases e dados misturados — foque no perfil institucional da empresa, ignore noticias recentes, releases de RI, dados de eventos sazonais e qualquer informacao que nao descreva o negocio em si):",
       (rawContext || "Sem dados adicionais.").slice(0, 5000),
       "",
-      "Escreva o resumo de conta agora, seguindo a estrutura de 2 paragrafos. Responda apenas com o texto.",
+      "Escreva o resumo de conta agora, seguindo a estrutura de 2 paragrafos. Responda apenas com o texto, sem titulos, sem bullets, sem markdown.",
     ].join("\n");
     const out = await callGemini(modelResumo, apiKey, sysR, usrR, 0.6, false);
     if (!out.ok) return res.status(502).json({ error: "Gemini erro: " + out.error });
