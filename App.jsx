@@ -1041,6 +1041,58 @@ function exportAccountPDF(acc, d) {
   w.document.close();
   setTimeout(function(){w.print();}, 500);
 }
+function StakeholdersFetchBtn(props) {
+  var acc = props.acc;
+  var _st_loading = useState(false); var loading = _st_loading[0]; var setLoading = _st_loading[1];
+  var _st_done    = useState(false); var done    = _st_done[0];    var setDone    = _st_done[1];
+  var _st_count   = useState(0);     var count   = _st_count[0];   var setCount   = _st_count[1];
+  var _st_err     = useState("");    var err     = _st_err[0];     var setErr     = _st_err[1];
+
+  function fetch_stk() {
+    setLoading(true); setErr(""); setDone(false);
+    var domain = (acc.enriched && acc.enriched.domain) || extractDomain(acc.nome);
+    fetch("/api/stakeholders", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({company:acc.nome, domain:domain}),
+    })
+      .then(function(r){ return r.ok ? r.json() : Promise.reject("HTTP "+r.status); })
+      .then(function(data){
+        var contacts = data.contacts || [];
+        setCount(contacts.length);
+        setDone(true);
+        // Persist into account storage
+        storageGet(acc.id).then(function(stored){
+          var updated = Object.assign({}, stored||acc, {
+            enriched: { contacts:contacts, sources:data.sources||[], domain:domain }
+          });
+          storageSet(acc.id, updated);
+        });
+        if (props.onDone) props.onDone(data);
+      })
+      .catch(function(e){ setErr(String(e)); })
+      .finally(function(){ setLoading(false); });
+  }
+
+  if (done) return (
+    <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#059669",fontWeight:600}}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      {count+" contato"+(count!==1?"s":"")+" encontrado"+(count!==1?"s":"")}
+      <button onClick={fetch_stk} style={{fontSize:10,color:"#6366f1",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",padding:0}}>{"atualizar"}</button>
+    </div>
+  );
+
+  return (
+    <button onClick={fetch_stk} disabled={loading} style={{display:"flex",alignItems:"center",gap:6,background:loading?"#f1f5f9":"#fff",color:loading?"#94a3b8":"#4f46e5",border:"1.5px solid "+(loading?"#e2e8f0":"rgba(99,102,241,.35)"),borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:loading?"default":"pointer",fontFamily:"inherit",transition:"all .2s"}}>
+      {loading
+        ? <><div style={{width:11,height:11,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite",flexShrink:0}}/>{" Buscando no LinkedIn..."}</>
+        : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>{"Buscar contatos reais"}</>
+      }
+      {err && <span style={{fontSize:9,color:"#ef4444",marginLeft:4}}>{"erro"}</span>}
+    </button>
+  );
+}
+
 function AccountModal(props) {
   var acc = props.acc;
   var onNav = props.onNav;
@@ -1183,7 +1235,8 @@ function AccountModal(props) {
           )}
           {activeTab==="stakeholders"&&(
             <div>
-              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8,flexWrap:"wrap"}}>
+                <StakeholdersFetchBtn acc={acc} onDone={function(data){setEnrichedContacts(data.contacts||[]);setEnrichedSources(data.sources||[]);}}/>
                 <button onClick={function(){if(onNav){props.onClose();onNav("contacts");}}} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.25)"}}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                   {"Ver contatos mapeados"}
@@ -3112,7 +3165,7 @@ function AccountsView(props) {
               );
             }
             return (
-              <div key={acc.id} style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:14,padding:"12px 18px",display:"flex",alignItems:"center",gap:14,transition:"all .2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.boxShadow="0 2px 12px rgba(99,102,241,.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.boxShadow="";}}>
+              <div key={acc.id} onClick={function(){props.onOpen(acc);}} style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:14,padding:"12px 18px",display:"flex",alignItems:"center",gap:14,transition:"all .2s",cursor:"pointer"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.boxShadow="0 2px 12px rgba(99,102,241,.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.boxShadow="";}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13.5,fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{acc.nome}</div>
                   <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{acc.setor}</div>
@@ -3121,8 +3174,8 @@ function AccountsView(props) {
                 <span style={{background:"#fbfbfd",border:"1px solid "+(TIER_COLOR[acc.tier]||"#e2e8f0"),color:TIER_COLOR[acc.tier]||"#94a3b8",borderRadius:7,padding:"3px 9px",fontSize:9,fontWeight:700,flexShrink:0}}>{acc.tier}</span>
                 <span style={{background:sc.bg,border:"1px solid "+sc.border,color:sc.color,borderRadius:7,padding:"3px 9px",fontSize:9,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>{sc.label}</span>
                 <span style={{fontSize:10,color:"#64748b",flexShrink:0}}>{fmtDate(acc.savedAt)}</span>
-                <button onClick={function(){props.onOpen(acc);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"5px 12px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>Ver</button>
-                <button onClick={function(){props.onDelete(acc.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>x</button>
+                <button onClick={function(e){e.stopPropagation();props.onOpen(acc);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"5px 12px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>Ver</button>
+                <button onClick={function(e){e.stopPropagation();props.onDelete(acc.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>x</button>
               </div>
             );
           })}
