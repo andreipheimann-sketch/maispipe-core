@@ -64,7 +64,7 @@ export default async function handler(req, res) {
     "Gere exatamente " + qtd + " itens no array 'empresas'. Varie setores, portes e cidades. Somente empresas reais brasileiras.",
   ].filter(Boolean).join("\n");
 
-  try {
+  async function callGemini(attempt) {
     const r = await fetch(BASE + model + ":generateContent", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
@@ -83,15 +83,30 @@ export default async function handler(req, res) {
     const data = await r.json();
     if (!r.ok) {
       const msg = (data && data.error && data.error.message) || ("HTTP " + r.status);
-      return res.status(502).json({ error: "Gemini erro: " + msg });
+      // High demand / overload — retry up to 2 times with backoff
+      const isOverload = msg.toLowerCase().includes("high demand") || msg.toLowerCase().includes("overloaded") || r.status === 503 || r.status === 429;
+      if (isOverload && attempt < 3) {
+        const delay = attempt * 4000; // 4s, 8s
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return callGemini(attempt + 1);
+      }
+      return { ok: false, error: msg };
     }
 
     const text = ((data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [])
       .map(p => p.text || "").join("").trim();
 
+    return { ok: true, text };
+  }
+
+  try {
+    const result = await callGemini(1);
+    if (!result.ok) {
+      return res.status(502).json({ error: "Gemini erro: " + result.error });
+    }
     let parsed;
     try {
-      parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+      parsed = JSON.parse(result.text.replace(/```json|```/g, "").trim());
     } catch (e) {
       return res.status(200).json({ empresas: [], error: "Falha ao interpretar resposta da IA." });
     }
