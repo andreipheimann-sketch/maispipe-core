@@ -2122,22 +2122,25 @@ function HomeView(props) {
   var taxa      = total>0?Math.round(converted/total*100):0;
 
   var CARDS = [
-    {id:"busca",  label:"Busca com IA",    emoji:"🔍", nav:"search",
+    {id:"prospect",label:"Busca Geral",       emoji:"🎯", nav:"prospect",
+     desc:"Gere uma lista de 50 empresas reais com base no seu ICP. Explore, filtre e enriqueça com um clique.",
+     stat:"Grátis — sem consumir créditos", statColor:"#059669"},
+    {id:"busca",  label:"Account Mapping",    emoji:"🔍", nav:"search",
      desc:CLIENT_CONFIG.ui.cardBusca,
      stat:total+" conta"+(total!==1?"s":"")+" mapeada"+(total!==1?"s":""), statColor:"#6366f1"},
-    {id:"contas", label:"Contas",           emoji:"📁", nav:"accounts",
+    {id:"contas", label:"Contas",              emoji:"📁", nav:"accounts",
      desc:"Todas as empresas mapeadas organizadas por fit, tier e estágio.",
      stat:total+" no total", statColor:"#0369a1"},
-    {id:"seqs",   label:"Sequências",       emoji:"📬", nav:"sequences",
+    {id:"seqs",   label:"Sequências",          emoji:"📬", nav:"sequences",
      desc:CLIENT_CONFIG.ui.cardSeqs,
      stat:CLIENT_CONFIG.ui.statSeqs, statColor:"#7c3aed"},
-    {id:"biblio", label:"Biblioteca",       emoji:"📚", nav:"biblioteca",
+    {id:"biblio", label:"Biblioteca",          emoji:"📚", nav:"biblioteca",
      desc:"Todas as sequências salvas organizadas. Exporte qualquer cadência em PDF com um clique.",
      stat:"Sequências salvas", statColor:"#059669"},
-    {id:"pipe",   label:"Pipeline Kanban",  emoji:"📊", nav:"pipeline",
+    {id:"pipe",   label:"Pipeline Kanban",     emoji:"📊", nav:"pipeline",
      desc:"Visualize todas as contas por estágio. Arraste os cards entre colunas para atualizar o status.",
      stat:converted+" convertida"+(converted!==1?"s":""), statColor:"#065f46"},
-    {id:"relat",  label:"Relatórios",       emoji:"📈", nav:"relatorios",
+    {id:"relat",  label:"Relatórios",          emoji:"📈", nav:"relatorios",
      desc:"Dashboard com funil de conversão, distribuição por fit e tier, gráficos e export em PDF.",
      stat:taxa+"% taxa de conversão", statColor:"#92400e"},
   ];
@@ -3553,7 +3556,9 @@ function ProspectView(props) {
     try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):{}; } catch(e){ return {}; }
   }); var icp = _st_icp[0];
 
-  var _st_lista     = useState([]); var lista = _st_lista[0]; var setLista = _st_lista[1];
+  var _st_lista     = useState(function(){
+    try { var s=localStorage.getItem("pipe_prospect_lista"); return s?JSON.parse(s):[]; } catch(e){ return []; }
+  }); var lista = _st_lista[0]; var setLista = _st_lista[1];
   var _st_loading   = useState(false); var loadingP = _st_loading[0]; var setLoadingP = _st_loading[1];
   var _st_error     = useState(""); var errorP = _st_error[0]; var setErrorP = _st_error[1];
   var _st_enriching = useState({}); var enriching = _st_enriching[0]; var setEnriching = _st_enriching[1];
@@ -3561,11 +3566,16 @@ function ProspectView(props) {
   var _st_filter    = useState("TODOS"); var filter = _st_filter[0]; var setFilter = _st_filter[1];
   var _st_search    = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
 
+  function saveLista(empresas) {
+    setLista(empresas);
+    try { localStorage.setItem("pipe_prospect_lista", JSON.stringify(empresas)); } catch(e){}
+  }
+
   var icpPreenchido = !!(icp && (icp.segmento || icp.porte || icp.faturamento));
   var mappedNames = new Set(accounts.map(function(a){ return (a.nome||"").toLowerCase().trim(); }));
 
   function gerarLista() {
-    setLoadingP(true); setErrorP(""); setLista([]);
+    setLoadingP(true); setErrorP(""); saveLista([]);
     fetch("/api/prospect", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
@@ -3578,7 +3588,7 @@ function ProspectView(props) {
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (d.error) { setErrorP(d.error); return; }
-        setLista(d.empresas || []);
+        saveLista(d.empresas || []);
       })
       .catch(function(e){ setErrorP("Erro ao gerar lista: " + e.message); })
       .finally(function(){ setLoadingP(false); });
@@ -3632,7 +3642,7 @@ function ProspectView(props) {
   return (
     <div>
       <div style={{marginBottom:24}}>
-        <div style={{fontSize:28,fontWeight:800,color:"#0f172a",letterSpacing:"-.6px",marginBottom:4}}>{"Prospectar"}</div>
+        <div style={{fontSize:28,fontWeight:800,color:"#0f172a",letterSpacing:"-.6px",marginBottom:4}}>{"Busca Geral"}</div>
         <div style={{fontSize:13,color:"#52617a"}}>{"Empresas sugeridas pela IA com base no seu ICP. Clique em Enriquecer para gerar o account mapping completo."}</div>
       </div>
 
@@ -4001,8 +4011,8 @@ export default function App() {
   ].join("");
   var NAV = [
     {id:"home",         emoji:"🏠", label:"Home"},
-    {id:"search",       emoji:"🔍", label:"Busca"},
-    {id:"prospect",     emoji:"🎯", label:"Prospectar"},
+    {id:"prospect",     emoji:"🎯", label:"Busca Geral"},
+    {id:"search",       emoji:"🔍", label:"Account Mapping"},
     {id:"accounts",     emoji:"📁", label:"Contas"},
     {id:"contacts",     emoji:"👥", label:"Contatos"},
     {id:"sequences",    emoji:"📬", label:"Sequências"},
