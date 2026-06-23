@@ -1622,29 +1622,113 @@ function ContactsView(props) {
     });
   }
 
+  // enrichProgress[contactId] = { hunter:"pending"|"found"|"miss"|"err", apollo:"...", snov:"..." }
+  var _st_enrichProgress = useState({}); var enrichProgress = _st_enrichProgress[0]; var setEnrichProgress = _st_enrichProgress[1];
+
+  function setSourceStatus(contactId, source, status) {
+    setEnrichProgress(function(prev){
+      var n = Object.assign({}, prev);
+      n[contactId] = Object.assign({}, n[contactId]||{}, {[source]: status});
+      return n;
+    });
+  }
+
   function enrichEmail(contact) {
-    setEnriching(function(e){ var n=Object.assign({},e); n[contact.id]=true; return n; });
-    fetch("/api/hunter", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({first_name:(contact.nome||"").split(" ")[0], last_name:(contact.nome||"").split(" ").slice(1).join(" "), organization_name:contact.empresa, domain:contact.domain||""})
-    }).then(function(r){ return r.json().then(function(d){ return {status:r.status, data:d}; }); }).then(function(res) {
-      var data = res.data || {};
-      if (data.error) { showToastC(data.error, "#f59e0b"); return; }
-      var email = (data.person && data.person.email) || "";
-      if (!email) { showToastC(data.message || ("Nenhum e-mail encontrado para este contato (HTTP " + res.status + ")."), "#f59e0b"); }
-      else {
-        var conf = (data.person && data.person.email_confidence) || 0;
-        var updated = Object.assign({}, contact, {email:email, emailValidated:true, emailConfidence:conf, domain:(data.person&&data.person.domain)||contact.domain||""});
-        storageSet(contact.id, updated).then(function() {
-          setContacts(function(prev){ return prev.map(function(c){ return c.id===contact.id ? updated : c; }); });
-          showToastC("E-mail encontrado (" + conf + "% confianca): " + email, "#10b981");
+    var cid   = contact.id;
+    var first = (contact.nome||"").split(" ")[0];
+    var last  = (contact.nome||"").split(" ").slice(1).join(" ");
+    var org   = contact.empresa || "";
+    var dom   = contact.domain  || "";
+
+    // Mark overall loading + all sources pending
+    setEnriching(function(e){ var n=Object.assign({},e); n[cid]=true; return n; });
+    setEnrichProgress(function(prev){
+      var n=Object.assign({},prev);
+      n[cid]={hunter:"pending", apollo:"pending", snov:"pending"};
+      return n;
+    });
+
+    // ── HUNTER ──────────────────────────────────────────────────────────────
+    var pHunter = fetch("/api/hunter", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({first_name:first, last_name:last, organization_name:org, domain:dom})
+    }).then(function(r){ return r.json(); }).then(function(d){
+      var email = (d.person && d.person.email) || null;
+      var conf  = (d.person && d.person.email_confidence) || 0;
+      setSourceStatus(cid, "hunter", email ? "found" : "miss");
+      return email ? {email:email, confidence:conf, source:"Hunter.io"} : null;
+    }).catch(function(){ setSourceStatus(cid, "hunter", "err"); return null; });
+
+    // ── APOLLO ───────────────────────────────────────────────────────────────
+    var pApollo = fetch("/api/contacts", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({first_name:first, last_name:last, organization_name:org, domain:dom})
+    }).then(function(r){ return r.json(); }).then(function(d){
+      var email = (d.person && d.person.email) || (d.email) || null;
+      var conf  = (d.person && d.person.email_confidence) || (d.confidence) || 0;
+      setSourceStatus(cid, "apollo", email ? "found" : "miss");
+      return email ? {email:email, confidence:conf, source:"Apollo.io"} : null;
+    }).catch(function(){ setSourceStatus(cid, "apollo", "err"); return null; });
+
+    // ── SNOV.IO ───────────────────────────────────────────────────────────────
+    var pSnov = dom
+      ? fetch("/api/snov", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({first_name:first, last_name:last, domain:dom})
+        }).then(function(r){ return r.json(); }).then(function(d){
+          var email = d.email || null;
+          var conf  = d.confidence || 0;
+          setSourceStatus(cid, "snov", email ? "found" : "miss");
+          return email ? {email:email, confidence:conf, source:"Snov.io"} : null;
+        }).catch(function(){ setSourceStatus(cid, "snov", "err"); return null; })
+      : Promise.resolve(null).then(function(){ setSourceStatus(cid,"snov","miss"); return null; });
+
+    // ── CONSOLIDATE ──────────────────────────────────────────────────────────
+    Promise.all([pHunter, pApollo, pSnov]).then(function(results) {
+      var found = results.filter(Boolean);
+      // Majority vote: pick email confirmed by 2+ sources, else highest confidence
+      var emailCounts = {};
+      found.forEach(function(r){ emailCounts[r.email] = (emailCounts[r.email]||0)+1; });
+      var majority = null;
+      Object.keys(emailCounts).forEach(function(e){ if(emailCounts[e]>=2) majority=e; });
+
+      var best = null;
+      if (majority) {
+        // Use the result from the majority email with highest confidence
+        best = found.filter(function(r){ return r.email===majority; })
+                    .reduce(function(a,b){ return (a.confidence||0)>=(b.confidence||0)?a:b; });
+        best = Object.assign({}, best, {confirmed: emailCounts[majority]});
+      } else if (found.length > 0) {
+        // Only 1 source found — use it, flag as unconfirmed
+        best = found.reduce(function(a,b){ return (a.confidence||0)>=(b.confidence||0)?a:b; });
+        best = Object.assign({}, best, {confirmed: 1});
+      }
+
+      if (!best) {
+        showToastC("Nenhum e-mail encontrado nas 3 fontes para este contato.", "#f59e0b");
+      } else {
+        var sources = found.map(function(r){return r.source;}).join(", ");
+        var confirmLabel = best.confirmed >= 2
+          ? ("✓ Confirmado em "+best.confirmed+"/3 fontes")
+          : ("1/3 fonte — não confirmado");
+        var updated = Object.assign({}, contact, {
+          email:           best.email,
+          emailValidated:  best.confirmed >= 2,
+          emailConfidence: best.confidence || 0,
+          emailSources:    sources,
+          emailConfirmed:  best.confirmed,
+          domain:          dom || contact.domain || ""
+        });
+        storageSet(cid, updated).then(function() {
+          setContacts(function(prev){ return prev.map(function(c){ return c.id===cid?updated:c; }); });
+          showToastC(confirmLabel + " · " + best.email, best.confirmed>=2?"#10b981":"#f59e0b");
         });
       }
-    }).catch(function() {
-      showToastC("Erro ao consultar Hunter. Verifique a chave HUNTER_API_KEY no servidor.", "#ef4444");
     }).finally(function() {
-      setEnriching(function(e){ var n=Object.assign({},e); delete n[contact.id]; return n; });
+      setTimeout(function(){
+        setEnriching(function(e){ var n=Object.assign({},e); delete n[cid]; return n; });
+        setEnrichProgress(function(p){ var n=Object.assign({},p); delete n[cid]; return n; });
+      }, 1800); // keep status visible briefly after completion
     });
   }
 
@@ -1784,15 +1868,45 @@ function ContactsView(props) {
                             {c.nome && c.cargo && c.nome!==c.cargo && <div style={{fontSize:11,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.cargo}</div>}
                           </div>
                           {c.email ? (
-                            <div style={{display:"flex",alignItems:"center",gap:6,background:"#fbfbfd",border:"1px solid #eef0f4",borderRadius:8,padding:"5px 8px",maxWidth:260,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6,background:"#fbfbfd",border:"1px solid #eef0f4",borderRadius:8,padding:"5px 8px",maxWidth:280,minWidth:0}}>
                               <span style={{fontSize:11,color:c.emailValidated?"#0f766e":"#64748b",fontWeight:c.emailValidated?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{c.email}</span>
-                              {c.emailValidated && <span title={"Confianca "+(c.emailConfidence||"")+"%"} style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 5px",flexShrink:0}}>{c.emailConfidence?c.emailConfidence+"%":"OK"}</span>}
+                              {c.emailConfirmed >= 2
+                                ? <span title={"Confirmado em "+c.emailConfirmed+"/3 fontes · "+(c.emailSources||"")} style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 6px",flexShrink:0,whiteSpace:"nowrap"}}>{c.emailConfirmed+"/3 ✓"}</span>
+                                : c.emailConfirmed === 1
+                                  ? <span title={"1/3 fontes · "+(c.emailSources||"")} style={{fontSize:8,fontWeight:700,color:"#92400e",background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",borderRadius:5,padding:"1px 6px",flexShrink:0,whiteSpace:"nowrap"}}>{"1/3"}</span>
+                                  : c.emailConfidence
+                                    ? <span style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 5px",flexShrink:0}}>{c.emailConfidence+"%"}</span>
+                                    : null
+                              }
                               <CopyBtn text={c.email}/>
                             </div>
                           ) : (
-                            <button onClick={function(){enrichEmail(c);}} disabled={enriching[c.id]} style={{background:enriching[c.id]?"#f1f5f9":"#eff6ff",color:enriching[c.id]?"#94a3b8":"#4f46e5",border:"1px solid "+(enriching[c.id]?"#e2e8f0":"#c7d0fa"),borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,cursor:enriching[c.id]?"default":"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
-                              {enriching[c.id] ? "Buscando..." : "Buscar e-mail"}
-                            </button>
+                            enriching[c.id] ? (
+                              <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:190}}>
+                                <div style={{fontSize:10,fontWeight:700,color:"#4f46e5",marginBottom:1}}>{"Buscando em 3 fontes..."}</div>
+                                {[
+                                  {key:"hunter", label:"Hunter.io"},
+                                  {key:"apollo",  label:"Apollo.io"},
+                                  {key:"snov",    label:"Snov.io"},
+                                ].map(function(src){
+                                  var st = (enrichProgress[c.id]||{})[src.key] || "pending";
+                                  var color = st==="found"?"#10b981":st==="miss"?"#94a3b8":st==="err"?"#ef4444":"#a5b4fc";
+                                  var icon  = st==="found"?"✓":st==="miss"?"–":st==="err"?"✕":"·";
+                                  var bg    = st==="found"?"rgba(52,211,153,.1)":st==="miss"?"#f8fafc":st==="err"?"rgba(239,68,68,.08)":"rgba(99,102,241,.06)";
+                                  return (
+                                    <div key={src.key} style={{display:"flex",alignItems:"center",gap:6,background:bg,borderRadius:6,padding:"3px 8px",transition:"all .3s"}}>
+                                      <span style={{fontSize:10,fontWeight:700,color:color,width:10,textAlign:"center"}}>{st==="pending"?"⋯":icon}</span>
+                                      <span style={{fontSize:10,color:"#334155",flex:1}}>{src.label}</span>
+                                      <span style={{fontSize:9,color:color,fontWeight:600}}>{st==="pending"?"aguardando":st==="found"?"encontrado":st==="miss"?"não encontrado":"erro"}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <button onClick={function(){enrichEmail(c);}} style={{background:"#eff6ff",color:"#4f46e5",border:"1px solid #c7d0fa",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
+                                {"Buscar e-mail"}
+                              </button>
+                            )
                           )}
                           <button onClick={function(){ if(canSeq && props.onGenerateSequence) props.onGenerateSequence(c); }} disabled={!canSeq} title={canSeq?"Gerar cadência de 6 toques para este contato":"Informe nome ou cargo para gerar"} style={{display:"flex",alignItems:"center",gap:5,background:"linear-gradient(135deg,#7c3aed,#6366f1)",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:canSeq?"pointer":"not-allowed",opacity:canSeq?1:.5,fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0,boxShadow:"0 2px 8px rgba(124,58,167,.25)"}}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
@@ -1965,7 +2079,41 @@ function IntegrationsView() {
 function HomeView(props) {
   var accounts = props.accounts || [];
   var onNav = props.onNav;
-  var _st_hidden = useState({}); var hidden = _st_hidden[0]; var setHidden = _st_hidden[1];
+  var _st_hidden   = useState({}); var hidden = _st_hidden[0]; var setHidden = _st_hidden[1];
+  var _st_icpModal = useState(false); var icpModal = _st_icpModal[0]; var setIcpModal = _st_icpModal[1];
+  var _st_prodModal= useState(false); var prodModal = _st_prodModal[0]; var setProdModal = _st_prodModal[1];
+
+  // ── ICP state (persisted in localStorage) ────────────────────────────────
+  var icpDefaults = CLIENT_CONFIG.icpDefault || {};
+  var _st_icp = useState(function(){
+    try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):icpDefaults; } catch(e){ return icpDefaults; }
+  }); var icp = _st_icp[0]; var setIcp = _st_icp[1];
+  var icpSaved = !!(icp && (icp.segmento||icp.porte||icp.faturamento));
+
+  function saveIcp(val) {
+    setIcp(val);
+    try { localStorage.setItem("pipe_icp", JSON.stringify(val)); } catch(e){}
+  }
+
+  // ── Product state (persisted in localStorage) ─────────────────────────────
+  var _st_prods = useState(function(){
+    try { var s=localStorage.getItem("pipe_produtos"); return s?JSON.parse(s):[]; } catch(e){ return []; }
+  }); var produtos = _st_prods[0]; var setProdutos = _st_prods[1];
+  var _st_newProd = useState({nome:"",descricao:"",beneficios:"",publico:"",preco:""});
+  var newProd = _st_newProd[0]; var setNewProd = _st_newProd[1];
+
+  function saveProduto() {
+    if (!newProd.nome.trim()) return;
+    var updated = produtos.concat([Object.assign({id:Date.now()},newProd)]);
+    setProdutos(updated);
+    try { localStorage.setItem("pipe_produtos",JSON.stringify(updated)); } catch(e){}
+    setNewProd({nome:"",descricao:"",beneficios:"",publico:"",preco:""});
+  }
+  function deleteProduto(id) {
+    var updated = produtos.filter(function(p){return p.id!==id;});
+    setProdutos(updated);
+    try { localStorage.setItem("pipe_produtos",JSON.stringify(updated)); } catch(e){}
+  }
 
   function toggleCard(id) {
     setHidden(function(h){ var n=Object.assign({},h); n[id]=!n[id]; return n; });
@@ -1973,38 +2121,42 @@ function HomeView(props) {
 
   var byStatus = {};
   STATUS_ORDER.forEach(function(s){ byStatus[s]=accounts.filter(function(a){return a.status===s;}).length; });
-  var total = accounts.length;
+  var total     = accounts.length;
   var converted = byStatus.won||0;
-  var taxa = total>0?Math.round(converted/total*100):0;
+  var taxa      = total>0?Math.round(converted/total*100):0;
 
   var CARDS = [
-    {id:"busca",    label:"Busca com IA",       emoji:"🔍", nav:"search",
+    {id:"busca",  label:"Busca com IA",    emoji:"🔍", nav:"search",
      desc:CLIENT_CONFIG.ui.cardBusca,
      stat:total+" conta"+(total!==1?"s":"")+" mapeada"+(total!==1?"s":""), statColor:"#6366f1"},
-    {id:"contas",   label:"Contas",              emoji:"📁", nav:"accounts",
-     desc:"Todas as empresas mapeadas organizadas por fit, tier e estágio. Visualize em cards ou lista com filtros avançados.",
+    {id:"contas", label:"Contas",           emoji:"📁", nav:"accounts",
+     desc:"Todas as empresas mapeadas organizadas por fit, tier e estágio.",
      stat:total+" no total", statColor:"#0369a1"},
-    {id:"seqs",     label:"Sequências",          emoji:"📬", nav:"sequences",
+    {id:"seqs",   label:"Sequências",       emoji:"📬", nav:"sequences",
      desc:CLIENT_CONFIG.ui.cardSeqs,
      stat:CLIENT_CONFIG.ui.statSeqs, statColor:"#7c3aed"},
-    {id:"biblio",   label:"Biblioteca",          emoji:"📚", nav:"biblioteca",
+    {id:"biblio", label:"Biblioteca",       emoji:"📚", nav:"biblioteca",
      desc:"Todas as sequências salvas organizadas. Exporte qualquer cadência em PDF com um clique.",
      stat:"Sequências salvas", statColor:"#059669"},
-    {id:"pipe",     label:"Pipeline Kanban",     emoji:"📊", nav:"pipeline",
-     desc:"Visualize todas as contas por estágio da prospecção. Arraste os cards entre colunas para atualizar o status.",
+    {id:"pipe",   label:"Pipeline Kanban",  emoji:"📊", nav:"pipeline",
+     desc:"Visualize todas as contas por estágio. Arraste os cards entre colunas para atualizar o status.",
      stat:converted+" convertida"+(converted!==1?"s":""), statColor:"#065f46"},
-    {id:"relat",    label:"Relatórios",          emoji:"📈", nav:"relatorios",
-     desc:"Dashboard com funil de conversão, distribuição por fit e tier, gráficos donut e semicírculo e export em PDF.",
+    {id:"relat",  label:"Relatórios",       emoji:"📈", nav:"relatorios",
+     desc:"Dashboard com funil de conversão, distribuição por fit e tier, gráficos e export em PDF.",
      stat:taxa+"% taxa de conversão", statColor:"#92400e"},
   ];
 
   var visible = CARDS.filter(function(c2){ return !hidden[c2.id]; });
   var now = new Date();
-  var hr = now.getHours();
+  var hr  = now.getHours();
   var greet = hr<12?"Bom dia":hr<18?"Boa tarde":"Boa noite";
+
+  // ── Fit criteria from clientLoader ────────────────────────────────────────
+  var fitCriteria = CLIENT_CONFIG.fitCriteria || [];
 
   return (
     <div>
+      {/* ── Hero ── */}
       <div style={{position:"relative",borderRadius:24,overflow:"hidden",marginBottom:28,background:"linear-gradient(135deg,#0a0a14 0%,#171430 45%,#1e1b4b 100%)",border:"1px solid #e6e9ef",padding:"40px 40px 36px"}}>
         <div style={{position:"absolute",top:-80,right:-60,width:320,height:320,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.4),transparent 70%)",filter:"blur(20px)"}}/>
         <div style={{position:"absolute",bottom:-100,left:-40,width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,.3),transparent 70%)",filter:"blur(20px)"}}/>
@@ -2020,16 +2172,17 @@ function HomeView(props) {
           <div style={{fontSize:13.5,color:"#94a3b8",maxWidth:520,lineHeight:1.7,marginBottom:26}}>{"Pesquise qualquer empresa, gere inteligência de conta completa e cadências de prospecção em segundos. Chegue preparado, feche mais rápido."}</div>
           <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
             {[
-              {label:"Contas mapeadas", value:total, accent:"#818cf8"},
-              {label:"Convertidas", value:converted, accent:"#34d399"},
-              {label:"Taxa de conversão", value:taxa+"%", accent:"#c084fc"},
-            ].map(function(m){return (
+              {label:"Contas mapeadas",   value:total,      accent:"#818cf8"},
+              {label:"Convertidas",       value:converted,  accent:"#34d399"},
+              {label:"Taxa de conversão", value:taxa+"%",   accent:"#c084fc"},
+            ].map(function(m){ return (
               <div key={m.label} style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.12)",borderRadius:16,padding:"16px 22px",minWidth:128}}>
                 <div style={{fontSize:30,fontWeight:800,color:m.accent,lineHeight:1,letterSpacing:"-.5px"}}>{m.value}</div>
                 <div style={{fontSize:10.5,color:"#cbd5e1",fontWeight:500,marginTop:6,whiteSpace:"nowrap"}}>{m.label}</div>
               </div>
-            );})}
-            <button onClick={function(){onNav("search");}} style={{marginLeft:"auto",alignSelf:"center",background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:14,padding:"14px 26px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 28px rgba(99,102,241,.5)",display:"flex",alignItems:"center",gap:8,whiteSpace:"nowrap"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 12px 36px rgba(99,102,241,.6)";}} onMouseLeave={function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 8px 28px rgba(99,102,241,.5)";}}>
+            ); })}
+            <button onClick={function(){onNav("search");}} style={{marginLeft:"auto",alignSelf:"center",background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:14,padding:"14px 26px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 28px rgba(99,102,241,.5)",display:"flex",alignItems:"center",gap:8,whiteSpace:"nowrap"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="";}}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
               {"Nova busca"}
             </button>
@@ -2037,6 +2190,69 @@ function HomeView(props) {
         </div>
       </div>
 
+      {/* ── Configuração: ICP + Produto ─────────────────────────────────────── */}
+      <div style={{marginBottom:28}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{"Configuração"}</div>
+          <span style={{fontSize:10,color:"#94a3b8",background:"#f1f5f9",borderRadius:6,padding:"2px 8px",fontWeight:500}}>{"opcional"}</span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
+
+          {/* ICP Card */}
+          <div onClick={function(){setIcpModal(true);}} style={{background:icpSaved?"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.04))":"#fff",border:"1.5px solid "+(icpSaved?"rgba(99,102,241,.35)":"#e6e9ef"),borderRadius:16,padding:"20px",cursor:"pointer",transition:"all .2s",position:"relative"}}
+            onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(99,102,241,.1)";}}
+            onMouseLeave={function(e){e.currentTarget.style.borderColor=icpSaved?"rgba(99,102,241,.35)":"#e6e9ef";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
+              <div style={{width:40,height:40,borderRadius:12,background:icpSaved?"linear-gradient(135deg,#6366f1,#8b5cf6)":"linear-gradient(135deg,#e2e8f0,#f1f5f9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={icpSaved?"#fff":"#94a3b8"} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:3}}>{icpSaved?"ICP Configurado":"Cadastre seu ICP"}</div>
+                <div style={{fontSize:11.5,color:"#64748b",lineHeight:1.5}}>{icpSaved?("Segmento: "+(icp.segmento||"—")):"Defina segmento, porte, faturamento e cargos-alvo para enriquecer o fit score."}</div>
+              </div>
+              {icpSaved && <span style={{fontSize:9,fontWeight:700,color:"#4f46e5",background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.2)",borderRadius:6,padding:"2px 7px",flexShrink:0}}>{"✓ ativo"}</span>}
+            </div>
+            {icpSaved && fitCriteria.length>0 && (
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                {fitCriteria.map(function(c){ return (
+                  <span key={c.id} style={{fontSize:9,color:"#6366f1",background:"rgba(99,102,241,.08)",borderRadius:5,padding:"2px 7px",fontWeight:600}}>{c.label}</span>
+                ); })}
+              </div>
+            )}
+            {!icpSaved && (
+              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                <span style={{fontSize:11,color:"#6366f1",fontWeight:600}}>{"Configurar ICP"}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Produto Card */}
+          <div onClick={function(){setProdModal(true);}} style={{background:produtos.length>0?"linear-gradient(135deg,rgba(5,150,105,.04),rgba(16,185,129,.02))":"#fff",border:"1.5px solid "+(produtos.length>0?"rgba(5,150,105,.3)":"#e6e9ef"),borderRadius:16,padding:"20px",cursor:"pointer",transition:"all .2s",position:"relative"}}
+            onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(5,150,105,.5)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(5,150,105,.08)";}}
+            onMouseLeave={function(e){e.currentTarget.style.borderColor=produtos.length>0?"rgba(5,150,105,.3)":"#e6e9ef";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
+              <div style={{width:40,height:40,borderRadius:12,background:produtos.length>0?"linear-gradient(135deg,#059669,#10b981)":"linear-gradient(135deg,#e2e8f0,#f1f5f9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={produtos.length>0?"#fff":"#94a3b8"} strokeWidth="2" strokeLinecap="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:3}}>{produtos.length>0?(produtos.length+" produto"+(produtos.length!==1?"s":"")+" cadastrado"+(produtos.length!==1?"s":"")):"Cadastre seu Produto"}</div>
+                <div style={{fontSize:11.5,color:"#64748b",lineHeight:1.5}}>{produtos.length>0?(produtos.map(function(p){return p.nome;}).join(", ")):"Adicione seus produtos/serviços para enriquecer o mapeamento de conta com IA."}</div>
+              </div>
+              {produtos.length>0 && <span style={{fontSize:9,fontWeight:700,color:"#059669",background:"rgba(5,150,105,.1)",border:"1px solid rgba(5,150,105,.2)",borderRadius:6,padding:"2px 7px",flexShrink:0}}>{"✓ ativo"}</span>}
+            </div>
+            {!produtos.length && (
+              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                <span style={{fontSize:11,color:"#059669",fontWeight:600}}>{"Adicionar produto"}</span>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+
+      {/* ── Acesso rápido ─────────────────────────────────────────────────── */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18,flexWrap:"wrap",gap:10}}>
         <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{"Acesso rápido"}</div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -2050,22 +2266,21 @@ function HomeView(props) {
           })}
         </div>
       </div>
-
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:18}}>
         {visible.map(function(card){
           return (
-            <div key={card.id} onClick={function(){onNav(card.nav);}} style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:18,padding:"24px",cursor:"pointer",transition:"all .25s cubic-bezier(.22,1,.36,1)",position:"relative",overflow:"hidden",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)"}}
+            <div key={card.id} onClick={function(){onNav(card.nav);}} style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:18,padding:"24px",cursor:"pointer",transition:"all .25s cubic-bezier(.22,1,.36,1)",position:"relative",overflow:"hidden"}}
               onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.35)";e.currentTarget.style.background="rgba(99,102,241,.06)";e.currentTarget.style.transform="translateY(-4px)";e.currentTarget.style.boxShadow="0 16px 48px rgba(15,23,42,.10)";}}
               onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.background="#fff";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16}}>
                 <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 16px rgba(99,102,241,.4)",flexShrink:0}}>
                   <span style={{fontSize:22}}>{card.emoji}</span>
                 </div>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
               </div>
               <div style={{fontSize:16,fontWeight:800,color:"#0f172a",marginBottom:8,letterSpacing:"-.3px"}}>{card.label}</div>
               <div style={{fontSize:12.5,color:"#64748b",lineHeight:1.65,marginBottom:16,minHeight:48}}>{card.desc}</div>
-              <div style={{display:"flex",alignItems:"center",gap:7,paddingTop:14,borderTop:"1px solid rgba(255,255,255,.07)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,paddingTop:14,borderTop:"1px solid rgba(0,0,0,.05)"}}>
                 <div style={{width:6,height:6,borderRadius:"50%",background:card.statColor,flexShrink:0}}/>
                 <span style={{fontSize:11,color:card.statColor,fontWeight:600}}>{card.stat}</span>
               </div>
@@ -2077,11 +2292,124 @@ function HomeView(props) {
       {total === 0 && (
         <div style={{marginTop:28,background:"linear-gradient(135deg,rgba(99,102,241,.12),rgba(255,255,255,.02))",border:"1px solid rgba(99,102,241,.25)",borderRadius:18,padding:"32px",textAlign:"center"}}>
           <div style={{fontSize:40,marginBottom:12}}>{"🚀"}</div>
-          <div style={{fontSize:18,fontWeight:700,color:"#0f172a",marginBottom:8}}>{"Bem-vindo ao +pipe Beta"}</div>
-          <div style={{fontSize:13,color:"#64748b",marginBottom:20,lineHeight:1.7,maxWidth:400,margin:"0 auto 20px"}}>{"Comece mapeando sua primeira conta. Digite o nome de uma empresa na Busca e deixe a IA gerar o account mapping completo."}</div>
+          <div style={{fontSize:18,fontWeight:700,color:"#0f172a",marginBottom:8}}>{"Bem-vindo ao +pipe"}</div>
+          <div style={{fontSize:13,color:"#64748b",marginBottom:20,lineHeight:1.7,maxWidth:400,margin:"0 auto 20px"}}>{"Comece mapeando sua primeira conta. Digite o nome de uma empresa ou cole o site dela na Busca."}</div>
           <button onClick={function(){onNav("search");}} style={{background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:12,padding:"12px 28px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.45)"}}>
             {"Mapear primeira conta"}
           </button>
+        </div>
+      )}
+
+      {/* ══ MODAL ICP ══════════════════════════════════════════════════════ */}
+      {icpModal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.4)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={function(e){if(e.target===e.currentTarget)setIcpModal(false);}}>
+          <div style={{background:"#fff",borderRadius:22,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(15,23,42,.18)"}} onClick={function(e){e.stopPropagation();}}>
+            <div style={{padding:"24px 28px 0",position:"sticky",top:0,background:"#fff",zIndex:2,borderBottom:"1px solid #f1f5f9",paddingBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:18,fontWeight:800,color:"#0f172a",letterSpacing:"-.3px"}}>{"Configurar ICP"}</div>
+                  <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{"Ideal Customer Profile — enriquece o fit score de todas as contas mapeadas"}</div>
+                </div>
+                <button onClick={function(){setIcpModal(false);}} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:20,lineHeight:1,padding:4}} onMouseEnter={function(e){e.currentTarget.style.color="#0f172a";}} onMouseLeave={function(e){e.currentTarget.style.color="#94a3b8";}}>{"✕"}</button>
+              </div>
+            </div>
+            <div style={{padding:"20px 28px 28px"}}>
+              {/* ICP fields */}
+              {[
+                {key:"segmento",    label:"Segmento / Vertical-alvo",         ph:"Ex: Tecnologia, Fintech, Saúde, Indústria"},
+                {key:"porte",       label:"Porte (colaboradores ou receita)",  ph:"Ex: 50–1000 colaboradores / R$ 10M–R$ 500M"},
+                {key:"faturamento", label:"Faturamento estimado",              ph:"Ex: R$ 20M – R$ 1B/ano"},
+                {key:"regiao",      label:"Região / Mercado",                  ph:"Ex: Brasil, LATAM, Sul e Sudeste"},
+                {key:"cargos",      label:"Cargos decisores",                  ph:"Ex: CTO, CEO, CISO, CFO, DPO"},
+              ].map(function(f){ return (
+                <div key={f.key} style={{marginBottom:14}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:5,textTransform:"uppercase",letterSpacing:.5}}>{f.label}</div>
+                  <input value={icp[f.key]||""} onChange={function(e){ var v=e.target.value; saveIcp(Object.assign({},icp,{[f.key]:v})); }} placeholder={f.ph} style={{width:"100%",boxSizing:"border-box",background:"#f8fafc",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+                </div>
+              ); })}
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:5,textTransform:"uppercase",letterSpacing:.5}}>{"Observações / Contexto adicional"}</div>
+                <textarea value={icp.observacoes||""} onChange={function(e){ saveIcp(Object.assign({},icp,{observacoes:e.target.value})); }} placeholder={"Ex: Empresas sem CISO dedicado, em crescimento ou expansão para mercados regulados."} rows={3} style={{width:"100%",boxSizing:"border-box",background:"#f8fafc",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none",resize:"vertical"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+              </div>
+
+              {/* 5 critérios de fit */}
+              {fitCriteria.length>0 && (
+                <div style={{background:"rgba(99,102,241,.04)",border:"1px solid rgba(99,102,241,.15)",borderRadius:14,padding:"16px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#4f46e5",marginBottom:12,textTransform:"uppercase",letterSpacing:.5}}>{"5 critérios de fit — aplicados ao scoring de conta"}</div>
+                  {fitCriteria.map(function(c,i){ return (
+                    <div key={c.id} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:i<fitCriteria.length-1?10:0}}>
+                      <div style={{width:22,height:22,borderRadius:7,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                        <span style={{fontSize:10,color:"#fff",fontWeight:800}}>{i+1}</span>
+                      </div>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>{c.label}</div>
+                        <div style={{fontSize:11,color:"#64748b",lineHeight:1.5}}>{c.desc}</div>
+                      </div>
+                    </div>
+                  ); })}
+                </div>
+              )}
+
+              <div style={{display:"flex",gap:10,marginTop:20}}>
+                <button onClick={function(){ saveIcp(icpDefaults); }} style={{flex:1,background:"#f8fafc",border:"1px solid #e6e9ef",color:"#64748b",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Restaurar padrão"}</button>
+                <button onClick={function(){setIcpModal(false);}} style={{flex:2,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>{"Salvar e fechar"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL PRODUTO ══════════════════════════════════════════════════ */}
+      {prodModal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.4)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={function(e){if(e.target===e.currentTarget)setProdModal(false);}}>
+          <div style={{background:"#fff",borderRadius:22,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(15,23,42,.18)"}} onClick={function(e){e.stopPropagation();}}>
+            <div style={{padding:"24px 28px 16px",position:"sticky",top:0,background:"#fff",zIndex:2,borderBottom:"1px solid #f1f5f9"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:18,fontWeight:800,color:"#0f172a",letterSpacing:"-.3px"}}>{"Produtos / Serviços"}</div>
+                  <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{"Cadastre o que você vende para enriquecer o mapeamento de conta com IA"}</div>
+                </div>
+                <button onClick={function(){setProdModal(false);}} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:20,lineHeight:1,padding:4}} onMouseEnter={function(e){e.currentTarget.style.color="#0f172a";}} onMouseLeave={function(e){e.currentTarget.style.color="#94a3b8";}}>{"✕"}</button>
+              </div>
+            </div>
+            <div style={{padding:"20px 28px 28px"}}>
+              {/* Existing products */}
+              {produtos.length>0 && (
+                <div style={{marginBottom:20}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>{"Cadastrados"}</div>
+                  {produtos.map(function(p){ return (
+                    <div key={p.id} style={{background:"#f8fafc",border:"1px solid #e6e9ef",borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"flex-start",gap:10}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{p.nome}</div>
+                        {p.descricao && <div style={{fontSize:11,color:"#64748b",marginTop:2,lineHeight:1.5}}>{p.descricao}</div>}
+                        {p.publico   && <div style={{fontSize:10,color:"#6366f1",marginTop:4}}>{"Público: "+p.publico}</div>}
+                      </div>
+                      <button onClick={function(){deleteProduto(p.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:"2px 4px",flexShrink:0}}>{"×"}</button>
+                    </div>
+                  ); })}
+                </div>
+              )}
+              {/* Add new product */}
+              <div style={{background:"rgba(5,150,105,.03)",border:"1px solid rgba(5,150,105,.15)",borderRadius:14,padding:"16px"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#059669",marginBottom:12,textTransform:"uppercase",letterSpacing:.5}}>{"Adicionar produto / serviço"}</div>
+                {[
+                  {key:"nome",       label:"Nome do produto *",         ph:"Ex: EC Governance / CISO as a Service"},
+                  {key:"descricao",  label:"Descrição curta",           ph:"Ex: Entrega CISO dedicado, SGSI e KPIs de segurança como serviço"},
+                  {key:"beneficios", label:"Benefícios principais",     ph:"Ex: Sem headcount, resultado em 90 dias, pass em auditorias enterprise"},
+                  {key:"publico",    label:"Público-alvo",              ph:"Ex: CEO e CTO de empresas de SaaS e Fintech sem CISO interno"},
+                  {key:"preco",      label:"Faixa de preço / modelo",   ph:"Ex: A partir de R$ 8k/mês · as-a-service"},
+                ].map(function(f){ return (
+                  <div key={f.key} style={{marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{f.label}</div>
+                    <input value={newProd[f.key]||""} onChange={function(e){ var v=e.target.value; setNewProd(function(p){ return Object.assign({},p,{[f.key]:v}); }); }} placeholder={f.ph} style={{width:"100%",boxSizing:"border-box",background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:9,padding:"9px 12px",fontSize:12,color:"#0f172a",fontFamily:"inherit",outline:"none"}} onFocus={function(e){e.target.style.borderColor="rgba(5,150,105,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+                  </div>
+                ); })}
+                <button onClick={saveProduto} disabled={!newProd.nome.trim()} style={{width:"100%",marginTop:8,background:!newProd.nome.trim()?"#e2e8f0":"linear-gradient(135deg,#059669,#10b981)",color:!newProd.nome.trim()?"#94a3b8":"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:700,cursor:!newProd.nome.trim()?"default":"pointer",fontFamily:"inherit"}}>{"+ Adicionar produto"}</button>
+              </div>
+
+              <button onClick={function(){setProdModal(false);}} style={{width:"100%",marginTop:14,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>{"Concluído"}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2275,33 +2603,39 @@ function SearchView(props) {
   }
   function handleSearch() {
     if (!inputVal.trim() || loading) return;
-    var nome = inputVal.trim();
-    var domain = extractDomain(nome);
+    var raw = inputVal.trim();
+    // Se é URL/domínio: extrai domínio e usa como nome provisório até o Gemini refinar
+    var domain = "";
+    var nome   = raw;
+    if (isUrl(raw) || /\.\w{2,}$/.test(raw)) {
+      var withProto = raw.startsWith("http") ? raw : "https://" + raw;
+      try {
+        var u = new URL(withProto);
+        domain = u.hostname.replace(/^www\./,"");
+        // Transforma "nubank.com.br" → "nubank" como nome inicial
+        nome = domain.split(".")[0];
+        nome = nome.charAt(0).toUpperCase() + nome.slice(1);
+      } catch(e) {
+        domain = extractDomain(raw);
+      }
+    } else {
+      domain = extractDomain(raw);
+    }
     var nomeLower = nome.toLowerCase().trim();
     if (props.accounts) {
       var dup = props.accounts.find(function(a){ return a.nome && a.nome.toLowerCase().trim() === nomeLower; });
       if (dup) {
-        // Conta criada manualmente: não bloqueia, faz o mapping e soma as infos
         if (dup.manualOnly) {
           if (props.onRequestCredit) {
-            props.onRequestCredit().then(function(ok){
-              if (!ok) return;
-              runSearch(nome, domain, dup);
-            });
-          } else {
-            runSearch(nome, domain, dup);
-          }
+            props.onRequestCredit().then(function(ok){ if (!ok) return; runSearch(nome, domain, dup); });
+          } else { runSearch(nome, domain, dup); }
           return;
         }
-        // Conta já mapeada pelo sistema: avisa
         setDuplicate(dup); setInputVal(""); return;
       }
     }
     if (props.onRequestCredit) {
-      props.onRequestCredit().then(function(ok){
-        if (!ok) return;
-        runSearch(nome, domain, null);
-      });
+      props.onRequestCredit().then(function(ok){ if (!ok) return; runSearch(nome, domain, null); });
     } else {
       runSearch(nome, domain, null);
     }
@@ -2433,7 +2767,7 @@ function SearchView(props) {
           </div>
         )}
         <div style={{display:"flex",gap:10}}>
-          <input value={inputVal} onChange={function(e){setInputVal(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")handleSearch();}} placeholder="Ex: Nubank, TOTVS, Stone..." style={{flex:1,background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:12,padding:"14px 18px",fontSize:13.5,color:"#0f172a",fontFamily:"inherit",outline:"none",boxShadow:"0 1px 3px rgba(15,23,42,.06)",transition:"border-color .2s"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+          <input value={inputVal} onChange={function(e){setInputVal(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")handleSearch();}} placeholder="Nome da empresa ou site (ex: nubank.com.br)" style={{flex:1,background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:12,padding:"14px 18px",fontSize:13.5,color:"#0f172a",fontFamily:"inherit",outline:"none",boxShadow:"0 1px 3px rgba(15,23,42,.06)",transition:"border-color .2s"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
           <button onClick={handleSearch} disabled={loading||!inputVal.trim()} style={{background:loading||!inputVal.trim()?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:loading||!inputVal.trim()?"#94a3b8":"#fff",border:"none",borderRadius:12,padding:"14px 28px",fontSize:13,fontWeight:600,cursor:loading||!inputVal.trim()?"not-allowed":"pointer",fontFamily:"inherit",boxShadow:loading||!inputVal.trim()?"none":"0 4px 14px rgba(99,102,241,.35)",transition:"all .2s",whiteSpace:"nowrap"}}>
             {loading?"Buscando na internet...":"Analisar"}
           </button>
