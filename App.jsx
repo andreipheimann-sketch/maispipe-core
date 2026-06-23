@@ -3544,6 +3544,223 @@ function BetaBanner() {
     </div>
   );
 }
+// ── PROSPECT VIEW ─────────────────────────────────────────────────────────────
+function ProspectView(props) {
+  var accounts   = props.accounts || [];
+  var usage      = props.usage || {};
+
+  var _st_icp = useState(function(){
+    try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):{}; } catch(e){ return {}; }
+  }); var icp = _st_icp[0];
+
+  var _st_lista     = useState([]); var lista = _st_lista[0]; var setLista = _st_lista[1];
+  var _st_loading   = useState(false); var loadingP = _st_loading[0]; var setLoadingP = _st_loading[1];
+  var _st_error     = useState(""); var errorP = _st_error[0]; var setErrorP = _st_error[1];
+  var _st_enriching = useState({}); var enriching = _st_enriching[0]; var setEnriching = _st_enriching[1];
+  var _st_enriched  = useState({}); var enriched = _st_enriched[0]; var setEnriched = _st_enriched[1];
+  var _st_filter    = useState("TODOS"); var filter = _st_filter[0]; var setFilter = _st_filter[1];
+  var _st_search    = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
+
+  var icpPreenchido = !!(icp && (icp.segmento || icp.porte || icp.faturamento));
+  var mappedNames = new Set(accounts.map(function(a){ return (a.nome||"").toLowerCase().trim(); }));
+
+  function gerarLista() {
+    setLoadingP(true); setErrorP(""); setLista([]);
+    fetch("/api/prospect", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        icp: icp,
+        clienteNome: (CLIENT_CONFIG && CLIENT_CONFIG.empresa && CLIENT_CONFIG.empresa.nome) || "",
+        quantidade: 50,
+      }),
+    })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.error) { setErrorP(d.error); return; }
+        setLista(d.empresas || []);
+      })
+      .catch(function(e){ setErrorP("Erro ao gerar lista: " + e.message); })
+      .finally(function(){ setLoadingP(false); });
+  }
+
+  function enriquecerEmpresa(emp) {
+    if (props.onRequestCredit) {
+      props.onRequestCredit().then(function(ok){ if (ok) doEnrich(emp); });
+    } else {
+      doEnrich(emp);
+    }
+  }
+
+  function doEnrich(emp) {
+    var key = emp.nome;
+    setEnriching(function(e){ var n=Object.assign({},e); n[key]=true; return n; });
+    var domain = emp.site ? emp.site.replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0] : "";
+    fetch("/api/search", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ company:emp.nome, domain:domain, context:"" }),
+    })
+      .then(function(r){ return r.json(); })
+      .then(function(resp){
+        if (props.onSaveRaw) {
+          props.onSaveRaw(emp.nome, resp.results, true, null, "", function(acc){
+            setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
+          }, null);
+        }
+      })
+      .catch(function(){})
+      .finally(function(){
+        setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
+      });
+  }
+
+  var listaFiltrada = lista.filter(function(e){
+    if (filter !== "TODOS" && e.score_fit !== filter) return false;
+    if (search) {
+      var q = search.toLowerCase();
+      return (e.nome||"").toLowerCase().includes(q)||(e.setor||"").toLowerCase().includes(q)||(e.cidade||"").toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  var FIT_STYLE = {
+    "ALTO":  { bg:"rgba(52,211,153,.12)", border:"rgba(52,211,153,.4)", color:"#047857" },
+    "MÉDIO": { bg:"rgba(251,191,36,.12)", border:"rgba(251,191,36,.4)", color:"#92400e" },
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:24}}>
+        <div style={{fontSize:28,fontWeight:800,color:"#0f172a",letterSpacing:"-.6px",marginBottom:4}}>{"Prospectar"}</div>
+        <div style={{fontSize:13,color:"#52617a"}}>{"Empresas sugeridas pela IA com base no seu ICP. Clique em Enriquecer para gerar o account mapping completo."}</div>
+      </div>
+
+      {!icpPreenchido && (
+        <div style={{background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.3)",borderRadius:14,padding:"14px 18px",marginBottom:20,display:"flex",alignItems:"center",gap:12}}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"#92400e"}}>{"ICP não configurado"}</div>
+            <div style={{fontSize:12,color:"#92400e",opacity:.8}}>{"Configure seu ICP na Home para sugestões mais precisas. Você ainda pode gerar uma lista com critérios padrão."}</div>
+          </div>
+        </div>
+      )}
+
+      {lista.length === 0 && !loadingP && (
+        <div style={{textAlign:"center",padding:"60px 20px",background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:20,marginBottom:24}}>
+          <div style={{fontSize:48,marginBottom:16}}>{"🎯"}</div>
+          <div style={{fontSize:20,fontWeight:800,color:"#0f172a",marginBottom:8}}>{"Gerar lista de prospecção"}</div>
+          <div style={{fontSize:13,color:"#64748b",maxWidth:440,margin:"0 auto 24px",lineHeight:1.7}}>
+            {icpPreenchido
+              ? ("A IA vai gerar 50 empresas reais brasileiras que se encaixam no ICP: " + (icp.segmento||"") + (icp.porte?", "+icp.porte:"") + ".")
+              : "A IA vai gerar 50 empresas reais brasileiras com base nos critérios padrão do produto."}
+          </div>
+          <button onClick={gerarLista} style={{background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 28px rgba(99,102,241,.4)",display:"inline-flex",alignItems:"center",gap:10}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            {"Gerar 50 empresas com IA"}
+          </button>
+        </div>
+      )}
+
+      {loadingP && (
+        <div style={{textAlign:"center",padding:"60px 20px"}}>
+          <div style={{width:48,height:48,borderRadius:"50%",border:"3px solid rgba(99,102,241,.2)",borderTopColor:"#6366f1",animation:"spin .8s linear infinite",margin:"0 auto 20px"}}/>
+          <div style={{fontSize:15,fontWeight:700,color:"#0f172a",marginBottom:6}}>{"Consultando a IA..."}</div>
+          <div style={{fontSize:12,color:"#64748b"}}>{"Gerando 50 empresas com base no ICP. Aguarde alguns segundos."}</div>
+        </div>
+      )}
+
+      {errorP && (
+        <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.3)",borderRadius:12,padding:"14px 18px",marginBottom:20,color:"#991b1b",fontSize:13}}>
+          {errorP}
+          <button onClick={gerarLista} style={{marginLeft:12,background:"none",border:"1px solid #991b1b",color:"#991b1b",borderRadius:8,padding:"4px 12px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Tentar novamente"}</button>
+        </div>
+      )}
+
+      {lista.length > 0 && (
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+            <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Filtrar por nome, setor ou cidade..." style={{flex:1,minWidth:180,background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 14px",fontSize:12,color:"#0f172a",fontFamily:"inherit",outline:"none"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+            {["TODOS","ALTO","MÉDIO"].map(function(f){
+              var active=filter===f;
+              return <button key={f} onClick={function(){setFilter(f);}} style={{background:active?"linear-gradient(135deg,#6366f1,#4f46e5)":"#fff",color:active?"#fff":"#64748b",border:"1.5px solid "+(active?"transparent":"#e6e9ef"),borderRadius:9,padding:"8px 14px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{f==="TODOS"?"Todos ("+lista.length+")":f}</button>;
+            })}
+            <button onClick={gerarLista} style={{background:"none",border:"1.5px solid rgba(99,102,241,.3)",color:"#6366f1",borderRadius:9,padding:"8px 14px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.44-5.5"/></svg>
+              {"Regerar"}
+            </button>
+          </div>
+
+          <div style={{display:"flex",gap:12,marginBottom:18,flexWrap:"wrap"}}>
+            {[
+              {label:"Total gerado",      value:lista.length,                                                                              color:"#6366f1"},
+              {label:"Fit ALTO",          value:lista.filter(function(e){return e.score_fit==="ALTO";}).length,                            color:"#10b981"},
+              {label:"Fit MÉDIO",         value:lista.filter(function(e){return e.score_fit==="MÉDIO";}).length,                           color:"#f59e0b"},
+              {label:"Já mapeadas",       value:lista.filter(function(e){return mappedNames.has((e.nome||"").toLowerCase().trim());}).length,color:"#64748b"},
+              {label:"Enriquecidas agora",value:Object.keys(enriched).length,                                                              color:"#7c3aed"},
+            ].map(function(s){ return (
+              <div key={s.label} style={{background:"#fff",border:"1px solid #e6e9ef",borderRadius:10,padding:"10px 16px",display:"flex",flexDirection:"column",gap:2}}>
+                <div style={{fontSize:20,fontWeight:800,color:s.color,lineHeight:1}}>{s.value}</div>
+                <div style={{fontSize:10,color:"#64748b",fontWeight:500,whiteSpace:"nowrap"}}>{s.label}</div>
+              </div>
+            ); })}
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
+            {listaFiltrada.map(function(emp, idx){
+              var fitStyle    = FIT_STYLE[emp.score_fit] || FIT_STYLE["MÉDIO"];
+              var jaMapeada   = mappedNames.has((emp.nome||"").toLowerCase().trim());
+              var jaEnriq     = !!enriched[emp.nome];
+              var isEnriching = !!enriching[emp.nome];
+              return (
+                <div key={idx} style={{background:"#fff",border:"1px solid "+(jaEnriq?"rgba(99,102,241,.3)":"#e6e9ef"),borderRadius:16,padding:"18px",transition:"all .2s",boxShadow:jaEnriq?"0 4px 20px rgba(99,102,241,.1)":"none"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:10}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:800,color:"#0f172a",lineHeight:1.3,marginBottom:3}}>{emp.nome}</div>
+                      <div style={{fontSize:11,color:"#64748b"}}>{[emp.setor,emp.cidade].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-end",flexShrink:0}}>
+                      <span style={{fontSize:8,fontWeight:800,background:fitStyle.bg,border:"1px solid "+fitStyle.border,color:fitStyle.color,borderRadius:6,padding:"2px 8px",whiteSpace:"nowrap"}}>{"FIT "+emp.score_fit}</span>
+                      {jaMapeada && <span style={{fontSize:8,fontWeight:700,background:"rgba(100,116,139,.1)",border:"1px solid rgba(100,116,139,.25)",color:"#475569",borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>{"✓ mapeada"}</span>}
+                      {jaEnriq && !jaMapeada && <span style={{fontSize:8,fontWeight:700,background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.25)",color:"#4f46e5",borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>{"✓ enriquecida"}</span>}
+                    </div>
+                  </div>
+                  {emp.porte_estimado && <div style={{fontSize:10,color:"#94a3b8",marginBottom:8}}>{"👥 "+emp.porte_estimado}</div>}
+                  <div style={{fontSize:12,color:"#475569",lineHeight:1.6,marginBottom:8}}>{emp.resumo}</div>
+                  {emp.motivo_fit && (
+                    <div style={{background:"rgba(99,102,241,.05)",border:"1px solid rgba(99,102,241,.12)",borderRadius:8,padding:"7px 10px",fontSize:11,color:"#4338ca",lineHeight:1.5,marginBottom:12}}>
+                      <span style={{fontWeight:700}}>{"Fit: "}</span>{emp.motivo_fit}
+                    </div>
+                  )}
+                  {emp.site && <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}><a href={"https://"+emp.site.replace(/^https?:\/\//,"")} target="_blank" rel="noopener noreferrer" style={{color:"#6366f1",textDecoration:"none"}} onClick={function(e){e.stopPropagation();}}>{"🔗 "+emp.site}</a></div>}
+                  <div style={{display:"flex",gap:8}}>
+                    {jaMapeada ? (
+                      <button onClick={function(){if(props.onNav)props.onNav("accounts");}} style={{flex:1,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#475569",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Ver em Contas →"}</button>
+                    ) : jaEnriq ? (
+                      <button onClick={function(){if(props.onOpenAccount)props.onOpenAccount(enriched[emp.nome]);}} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>{"Ver mapeamento →"}</button>
+                    ) : (
+                      <button onClick={function(){enriquecerEmpresa(emp);}} disabled={isEnriching} style={{flex:1,background:isEnriching?"#f1f5f9":"linear-gradient(135deg,#6366f1,#4f46e5)",color:isEnriching?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:isEnriching?"default":"pointer",fontFamily:"inherit",boxShadow:isEnriching?"none":"0 4px 12px rgba(99,102,241,.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .2s"}}>
+                        {isEnriching
+                          ? <><div style={{width:10,height:10,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite"}}/> {"Mapeando..."}</>
+                          : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>{"Enriquecer — 1 crédito"}</>
+                        }
+                      </button>
+                    )}
+                    {emp.site && !jaMapeada && !jaEnriq && !isEnriching && (
+                      <button onClick={function(){if(props.onNav)props.onNav("search");}} title="Buscar manualmente" style={{background:"#f8fafc",border:"1px solid #e2e8f0",color:"#64748b",borderRadius:9,padding:"8px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>{"🔍"}</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {listaFiltrada.length===0 && <div style={{textAlign:"center",padding:"40px",color:"#94a3b8",fontSize:13}}>{"Nenhuma empresa com esses filtros."}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   var _st_nav = useState("home"); var nav = _st_nav[0]; var setNav = _st_nav[1];
   var _st_accounts = useState([]); var accounts = _st_accounts[0]; var setAccounts = _st_accounts[1];
@@ -3777,6 +3994,7 @@ export default function App() {
   var NAV = [
     {id:"home",         emoji:"🏠", label:"Home"},
     {id:"search",       emoji:"🔍", label:"Busca"},
+    {id:"prospect",     emoji:"🎯", label:"Prospectar"},
     {id:"accounts",     emoji:"📁", label:"Contas"},
     {id:"contacts",     emoji:"👥", label:"Contatos"},
     {id:"sequences",    emoji:"📬", label:"Sequências"},
@@ -3861,6 +4079,7 @@ export default function App() {
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav}/>}
               {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav}/>}
+              {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts}/>}
