@@ -2123,7 +2123,7 @@ function HomeView(props) {
 
   var CARDS = [
     {id:"prospect",label:"Busca Geral",       emoji:"🎯", nav:"prospect",
-     desc:"Gere uma lista de 50 empresas reais com base no seu ICP. Explore, filtre e enriqueça com um clique.",
+     desc:"Gere uma lista de 30 empresas reais com base no seu ICP. Explore, filtre e enriqueça com um clique.",
      stat:"Grátis — sem consumir créditos", statColor:"#059669"},
     {id:"busca",  label:"Account Mapping",    emoji:"🔍", nav:"search",
      desc:CLIENT_CONFIG.ui.cardBusca,
@@ -2180,70 +2180,88 @@ function HomeView(props) {
                 <div style={{fontSize:10.5,color:"#cbd5e1",fontWeight:500,marginTop:6,whiteSpace:"nowrap"}}>{m.label}</div>
               </div>
             ); })}
-            <button onClick={function(){onNav("search");}} style={{marginLeft:"auto",alignSelf:"center",background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:14,padding:"14px 26px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 28px rgba(99,102,241,.5)",display:"flex",alignItems:"center",gap:8,whiteSpace:"nowrap"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="";}}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-              {"Nova busca"}
-            </button>
           </div>
         </div>
       </div>
 
-      {/* ── Configuração: ICP + Produto ─────────────────────────────────────── */}
+      {/* ── Comece por aqui ───────────────────────────────────────────────── */}
       <div style={{marginBottom:28}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{"Configuração"}</div>
-          <span style={{fontSize:10,color:"#94a3b8",background:"#f1f5f9",borderRadius:6,padding:"2px 8px",fontWeight:500}}>{"opcional"}</span>
+        {/* Section header */}
+        <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05))",border:"1px solid rgba(99,102,241,.2)",borderRadius:16,padding:"16px 20px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 4px 12px rgba(99,102,241,.35)"}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </div>
+            <div>
+              <div style={{fontSize:15,fontWeight:800,color:"#1e293b",letterSpacing:"-.2px"}}>{"Comece por aqui"}</div>
+              <div style={{fontSize:12,color:"#6366f1",fontWeight:500,marginTop:1}}>{"Configure o ICP e seus produtos para ativar o potencial completo da plataforma"}</div>
+            </div>
+          </div>
+          {icpSaved && produtos.length>0
+            ? <span style={{fontSize:10,fontWeight:700,color:"#059669",background:"rgba(5,150,105,.1)",border:"1px solid rgba(5,150,105,.25)",borderRadius:20,padding:"4px 12px",whiteSpace:"nowrap"}}>{"✓ Tudo configurado"}</span>
+            : <span style={{fontSize:10,fontWeight:700,color:"#d97706",background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",borderRadius:20,padding:"4px 12px",whiteSpace:"nowrap"}}>{(!icpSaved && !produtos.length)?"2 itens pendentes":!icpSaved?"ICP pendente":"Produto pendente"}</span>
+          }
         </div>
+
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
 
           {/* ICP Card */}
-          <div onClick={function(){setIcpModal(true);}} style={{background:icpSaved?"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.04))":"#fff",border:"1.5px solid "+(icpSaved?"rgba(99,102,241,.35)":"#e6e9ef"),borderRadius:16,padding:"20px",cursor:"pointer",transition:"all .2s",position:"relative"}}
-            onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(99,102,241,.1)";}}
-            onMouseLeave={function(e){e.currentTarget.style.borderColor=icpSaved?"rgba(99,102,241,.35)":"#e6e9ef";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
+          <div onClick={function(){setIcpModal(true);}} style={{background:icpSaved?"linear-gradient(135deg,rgba(99,102,241,.07),rgba(139,92,246,.04))":"linear-gradient(135deg,#fff,rgba(99,102,241,.03))",border:"1.5px solid "+(icpSaved?"rgba(99,102,241,.4)":"rgba(99,102,241,.2)"),borderRadius:16,padding:"20px",cursor:"pointer",transition:"all .2s",position:"relative",boxShadow:icpSaved?"0 2px 12px rgba(99,102,241,.1)":"0 2px 8px rgba(99,102,241,.06)"}}
+            onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.6)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(99,102,241,.15)";}}
+            onMouseLeave={function(e){e.currentTarget.style.borderColor=icpSaved?"rgba(99,102,241,.4)":"rgba(99,102,241,.2)";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=icpSaved?"0 2px 12px rgba(99,102,241,.1)":"0 2px 8px rgba(99,102,241,.06)";}}>
+            {!icpSaved && <div style={{position:"absolute",top:-1,right:16,background:"linear-gradient(135deg,#f59e0b,#f97316)",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"0 0 8px 8px",padding:"3px 10px",letterSpacing:.5}}>{"RECOMENDADO"}</div>}
             <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
-              <div style={{width:40,height:40,borderRadius:12,background:icpSaved?"linear-gradient(135deg,#6366f1,#8b5cf6)":"linear-gradient(135deg,#e2e8f0,#f1f5f9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={icpSaved?"#fff":"#94a3b8"} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
+              <div style={{width:44,height:44,borderRadius:13,background:icpSaved?"linear-gradient(135deg,#6366f1,#8b5cf6)":"linear-gradient(135deg,#818cf8,#a78bfa)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:icpSaved?"0 4px 14px rgba(99,102,241,.4)":"0 4px 10px rgba(99,102,241,.2)"}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
               </div>
               <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:3}}>{icpSaved?"ICP Configurado":"Cadastre seu ICP"}</div>
-                <div style={{fontSize:11.5,color:"#64748b",lineHeight:1.5}}>{icpSaved?("Segmento: "+(icp.segmento||"—")):"Defina segmento, porte, faturamento e cargos-alvo para enriquecer o fit score."}</div>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                  <div style={{fontSize:14,fontWeight:800,color:"#0f172a"}}>{icpSaved?"ICP Configurado ✓":"1. Configure seu ICP"}</div>
+                </div>
+                <div style={{fontSize:11.5,color:icpSaved?"#4f46e5":"#64748b",lineHeight:1.55,fontWeight:icpSaved?500:400}}>{icpSaved?("Segmento: "+(icp.segmento||"—")):"Defina quem é seu cliente ideal: segmento, porte, faturamento e cargos decisores. O ICP é usado em todo o mapeamento e na Busca Geral."}</div>
               </div>
-              {icpSaved && <span style={{fontSize:9,fontWeight:700,color:"#4f46e5",background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.2)",borderRadius:6,padding:"2px 7px",flexShrink:0}}>{"✓ ativo"}</span>}
+              {icpSaved && <span style={{fontSize:9,fontWeight:700,color:"#4f46e5",background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.25)",borderRadius:6,padding:"2px 7px",flexShrink:0}}>{"✓ ativo"}</span>}
             </div>
             {icpSaved && fitCriteria.length>0 && (
-              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
                 {fitCriteria.map(function(c){ return (
                   <span key={c.id} style={{fontSize:9,color:"#6366f1",background:"rgba(99,102,241,.08)",borderRadius:5,padding:"2px 7px",fontWeight:600}}>{c.label}</span>
                 ); })}
               </div>
             )}
             {!icpSaved && (
-              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                <span style={{fontSize:11,color:"#6366f1",fontWeight:600}}>{"Configurar ICP"}</span>
+              <div style={{background:"rgba(99,102,241,.06)",borderRadius:10,padding:"10px 12px",marginTop:8}}>
+                <div style={{fontSize:10.5,color:"#4338ca",lineHeight:1.6,fontWeight:500}}>{"Sem ICP configurado, o fit score é genérico e a Busca Geral usa critérios padrão. Com ICP, cada conta recebe um score personalizado para o seu negócio."}</div>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:"#6366f1",flexShrink:0}}/>
+                  <span style={{fontSize:11,color:"#6366f1",fontWeight:700}}>{"Configurar agora →"}</span>
+                </div>
               </div>
             )}
           </div>
 
           {/* Produto Card */}
-          <div onClick={function(){setProdModal(true);}} style={{background:produtos.length>0?"linear-gradient(135deg,rgba(5,150,105,.04),rgba(16,185,129,.02))":"#fff",border:"1.5px solid "+(produtos.length>0?"rgba(5,150,105,.3)":"#e6e9ef"),borderRadius:16,padding:"20px",cursor:"pointer",transition:"all .2s",position:"relative"}}
-            onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(5,150,105,.5)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(5,150,105,.08)";}}
-            onMouseLeave={function(e){e.currentTarget.style.borderColor=produtos.length>0?"rgba(5,150,105,.3)":"#e6e9ef";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
+          <div onClick={function(){setProdModal(true);}} style={{background:produtos.length>0?"linear-gradient(135deg,rgba(5,150,105,.06),rgba(16,185,129,.03))":"linear-gradient(135deg,#fff,rgba(5,150,105,.02))",border:"1.5px solid "+(produtos.length>0?"rgba(5,150,105,.4)":"rgba(5,150,105,.2)"),borderRadius:16,padding:"20px",cursor:"pointer",transition:"all .2s",position:"relative",boxShadow:produtos.length>0?"0 2px 12px rgba(5,150,105,.08)":"0 2px 8px rgba(5,150,105,.04)"}}
+            onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(5,150,105,.6)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(5,150,105,.12)";}}
+            onMouseLeave={function(e){e.currentTarget.style.borderColor=produtos.length>0?"rgba(5,150,105,.4)":"rgba(5,150,105,.2)";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=produtos.length>0?"0 2px 12px rgba(5,150,105,.08)":"0 2px 8px rgba(5,150,105,.04)";}}>
+            {!produtos.length && <div style={{position:"absolute",top:-1,right:16,background:"linear-gradient(135deg,#059669,#0d9488)",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"0 0 8px 8px",padding:"3px 10px",letterSpacing:.5}}>{"RECOMENDADO"}</div>}
             <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
-              <div style={{width:40,height:40,borderRadius:12,background:produtos.length>0?"linear-gradient(135deg,#059669,#10b981)":"linear-gradient(135deg,#e2e8f0,#f1f5f9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={produtos.length>0?"#fff":"#94a3b8"} strokeWidth="2" strokeLinecap="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+              <div style={{width:44,height:44,borderRadius:13,background:produtos.length>0?"linear-gradient(135deg,#059669,#10b981)":"linear-gradient(135deg,#34d399,#6ee7b7)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:produtos.length>0?"0 4px 14px rgba(5,150,105,.35)":"0 4px 10px rgba(5,150,105,.15)"}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
               </div>
               <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:3}}>{produtos.length>0?(produtos.length+" produto"+(produtos.length!==1?"s":"")+" cadastrado"+(produtos.length!==1?"s":"")):"Cadastre seu Produto"}</div>
-                <div style={{fontSize:11.5,color:"#64748b",lineHeight:1.5}}>{produtos.length>0?(produtos.map(function(p){return p.nome;}).join(", ")):"Adicione seus produtos/serviços para enriquecer o mapeamento de conta com IA."}</div>
+                <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:3}}>{produtos.length>0?(produtos.length+" produto"+(produtos.length!==1?"s":"")+" ✓"):"2. Cadastre seu Produto"}</div>
+                <div style={{fontSize:11.5,color:produtos.length>0?"#059669":"#64748b",lineHeight:1.55,fontWeight:produtos.length>0?500:400}}>{produtos.length>0?(produtos.map(function(p){return p.nome;}).join(", ")):"Descreva o que você vende. Com produtos cadastrados, o mapeamento de conta relaciona dores e oportunidades diretamente à sua oferta."}</div>
               </div>
-              {produtos.length>0 && <span style={{fontSize:9,fontWeight:700,color:"#059669",background:"rgba(5,150,105,.1)",border:"1px solid rgba(5,150,105,.2)",borderRadius:6,padding:"2px 7px",flexShrink:0}}>{"✓ ativo"}</span>}
+              {produtos.length>0 && <span style={{fontSize:9,fontWeight:700,color:"#059669",background:"rgba(5,150,105,.1)",border:"1px solid rgba(5,150,105,.25)",borderRadius:6,padding:"2px 7px",flexShrink:0}}>{"✓ ativo"}</span>}
             </div>
             {!produtos.length && (
-              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                <span style={{fontSize:11,color:"#059669",fontWeight:600}}>{"Adicionar produto"}</span>
+              <div style={{background:"rgba(5,150,105,.05)",borderRadius:10,padding:"10px 12px",marginTop:8}}>
+                <div style={{fontSize:10.5,color:"#065f46",lineHeight:1.6,fontWeight:500}}>{"Sem produtos, o mapeamento usa os serviços padrão do seu plano. Com produtos cadastrados, a IA personaliza dores, perguntas SPIN e sequências para o que você vende."}</div>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:"#059669",flexShrink:0}}/>
+                  <span style={{fontSize:11,color:"#059669",fontWeight:700}}>{"Adicionar produto →"}</span>
+                </div>
               </div>
             )}
           </div>
@@ -3556,20 +3574,16 @@ function ProspectView(props) {
     try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):{}; } catch(e){ return {}; }
   }); var icp = _st_icp[0];
 
-  var _st_lista     = useState(function(){
-    try { var s=localStorage.getItem("pipe_prospect_lista"); return s?JSON.parse(s):[]; } catch(e){ return []; }
-  }); var lista = _st_lista[0]; var setLista = _st_lista[1];
-  var _st_loading   = useState(false); var loadingP = _st_loading[0]; var setLoadingP = _st_loading[1];
-  var _st_error     = useState(""); var errorP = _st_error[0]; var setErrorP = _st_error[1];
+  var lista    = props.lista    || [];
+  var loadingP = props.loadingP || false;
+  var errorP   = props.errorP   || "";
+  var saveLista  = props.setLista;
+  var setLoadingP= props.setLoadingP;
+  var setErrorP  = props.setErrorP;
   var _st_enriching = useState({}); var enriching = _st_enriching[0]; var setEnriching = _st_enriching[1];
   var _st_enriched  = useState({}); var enriched = _st_enriched[0]; var setEnriched = _st_enriched[1];
   var _st_filter    = useState("TODOS"); var filter = _st_filter[0]; var setFilter = _st_filter[1];
   var _st_search    = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
-
-  function saveLista(empresas) {
-    setLista(empresas);
-    try { localStorage.setItem("pipe_prospect_lista", JSON.stringify(empresas)); } catch(e){}
-  }
 
   var icpPreenchido = !!(icp && (icp.segmento || icp.porte || icp.faturamento));
   var mappedNames = new Set(accounts.map(function(a){ return (a.nome||"").toLowerCase().trim(); }));
@@ -3582,7 +3596,7 @@ function ProspectView(props) {
       body:JSON.stringify({
         icp: icp,
         clienteNome: (CLIENT_CONFIG && CLIENT_CONFIG.empresa && CLIENT_CONFIG.empresa.nome) || "",
-        quantidade: 50,
+        quantidade: 30,
       }),
     })
       .then(function(r){ return r.json(); })
@@ -3662,8 +3676,8 @@ function ProspectView(props) {
           <div style={{fontSize:20,fontWeight:800,color:"#0f172a",marginBottom:8}}>{"Gerar lista de prospecção"}</div>
           <div style={{fontSize:13,color:"#64748b",maxWidth:440,margin:"0 auto 16px",lineHeight:1.7}}>
             {icpPreenchido
-              ? ("A IA vai gerar 50 empresas reais brasileiras que se encaixam no ICP: " + (icp.segmento||"") + (icp.porte?", "+icp.porte:"") + ".")
-              : "A IA vai gerar 50 empresas reais brasileiras com base nos critérios padrão do produto."}
+              ? ("A IA vai gerar 30 empresas reais brasileiras que se encaixam no ICP: " + (icp.segmento||"") + (icp.porte?", "+icp.porte:"") + ".")
+              : "A IA vai gerar 30 empresas reais brasileiras com base nos critérios padrão do produto."}
           </div>
           <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.3)",borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:700,color:"#047857",marginBottom:24}}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -3672,7 +3686,7 @@ function ProspectView(props) {
           <div>
             <button onClick={gerarLista} style={{background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 8px 28px rgba(99,102,241,.4)",display:"inline-flex",alignItems:"center",gap:10}}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              {"Gerar 50 empresas com IA — grátis"}
+              {"Gerar 30 empresas com IA — grátis"}
             </button>
           </div>
         </div>
@@ -3682,7 +3696,7 @@ function ProspectView(props) {
         <div style={{textAlign:"center",padding:"60px 20px"}}>
           <div style={{width:48,height:48,borderRadius:"50%",border:"3px solid rgba(99,102,241,.2)",borderTopColor:"#6366f1",animation:"spin .8s linear infinite",margin:"0 auto 20px"}}/>
           <div style={{fontSize:15,fontWeight:700,color:"#0f172a",marginBottom:6}}>{"Consultando a IA..."}</div>
-          <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>{"Gerando 50 empresas com base no ICP. Pode levar até 30 segundos."}</div>
+          <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>{"Gerando 30 empresas com base no ICP. Aguarde alguns segundos."}</div>
           <div style={{fontSize:11,color:"#94a3b8"}}>{"Em caso de alta demanda da IA, a lista é gerada automaticamente na segunda tentativa."}</div>
         </div>
       )}
@@ -3792,6 +3806,13 @@ export default function App() {
   var _st_usage = useState(null); var usage = _st_usage[0]; var setUsage = _st_usage[1];
   var _st_mappingId = useState(null); var mappingId = _st_mappingId[0]; var setMappingId = _st_mappingId[1];
   var _st_seqRequest = useState(null); var seqRequest = _st_seqRequest[0]; var setSeqRequest = _st_seqRequest[1];
+
+  // ── Prospect state — lifted to App so search runs in background ──────────
+  var _st_pLista = useState(function(){ try{var s=localStorage.getItem("pipe_prospect_lista");return s?JSON.parse(s):[];}catch(e){return [];} });
+  var prospectLista = _st_pLista[0]; var setProspectListaRaw = _st_pLista[1];
+  function setProspectLista(empresas){ setProspectListaRaw(empresas); try{localStorage.setItem("pipe_prospect_lista",JSON.stringify(empresas));}catch(e){} }
+  var _st_pLoading = useState(false); var prospectLoading = _st_pLoading[0]; var setProspectLoading = _st_pLoading[1];
+  var _st_pError   = useState("");    var prospectError   = _st_pError[0];   var setProspectError   = _st_pError[1];
   // Dispara a geração de uma sequência a partir de um contato real (nome + cargo).
   function generateSequenceFromContact(contact) {
     setSeqRequest({
@@ -4056,9 +4077,13 @@ export default function App() {
             return (
               <button key={item.id} onClick={function(){setNav(item.id);}} title={sidebarExpanded?"":item.label} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:sidebarExpanded?"10px 12px":"8px 0",justifyContent:sidebarExpanded?"flex-start":"center",borderRadius:11,border:"1px solid "+(active?"rgba(99,102,241,.3)":"transparent"),background:active?"linear-gradient(135deg,rgba(99,102,241,.22),rgba(139,92,246,.15))":"transparent",color:active?"#ffffff":"rgba(255,255,255,.92)",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:active?700:600,marginBottom:3,transition:"all .25s cubic-bezier(.4,0,.2,1)",textAlign:"left",boxShadow:active?"0 4px 14px rgba(99,102,241,.25)":"none",position:"relative",willChange:"background,color"}} onMouseEnter={function(e){if(!active){e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.85)";}}} onMouseLeave={function(e){if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color="rgba(255,255,255,.92)";}}}>
                 {active && <span style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:18,background:"linear-gradient(180deg,#6366f1,#8b5cf6)",borderRadius:"0 3px 3px 0"}}/>}
-                <span style={{fontSize:sidebarExpanded?16:20,flexShrink:0,transition:"font-size .2s ease"}}>{item.emoji}</span>
-                <span className={"sidebar-label " + (sidebarExpanded?"visible":"hidden")} style={{flex:1}}>
+                <span style={{fontSize:sidebarExpanded?16:20,flexShrink:0,transition:"font-size .2s ease",position:"relative"}}>
+                  {item.emoji}
+                  {item.id==="prospect" && prospectLoading && <span style={{position:"absolute",top:-3,right:-3,width:7,height:7,borderRadius:"50%",background:"#a5b4fc",animation:"pulse 1.2s ease-in-out infinite"}}/>}
+                </span>
+                <span className={"sidebar-label " + (sidebarExpanded?"visible":"hidden")} style={{flex:1,display:"flex",alignItems:"center",gap:6}}>
                   {item.label}
+                  {item.id==="prospect" && prospectLoading && sidebarExpanded && <span style={{fontSize:9,color:"#a5b4fc",fontWeight:600,animation:"pulse 1.2s ease-in-out infinite"}}>{"buscando..."}</span>}
                 </span>
               </button>
             );
@@ -4097,7 +4122,7 @@ export default function App() {
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav}/>}
               {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav}/>}
-              {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }}/>}
+              {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts}/>}
