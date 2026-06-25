@@ -2462,6 +2462,13 @@ function HomeView(props) {
       <div style={{position:"relative",borderRadius:24,overflow:"hidden",marginBottom:28,background:"linear-gradient(135deg,#0a0a14 0%,#171430 45%,#1e1b4b 100%)",border:"1px solid #e6e9ef",padding:"40px 40px 36px"}}>
         <div style={{position:"absolute",top:-80,right:-60,width:320,height:320,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.4),transparent 70%)",filter:"blur(20px)"}}/>
         <div style={{position:"absolute",bottom:-100,left:-40,width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,.3),transparent 70%)",filter:"blur(20px)"}}/>
+        {/* Plan badge — top right */}
+        {props.usage && (
+          <div style={{position:"absolute",top:20,right:24,zIndex:3,display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:9,fontWeight:700,color:"#fff",background:props.usage.planColor,borderRadius:6,padding:"3px 10px",textTransform:"uppercase",letterSpacing:.6}}>{props.usage.planLabel}</span>
+            <span style={{fontSize:10,color:"rgba(255,255,255,.5)",fontWeight:500}}>{props.usage.used + "/" + props.usage.limit + " mapeamentos"}</span>
+          </div>
+        )}
         <div style={{position:"relative",zIndex:2}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}>
             <span style={{fontSize:10,fontWeight:700,color:"#4f46e5",background:"rgba(99,102,241,.15)",border:"1px solid rgba(129,140,248,.3)",borderRadius:20,padding:"4px 12px",letterSpacing:.5}}>{"PROSPECTING TOOL"}</span>
@@ -2489,23 +2496,36 @@ function HomeView(props) {
 
       {/* ── Comece por aqui ───────────────────────────────────────────────── */}
       <div style={{marginBottom:28}}>
-        {/* Section header */}
-        <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05))",border:"1px solid rgba(99,102,241,.2)",borderRadius:16,padding:"16px 20px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 4px 12px rgba(99,102,241,.35)"}}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            </div>
-            <div>
-              <div style={{fontSize:15,fontWeight:800,color:"#1e293b",letterSpacing:"-.2px"}}>{"Comece por aqui"}</div>
-              <div style={{fontSize:12,color:"#6366f1",fontWeight:500,marginTop:1}}>{"Configure o ICP e seus produtos para ativar o potencial completo da plataforma"}</div>
-            </div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+          <div style={{width:4,height:18,background:"linear-gradient(180deg,#6366f1,#8b5cf6)",borderRadius:2,flexShrink:0}}/>
+          <div style={{fontSize:14,fontWeight:800,color:"#1e293b",letterSpacing:"-.2px"}}>{"Comece por aqui"}</div>
+        </div>
+        {/* Busca Geral CTA card */}
+        <div onClick={function(){onNav("prospect");}} style={{background:"linear-gradient(135deg,#0a0a14,#171430)",border:"1px solid rgba(99,102,241,.3)",borderRadius:18,padding:"24px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:20,transition:"all .25s cubic-bezier(.22,1,.36,1)",position:"relative",overflow:"hidden"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.6)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 12px 36px rgba(99,102,241,.2)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.3)";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
+          <div style={{position:"absolute",top:-40,right:-20,width:160,height:160,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.25),transparent 70%)",filter:"blur(12px)"}}/>
+          <div style={{width:52,height:52,borderRadius:15,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 6px 18px rgba(99,102,241,.45)"}}>
+            <span style={{fontSize:24}}>{"🎯"}</span>
           </div>
+          <div style={{flex:1,position:"relative",zIndex:1}}>
+            <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:4,letterSpacing:"-.3px"}}>{"Busca Geral — mapeamento inicial"}</div>
+            <div style={{fontSize:12.5,color:"#94a3b8",lineHeight:1.6}}>{"Gere uma lista de 30 empresas reais com base no seu ICP. Explore, filtre por fit e enriqueça com 1 clique. Gratuito."}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,background:"rgba(99,102,241,.2)",border:"1px solid rgba(99,102,241,.35)",borderRadius:10,padding:"8px 16px",flexShrink:0,position:"relative",zIndex:1}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#a5b4fc",whiteSpace:"nowrap"}}>{"Iniciar →"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Configurações ─────────────────────────────────────────────────── */}
+      <div style={{marginBottom:28}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+          <div style={{width:4,height:18,background:"linear-gradient(180deg,#6366f1,#8b5cf6)",borderRadius:2,flexShrink:0}}/>
+          <div style={{fontSize:14,fontWeight:800,color:"#1e293b",letterSpacing:"-.2px"}}>{"Configurações"}</div>
           {icpSaved && produtos.length>0
-            ? <span style={{fontSize:10,fontWeight:700,color:"#059669",background:"rgba(5,150,105,.1)",border:"1px solid rgba(5,150,105,.25)",borderRadius:20,padding:"4px 12px",whiteSpace:"nowrap"}}>{"✓ Tudo configurado"}</span>
-            : <span style={{fontSize:10,fontWeight:700,color:"#d97706",background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",borderRadius:20,padding:"4px 12px",whiteSpace:"nowrap"}}>{(!icpSaved && !produtos.length)?"2 itens pendentes":!icpSaved?"ICP pendente":"Produto pendente"}</span>
+            ? <span style={{fontSize:10,fontWeight:700,color:"#059669",background:"rgba(5,150,105,.1)",border:"1px solid rgba(5,150,105,.25)",borderRadius:20,padding:"3px 10px",marginLeft:4}}>{"✓ Tudo configurado"}</span>
+            : <span style={{fontSize:10,fontWeight:700,color:"#d97706",background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",borderRadius:20,padding:"3px 10px",marginLeft:4}}>{(!icpSaved&&!produtos.length)?"2 itens pendentes":!icpSaved?"ICP pendente":"Produto pendente"}</span>
           }
         </div>
-
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
 
           {/* ICP Card */}
@@ -3301,20 +3321,6 @@ function AccountsView(props) {
           </div>
         </div>
       </div>
-      {usage && (
-        <div style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:16,padding:"14px 18px",marginBottom:18}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:9,fontWeight:700,color:"#fff",background:usage.planColor,borderRadius:6,padding:"3px 8px",textTransform:"uppercase",letterSpacing:.5}}>{usage.planLabel}</span>
-              <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{"Mapeamentos: " + usage.used + " / " + usage.limit}</span>
-            </div>
-            <span style={{fontSize:11,color:usage.remaining<=3?"#ef4444":"#64748b",fontWeight:usage.remaining<=3?700:500}}>{usage.remaining + " restante" + (usage.remaining!==1?"s":"") + " este mês"}</span>
-          </div>
-          <div style={{height:8,background:"#f6f7f9",borderRadius:8,overflow:"hidden"}}>
-            <div style={{height:"100%",width:Math.min(100,Math.round((usage.used/usage.limit)*100))+"%",background:usage.remaining<=3?"linear-gradient(90deg,#ef4444,#f59e0b)":"linear-gradient(90deg,"+usage.planColor+",#4f46e5)",borderRadius:8,transition:"width .4s"}}/>
-          </div>
-        </div>
-      )}
       {selectedCount>0 && (
         <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.08),rgba(14,165,233,.05))",border:"1.5px solid rgba(99,102,241,.2)",borderRadius:14,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
           <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{selectedCount + " selecionada" + (selectedCount!==1?"s":"")}</span>
@@ -3979,10 +3985,11 @@ function ProspectView(props) {
       {!icpPreenchido && (
         <div style={{background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.3)",borderRadius:14,padding:"14px 18px",marginBottom:20,display:"flex",alignItems:"center",gap:12}}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <div>
+          <div style={{flex:1}}>
             <div style={{fontSize:13,fontWeight:700,color:"#92400e"}}>{"ICP não configurado"}</div>
-            <div style={{fontSize:12,color:"#92400e",opacity:.8}}>{"Configure seu ICP na Home para sugestões mais precisas. Você ainda pode gerar uma lista com critérios padrão."}</div>
+            <div style={{fontSize:12,color:"#92400e",opacity:.8}}>{"Configure seu ICP na seção "}<strong>{"Configurações"}</strong>{" da Home para sugestões mais precisas. Você ainda pode gerar uma lista com critérios padrão."}</div>
           </div>
+          {props.onNav && <button onClick={function(){props.onNav("home");}} style={{background:"rgba(245,158,11,.15)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:9,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>{"Ir para Home →"}</button>}
         </div>
       )}
 
@@ -4478,7 +4485,7 @@ export default function App() {
             </div>
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
-              {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup}/>}
+              {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage}/>}
               {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
