@@ -2154,9 +2154,200 @@ function IntegrationsView() {
   );
 }
 
+// -- ONBOARDING FLOW ----------------------------------------------------------
+function OnboardingFlow(props) {
+  var onFinish = props.onFinish;
+  var _st_step = useState(0); var step = _st_step[0]; var setStep = _st_step[1];
+  var _st_exiting = useState(false); var exiting = _st_exiting[0]; var setExiting = _st_exiting[1];
+
+  // Step 1: Company site
+  var _st_site = useState(""); var site = _st_site[0]; var setSite = _st_site[1];
+  var _st_siteLoading = useState(false); var siteLoading = _st_siteLoading[0]; var setSiteLoading = _st_siteLoading[1];
+
+  // Step 2: ICP
+  var icpDefaults = CLIENT_CONFIG.icpDefault || {};
+  var _st_icp = useState(function(){
+    try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):icpDefaults; } catch(e){ return icpDefaults; }
+  }); var icp = _st_icp[0]; var setIcp = _st_icp[1];
+  function saveIcp(val) { setIcp(val); try { localStorage.setItem("pipe_icp",JSON.stringify(val)); } catch(e){} }
+
+  // Step 3: Product
+  var _st_prod = useState({nome:"",descricao:"",beneficios:"",publico:"",preco:""});
+  var prod = _st_prod[0]; var setProd = _st_prod[1];
+
+  function advanceTo(nextStep) {
+    setExiting(true);
+    setTimeout(function(){ setExiting(false); setStep(nextStep); }, 350);
+  }
+
+  function handleSiteNext() {
+    if (site.trim()) {
+      setSiteLoading(true);
+      try { localStorage.setItem("pipe_company_site", site.trim()); } catch(e){}
+      // Give a brief moment to feel responsive
+      setTimeout(function(){ setSiteLoading(false); advanceTo(1); }, 800);
+    } else {
+      advanceTo(1);
+    }
+  }
+
+  function handleIcpNext() {
+    advanceTo(2);
+  }
+
+  function handleProdNext() {
+    if (prod.nome.trim()) {
+      var existing = [];
+      try { var s = localStorage.getItem("pipe_produtos"); existing = s?JSON.parse(s):[]; } catch(e){}
+      var updated = existing.concat([Object.assign({id:Date.now()},prod)]);
+      try { localStorage.setItem("pipe_produtos",JSON.stringify(updated)); } catch(e){}
+    }
+    setExiting(true);
+    setTimeout(function(){ if (onFinish) onFinish(); }, 350);
+  }
+
+  var STEP_LABELS = ["Sua empresa","Seu ICP","Seu Produto"];
+  var inputStyle = {width:"100%",boxSizing:"border-box",background:"#f8fafc",border:"1.5px solid #e6e9ef",borderRadius:12,padding:"12px 16px",fontSize:14,color:"#0f172a",fontFamily:"inherit",outline:"none",transition:"border-color .2s"};
+  var labelStyle = {fontSize:10,fontWeight:700,color:"#52617a",marginBottom:6,textTransform:"uppercase",letterSpacing:.5,display:"block"};
+
+  return (
+    <div style={{maxWidth:560,margin:"0 auto",padding:"0 4px"}}>
+      {/* Progress indicator */}
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:32}}>
+        {STEP_LABELS.map(function(lbl,i){
+          var done = i < step;
+          var active = i === step;
+          return (
+            <div key={i} style={{display:"flex",alignItems:"center",gap:6,flex:i<2?1:"auto"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:done?"#6366f1":active?"#6366f1":"#e2e8f0",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .3s",boxShadow:active?"0 0 0 4px rgba(99,102,241,.15)":"none"}}>
+                  {done
+                    ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    : <span style={{fontSize:11,fontWeight:800,color:active?"#fff":"#94a3b8"}}>{i+1}</span>
+                  }
+                </div>
+                <span style={{fontSize:11,fontWeight:active?700:500,color:active?"#4f46e5":done?"#6366f1":"#94a3b8",whiteSpace:"nowrap"}}>{lbl}</span>
+              </div>
+              {i < 2 && <div style={{flex:1,height:2,background:done?"#6366f1":"#e2e8f0",borderRadius:2,transition:"background .4s",minWidth:20}}/>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Card wrapper with slide animation */}
+      <div className={exiting?"onb-card-exit":"onb-card"} key={step}>
+
+        {/* ── STEP 1: Company site ─────────────────────────────────────────── */}
+        {step === 0 && (
+          <div style={{background:"#fff",borderRadius:22,padding:"32px",border:"1px solid #e6e9ef",boxShadow:"0 4px 24px rgba(15,23,42,.07)"}}>
+            <div style={{width:52,height:52,borderRadius:15,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20,boxShadow:"0 6px 18px rgba(99,102,241,.4)"}}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <div style={{fontSize:22,fontWeight:900,color:"#0f172a",letterSpacing:"-.5px",marginBottom:6}}>{"Vamos começar!"}</div>
+            <div style={{fontSize:13,color:"#64748b",marginBottom:24,lineHeight:1.65}}>{"Digite o site da sua empresa e vamos configurar o +pipe para você. Pode pular se preferir configurar depois."}</div>
+            <div style={{marginBottom:20}}>
+              <label style={labelStyle}>{"Site da sua empresa"}</label>
+              <input
+                value={site}
+                onChange={function(e){setSite(e.target.value);}}
+                placeholder={"Ex: minhaempresa.com.br"}
+                style={inputStyle}
+                onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.6)";e.target.style.background="#fff";}}
+                onBlur={function(e){e.target.style.borderColor="#e6e9ef";e.target.style.background="#f8fafc";}}
+                onKeyDown={function(e){if(e.key==="Enter")handleSiteNext();}}
+              />
+              <div style={{fontSize:11,color:"#94a3b8",marginTop:8,lineHeight:1.5}}>{"Usaremos isso para personalizar o mapeamento e as sequências de prospecção."}</div>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:8}}>
+              <button onClick={function(){advanceTo(1);}} style={{flex:1,background:"#f8fafc",border:"1.5px solid #e2e8f0",color:"#64748b",borderRadius:12,padding:"12px 0",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all .2s"}}>{"Pular"}</button>
+              <button onClick={handleSiteNext} disabled={siteLoading} style={{flex:2,background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:12,padding:"12px 0",fontSize:13,fontWeight:700,cursor:siteLoading?"default":"pointer",fontFamily:"inherit",boxShadow:"0 6px 18px rgba(99,102,241,.35)",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all .2s"}}>
+                {siteLoading
+                  ? <><div style={{width:14,height:14,borderRadius:"50%",border:"2.5px solid rgba(255,255,255,.4)",borderTopColor:"#fff",animation:"spin .7s linear infinite"}}/> {"Configurando..."}</>
+                  : "Próximo →"
+                }
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2: ICP ──────────────────────────────────────────────────── */}
+        {step === 1 && (
+          <div style={{background:"#fff",borderRadius:22,padding:"32px",border:"1px solid e6e9ef",boxShadow:"0 4px 24px rgba(15,23,42,.07)"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20}}>
+              <div>
+                <div style={{width:52,height:52,borderRadius:15,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16,boxShadow:"0 6px 18px rgba(99,102,241,.4)"}}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
+                </div>
+                <div style={{fontSize:22,fontWeight:900,color:"#0f172a",letterSpacing:"-.5px",marginBottom:4}}>{"Defina seu ICP"}</div>
+                <div style={{fontSize:13,color:"#64748b",lineHeight:1.65}}>{"Ideal Customer Profile — define quem é seu cliente ideal e melhora o scoring de fit em cada conta."}</div>
+              </div>
+              <span style={{fontSize:9,fontWeight:800,background:"linear-gradient(135deg,#f59e0b,#f97316)",color:"#fff",borderRadius:"0 12px 12px 0",padding:"4px 10px",letterSpacing:.5,marginTop:-32,marginRight:-32,whiteSpace:"nowrap"}}>{"RECOMENDADO"}</span>
+            </div>
+            <div style={{maxHeight:320,overflowY:"auto",paddingRight:4,marginBottom:20}}>
+              {[
+                {key:"segmento", label:"Segmento / Vertical-alvo", ph:"Ex: Tecnologia, Fintech, Saúde, Indústria"},
+                {key:"porte",    label:"Porte (colaboradores ou receita)", ph:"Ex: 50–1000 colaboradores"},
+                {key:"faturamento",label:"Faturamento estimado", ph:"Ex: R$ 20M – R$ 1B/ano"},
+                {key:"regiao",   label:"Região / Mercado", ph:"Ex: Brasil, LATAM, Sul e Sudeste"},
+                {key:"cargos",   label:"Cargos decisores", ph:"Ex: CTO, CEO, CISO, CFO, DPO"},
+              ].map(function(f){ return (
+                <div key={f.key} style={{marginBottom:12}}>
+                  <label style={labelStyle}>{f.label}</label>
+                  <input value={icp[f.key]||""} onChange={function(e){ var v=e.target.value; saveIcp(Object.assign({},icp,{[f.key]:v})); }} placeholder={f.ph} style={inputStyle} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.6)";e.target.style.background="#fff";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";e.target.style.background="#f8fafc";}}/>
+                </div>
+              ); })}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={function(){advanceTo(2);}} style={{flex:1,background:"#f8fafc",border:"1.5px solid #e2e8f0",color:"#64748b",borderRadius:12,padding:"12px 0",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Pular"}</button>
+              <button onClick={handleIcpNext} style={{flex:2,background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:12,padding:"12px 0",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 6px 18px rgba(99,102,241,.35)"}}>{"Próximo →"}</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 3: Product ──────────────────────────────────────────────── */}
+        {step === 2 && (
+          <div style={{background:"#fff",borderRadius:22,padding:"32px",border:"1px solid #e6e9ef",boxShadow:"0 4px 24px rgba(15,23,42,.07)"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20}}>
+              <div>
+                <div style={{width:52,height:52,borderRadius:15,background:"linear-gradient(135deg,#059669,#10b981)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16,boxShadow:"0 6px 18px rgba(5,150,105,.4)"}}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                </div>
+                <div style={{fontSize:22,fontWeight:900,color:"#0f172a",letterSpacing:"-.5px",marginBottom:4}}>{"Cadastre seu produto"}</div>
+                <div style={{fontSize:13,color:"#64748b",lineHeight:1.65}}>{"O que você vende? Com produtos cadastrados, a IA personaliza dores, perguntas SPIN e sequências para a sua oferta."}</div>
+              </div>
+              <span style={{fontSize:9,fontWeight:800,background:"linear-gradient(135deg,#059669,#0d9488)",color:"#fff",borderRadius:"0 12px 12px 0",padding:"4px 10px",letterSpacing:.5,marginTop:-32,marginRight:-32,whiteSpace:"nowrap"}}>{"RECOMENDADO"}</span>
+            </div>
+            <div style={{maxHeight:280,overflowY:"auto",paddingRight:4,marginBottom:20}}>
+              {[
+                {key:"nome",       label:"Nome do produto *",         ph:"Ex: EC Governance / CISO as a Service"},
+                {key:"descricao",  label:"Descrição curta",           ph:"Ex: CISO dedicado, SGSI e KPIs de segurança como serviço"},
+                {key:"beneficios", label:"Benefícios principais",     ph:"Ex: Sem headcount, resultado em 90 dias"},
+                {key:"publico",    label:"Público-alvo",              ph:"Ex: CEO e CTO de SaaS e Fintech sem CISO interno"},
+                {key:"preco",      label:"Faixa de preço / modelo",   ph:"Ex: A partir de R$ 8k/mês"},
+              ].map(function(f){ return (
+                <div key={f.key} style={{marginBottom:12}}>
+                  <label style={labelStyle}>{f.label}</label>
+                  <input value={prod[f.key]||""} onChange={function(e){ var v=e.target.value; setProd(function(p){ return Object.assign({},p,{[f.key]:v}); }); }} placeholder={f.ph} style={inputStyle} onFocus={function(e){e.target.style.borderColor="rgba(5,150,105,.6)";e.target.style.background="#fff";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";e.target.style.background="#f8fafc";}}/>
+                </div>
+              ); })}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={handleProdNext} style={{flex:1,background:"#f8fafc",border:"1.5px solid #e2e8f0",color:"#64748b",borderRadius:12,padding:"12px 0",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Pular e entrar"}</button>
+              <button onClick={handleProdNext} disabled={!prod.nome.trim()} style={{flex:2,background:prod.nome.trim()?"linear-gradient(135deg,#059669,#10b981)":"#e2e8f0",color:prod.nome.trim()?"#fff":"#94a3b8",border:"none",borderRadius:12,padding:"12px 0",fontSize:13,fontWeight:700,cursor:prod.nome.trim()?"pointer":"default",fontFamily:"inherit",boxShadow:prod.nome.trim()?"0 6px 18px rgba(5,150,105,.35)":"none",transition:"all .2s"}}>{"Salvar e entrar na plataforma 🚀"}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HomeView(props) {
   var accounts = props.accounts || [];
   var onNav = props.onNav;
+  var setupDone = props.setupDone;
+  var onFinishSetup = props.onFinishSetup;
+  var onResetSetup = props.onResetSetup;
   var _st_hidden   = useState({}); var hidden = _st_hidden[0]; var setHidden = _st_hidden[1];
   var _st_icpModal = useState(false); var icpModal = _st_icpModal[0]; var setIcpModal = _st_icpModal[1];
   var _st_prodModal= useState(false); var prodModal = _st_prodModal[0]; var setProdModal = _st_prodModal[1];
@@ -2237,6 +2428,36 @@ function HomeView(props) {
 
   return (
     <div>
+      {/* ── ONBOARDING FLOW (first access) ── */}
+      {!setupDone && (
+        <div>
+          {/* Hero banner - always visible */}
+          <div style={{position:"relative",borderRadius:24,overflow:"hidden",marginBottom:32,background:"linear-gradient(135deg,#0a0a14 0%,#171430 45%,#1e1b4b 100%)",border:"1px solid rgba(99,102,241,.2)",padding:"36px 40px 32px"}}>
+            <div style={{position:"absolute",top:-80,right:-60,width:320,height:320,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.4),transparent 70%)",filter:"blur(20px)"}}/>
+            <div style={{position:"absolute",bottom:-100,left:-40,width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,.3),transparent 70%)",filter:"blur(20px)"}}/>
+            <div style={{position:"relative",zIndex:2}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                <span style={{fontSize:10,fontWeight:700,color:"#4f46e5",background:"rgba(99,102,241,.15)",border:"1px solid rgba(129,140,248,.3)",borderRadius:20,padding:"4px 12px",letterSpacing:.5}}>{"PROSPECTING TOOL"}</span>
+                <span style={{fontSize:12,color:"#94a3b8"}}>{"Configuração inicial"}</span>
+              </div>
+              <div style={{fontSize:32,fontWeight:900,letterSpacing:"-1px",lineHeight:1.1,color:"#fff",marginBottom:8}}>
+                <span style={{color:"#818cf8"}}>{"+"}</span>{"pipe"}
+                <span style={{display:"block",fontSize:16,fontWeight:600,color:"#94a3b8",letterSpacing:"-.2px",marginTop:6}}>{"Account mapping com IA para times de vendas"}</span>
+              </div>
+              <div style={{fontSize:13,color:"#94a3b8",maxWidth:480,lineHeight:1.7}}>{"Faça a configuração inicial em 3 etapas rápidas e deixe a plataforma pronta para o seu perfil. Você pode pular qualquer etapa."}</div>
+            </div>
+          </div>
+          {/* Onboarding steps title */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#52617a",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>{"Comece por aqui"}</div>
+          </div>
+          <OnboardingFlow onFinish={onFinishSetup}/>
+        </div>
+      )}
+
+      {/* ── NORMAL HOME VIEW (post-setup) ── */}
+      {setupDone && (
+      <div>
       {/* ── Hero ── */}
       <div style={{position:"relative",borderRadius:24,overflow:"hidden",marginBottom:28,background:"linear-gradient(135deg,#0a0a14 0%,#171430 45%,#1e1b4b 100%)",border:"1px solid #e6e9ef",padding:"40px 40px 36px"}}>
         <div style={{position:"absolute",top:-80,right:-60,width:320,height:320,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.4),transparent 70%)",filter:"blur(20px)"}}/>
@@ -2510,6 +2731,17 @@ function HomeView(props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Reset setup option ── */}
+      <div style={{marginTop:32,paddingTop:20,borderTop:"1px solid #f1f5f9",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:12,fontWeight:600,color:"#94a3b8"}}>{"Trocou de empresa?"}</div>
+          <div style={{fontSize:11,color:"#b9c0cc",marginTop:2}}>{"Refaça o setup para configurar o +pipe para um novo contexto."}</div>
+        </div>
+        <button onClick={function(){ if(window.confirm("Resetar as configurações da plataforma? Suas contas e sequências não serão apagadas.")) onResetSetup(); }} style={{background:"#fff",border:"1.5px solid rgba(239,68,68,.25)",color:"#ef4444",borderRadius:10,padding:"8px 16px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",transition:"all .2s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(239,68,68,.05)";}} onMouseLeave={function(e){e.currentTarget.style.background="#fff";}}>{"↺ Resetar setup"}</button>
+      </div>
+      </div>
       )}
     </div>
   );
@@ -3881,6 +4113,11 @@ export default function App() {
   var _st_nav = useState("home"); var nav = _st_nav[0]; var setNav = _st_nav[1];
   var _st_accounts = useState([]); var accounts = _st_accounts[0]; var setAccounts = _st_accounts[1];
   var _st_loading = useState(true); var loading = _st_loading[0]; var setLoading = _st_loading[1];
+  // ── Onboarding setup state ─────────────────────────────────────────────────
+  var _st_setupDone = useState(function(){
+    try { return !!localStorage.getItem("pipe_setup_done"); } catch(e){ return false; }
+  }); var setupDone = _st_setupDone[0]; var setSetupDone = _st_setupDone[1];
+  var _st_setupUnlocking = useState(false); var setupUnlocking = _st_setupUnlocking[0]; var setSetupUnlocking = _st_setupUnlocking[1];
   var _st_openAcc = useState(null); var openAcc = _st_openAcc[0]; var setOpenAcc = _st_openAcc[1];
   var _st_toast = useState(null); var toast = _st_toast[0]; var setToast = _st_toast[1];
   var _st_sidebarOpen = useState(false); var sidebarOpen = _st_sidebarOpen[0]; var setSidebarOpen = _st_sidebarOpen[1];
@@ -3914,6 +4151,24 @@ export default function App() {
     setNav("sequences");
   }
   function refreshUsage() { getUsage().then(setUsage); }
+  // ── Finish onboarding ──────────────────────────────────────────────────────
+  function finishSetup() {
+    try { localStorage.setItem("pipe_setup_done","1"); } catch(e){}
+    setSetupUnlocking(true);
+    setTimeout(function(){ setSetupDone(true); setSetupUnlocking(false); }, 1200);
+  }
+  function resetSetup() {
+    try {
+      localStorage.removeItem("pipe_setup_done");
+      localStorage.removeItem("pipe_icp");
+      localStorage.removeItem("pipe_produtos");
+      localStorage.removeItem("pipe_company_site");
+    } catch(e){}
+    setSetupDone(false);
+    setSetupUnlocking(false);
+    setNav("home");
+    showToast("Configurações resetadas. Bem-vindo ao setup inicial!", "#6366f1");
+  }
   function changePlan(planId) {
     var isDifferent = !usage || usage.plan !== planId;
     setPlan(planId, isDifferent).then(function(){ refreshUsage(); });
@@ -4101,6 +4356,14 @@ export default function App() {
     "@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}",
     "@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(99,102,241,0)}50%{box-shadow:0 0 0 6px rgba(99,102,241,.12)}}",
     "@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}",
+    "@keyframes slideInRight{from{opacity:0;transform:translateX(80px)}to{opacity:1;transform:translateX(0)}}",
+    "@keyframes slideOutLeft{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(-80px)}}",
+    "@keyframes unlockPop{0%{transform:scale(.85);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}",
+    "@keyframes navUnlock{from{opacity:.35;filter:grayscale(1)}to{opacity:1;filter:grayscale(0)}}",
+    ".onb-card{animation:slideInRight .45s cubic-bezier(.22,1,.36,1) both}",
+    ".onb-card-exit{animation:slideOutLeft .35s cubic-bezier(.4,0,.2,1) both}",
+    ".nav-locked{opacity:.35!important;pointer-events:none!important;filter:grayscale(1)!important}",
+    ".nav-unlocking{animation:navUnlock .6s cubic-bezier(.22,1,.36,1) forwards}",
     ".sidebar{transition:width .3s cubic-bezier(.22,1,.36,1)}",
     ".sidebar-label{transition:opacity .3s cubic-bezier(.4,0,.2,1),transform .3s cubic-bezier(.4,0,.2,1);white-space:nowrap;overflow:hidden}",
     ".sidebar-label.hidden{opacity:0;transform:translateX(-6px);pointer-events:none;width:0}",
@@ -4165,8 +4428,11 @@ export default function App() {
         <nav style={{padding:"0 8px",flex:1,overflow:"hidden"}}>
           {NAV.map(function(item) {
             var active = nav===item.id;
+            var isHome = item.id === "home";
+            var locked = !setupDone && !isHome;
+            var unlocking = setupUnlocking && !isHome;
             return (
-              <button key={item.id} onClick={function(){setNav(item.id);}} title={sidebarExpanded?"":item.label} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:sidebarExpanded?"10px 12px":"8px 0",justifyContent:sidebarExpanded?"flex-start":"center",borderRadius:11,border:"1px solid "+(active?"rgba(99,102,241,.3)":"transparent"),background:active?"linear-gradient(135deg,rgba(99,102,241,.22),rgba(139,92,246,.15))":"transparent",color:active?"#ffffff":"rgba(255,255,255,.92)",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:active?700:600,marginBottom:3,transition:"all .25s cubic-bezier(.4,0,.2,1)",textAlign:"left",boxShadow:active?"0 4px 14px rgba(99,102,241,.25)":"none",position:"relative",willChange:"background,color"}} onMouseEnter={function(e){if(!active){e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.85)";}}} onMouseLeave={function(e){if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color="rgba(255,255,255,.92)";}}}>
+              <button key={item.id} onClick={function(){ if (!locked) setNav(item.id); }} title={sidebarExpanded?"":item.label} className={locked?"nav-locked":unlocking?"nav-unlocking":""} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:sidebarExpanded?"10px 12px":"8px 0",justifyContent:sidebarExpanded?"flex-start":"center",borderRadius:11,border:"1px solid "+(active?"rgba(99,102,241,.3)":"transparent"),background:active?"linear-gradient(135deg,rgba(99,102,241,.22),rgba(139,92,246,.15))":"transparent",color:active?"#ffffff":"rgba(255,255,255,.92)",cursor:locked?"default":"pointer",fontFamily:"inherit",fontSize:13,fontWeight:active?700:600,marginBottom:3,transition:"all .25s cubic-bezier(.4,0,.2,1)",textAlign:"left",boxShadow:active?"0 4px 14px rgba(99,102,241,.25)":"none",position:"relative",willChange:"background,color"}} onMouseEnter={function(e){if(!active&&!locked){e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.85)";}}} onMouseLeave={function(e){if(!active&&!locked){e.currentTarget.style.background="transparent";e.currentTarget.style.color="rgba(255,255,255,.92)";}}}> 
                 {active && <span style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:18,background:"linear-gradient(180deg,#6366f1,#8b5cf6)",borderRadius:"0 3px 3px 0"}}/>}
                 <span style={{fontSize:sidebarExpanded?16:20,flexShrink:0,transition:"font-size .2s ease",position:"relative"}}>
                   {item.emoji}
@@ -4175,6 +4441,7 @@ export default function App() {
                 <span className={"sidebar-label " + (sidebarExpanded?"visible":"hidden")} style={{flex:1,display:"flex",alignItems:"center",gap:6}}>
                   {item.label}
                   {item.id==="prospect" && prospectLoading && sidebarExpanded && <span style={{fontSize:9,color:"#a5b4fc",fontWeight:600,animation:"pulse 1.2s ease-in-out infinite"}}>{"buscando..."}</span>}
+                  {locked && sidebarExpanded && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{opacity:.5,flexShrink:0,marginLeft:"auto"}}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>}
                 </span>
               </button>
             );
@@ -4211,7 +4478,7 @@ export default function App() {
             </div>
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
-              {nav==="home"      && <HomeView accounts={accounts} onNav={setNav}/>}
+              {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup}/>}
               {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
