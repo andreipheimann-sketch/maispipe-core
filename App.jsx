@@ -3043,11 +3043,73 @@ function SearchView(props) {
 
   function doEnrich(nome, domain) {
     enhanceResumo(nome);
+
+    // ── Full AI mapping — dores, triggers, SPIN, emails, stakeholders, próximos passos ──
+    var icp = getStoredIcp();
+    var produtos = getStoredProducts();
+    var assinatura = getCompanySite() ? ("Consultor | " + getCompanySite()) : "Consultor";
+
+    // Get rawContext from stored account to feed the AI
+    storageList("acc:").then(function(keys){
+      keys.forEach(function(k){
+        storageGet(k).then(function(stored){
+          if (!stored || stored.nome.toLowerCase() !== nome.toLowerCase()) return;
+          var emp = (stored.data && stored.data.empresa) || {};
+          var rawContext = emp.rawContext || emp.resumo || "";
+          var setor = emp.setor || stored.setor || "tecnologia";
+
+          fetch("/api/gemini", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              mode: "mapeamento",
+              empresa: nome,
+              setor: setor,
+              rawContext: rawContext,
+              icp: icp,
+              produtos: produtos,
+              companySite: getCompanySite(),
+              assinatura: assinatura,
+            })
+          })
+          .then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(mapped){
+            if (!mapped || mapped.error) return;
+            storageGet(k).then(function(cur){
+              if (!cur) return;
+              var updated = Object.assign({}, cur, {
+                data: Object.assign({}, cur.data, {
+                  fit:           mapped.fit           || cur.data.fit,
+                  dores:         mapped.dores         || cur.data.dores,
+                  triggers:      mapped.triggers      || cur.data.triggers,
+                  stakeholders:  mapped.stakeholders  || cur.data.stakeholders,
+                  estrategia:    Object.assign({}, (cur.data.estrategia||{}), {
+                    emails:         mapped.estrategia && mapped.estrategia.emails         || [],
+                    inmails:        mapped.estrategia && mapped.estrategia.inmails        || [],
+                    whatsapps:      mapped.estrategia && mapped.estrategia.whatsapps      || [],
+                    cold_calls:     mapped.estrategia && mapped.estrategia.cold_calls     || [],
+                    perguntas_spin: mapped.estrategia && mapped.estrategia.perguntas_spin || [],
+                    "objeções":     mapped.estrategia && mapped.estrategia["objeções"]    || [],
+                    tier: (cur.data.estrategia && cur.data.estrategia.tier) || "Tier 2",
+                  }),
+                  proximos_passos: mapped.proximos_passos || cur.data.proximos_passos,
+                }),
+                aiMapped: true,
+              });
+              storageSet(k, updated);
+              if (props.onUpdateAccount) props.onUpdateAccount(updated);
+            });
+          })
+          .catch(function(){});
+        });
+      });
+    });
+
+    // ── Real contacts via stakeholders API ────────────────────────────────────
     fetch("/api/stakeholders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,domain:domain})})
       .then(function(r){return r.ok?r.json():null;})
       .then(function(stakhData){
         if(!stakhData||!stakhData.contacts||!stakhData.contacts.length) return;
-        // Save real contacts (those with an actual name) into Contatos, avoiding duplicates
         storageList("contact:").then(function(ckeys){
           Promise.all(ckeys.map(storageGet)).then(function(existing){
             var existingSet = {};
@@ -3064,7 +3126,6 @@ function SearchView(props) {
               var contact = { id:cid, nome:nomeReal, cargo:s.cargo||s.title||"", empresa:nome, email:s.email||"", emailValidated:!!s.email, linkedin:s.linkedin||"", savedAt:Date.now() };
               storageSet(cid, contact);
             });
-            // Signal ContactsView to reload from storage
             if (props.onContactsRefresh) props.onContactsRefresh();
           });
         });
@@ -4068,6 +4129,39 @@ function ProspectView(props) {
         if (props.onSaveRaw) {
           props.onSaveRaw(emp.nome, resp.results, true, null, "", function(acc){
             setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
+            // Trigger full AI mapping after account saved
+            var icpLocal = getStoredIcp();
+            var produtosLocal = getStoredProducts();
+            var rawCtx = (acc && acc.data && acc.data.empresa && acc.data.empresa.rawContext) || "";
+            var setorLocal = (acc && acc.data && acc.data.empresa && acc.data.empresa.setor) || "tecnologia";
+            fetch("/api/gemini", {
+              method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({ mode:"mapeamento", empresa:emp.nome, setor:setorLocal, rawContext:rawCtx, icp:icpLocal, produtos:produtosLocal, companySite:getCompanySite(), assinatura:getCompanySite()?("Consultor | "+getCompanySite()):"Consultor" })
+            })
+            .then(function(r2){ return r2.ok?r2.json():null; })
+            .then(function(mapped){
+              if (!mapped||mapped.error) return;
+              storageList("acc:").then(function(ks){
+                ks.forEach(function(k){
+                  storageGet(k).then(function(stored){
+                    if (!stored||stored.nome.toLowerCase()!==emp.nome.toLowerCase()) return;
+                    var updated=Object.assign({},stored,{aiMapped:true,data:Object.assign({},stored.data,{
+                      fit:mapped.fit||stored.data.fit, dores:mapped.dores||stored.data.dores,
+                      triggers:mapped.triggers||stored.data.triggers, stakeholders:mapped.stakeholders||stored.data.stakeholders,
+                      estrategia:Object.assign({},(stored.data.estrategia||{}),{
+                        emails:mapped.estrategia&&mapped.estrategia.emails||[], inmails:mapped.estrategia&&mapped.estrategia.inmails||[],
+                        whatsapps:mapped.estrategia&&mapped.estrategia.whatsapps||[], cold_calls:mapped.estrategia&&mapped.estrategia.cold_calls||[],
+                        perguntas_spin:mapped.estrategia&&mapped.estrategia.perguntas_spin||[], "objeções":mapped.estrategia&&mapped.estrategia["objeções"]||[],
+                        tier:(stored.data.estrategia&&stored.data.estrategia.tier)||"Tier 2",
+                      }),
+                      proximos_passos:mapped.proximos_passos||stored.data.proximos_passos,
+                    })});
+                    storageSet(k,updated);
+                    if(props.onUpdateAccount) props.onUpdateAccount(updated);
+                  });
+                });
+              });
+            }).catch(function(){});
           }, null);
         }
       })
