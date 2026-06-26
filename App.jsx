@@ -344,7 +344,11 @@ function SequenceView(props) {
       persistSeq(upd);
     }
     fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      empresa:selAcc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain, touches:[{day:touch.day,type:touch.type}]
+      empresa:selAcc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain, touches:[{day:touch.day,type:touch.type}],
+      icp: getStoredIcp(),
+      produtos: getStoredProducts(),
+      companySite: getCompanySite(),
+      assinatura: getCompanySite() ? ("Consultor | " + getCompanySite()) : "Consultor",
     })})
       .then(function(r){return r.json();})
       .then(function(data){
@@ -400,7 +404,11 @@ function SequenceView(props) {
 
     setGenLoading(true);
     fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      empresa:acc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain, contato:contactName||"", touches:cadência
+      empresa:acc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain, contato:contactName||"", touches:cadência,
+      icp: getStoredIcp(),
+      produtos: getStoredProducts(),
+      companySite: getCompanySite(),
+      assinatura: getCompanySite() ? ("Consultor | " + getCompanySite()) : "Consultor",
     })})
       .then(function(r){ return r.json().then(function(d){ return {status:r.status, data:d}; }); })
       .then(function(res){
@@ -1299,6 +1307,15 @@ function AccountModal(props) {
               {sinais.length>0&&<Sec title="Sinais de Intenção"><div style={{background:"#0c2340",borderRadius:12,padding:"12px 16px"}}>{sinais.map(function(s,i){return <div key={i} style={{fontSize:11.5,color:"#7dd3fc",lineHeight:1.6,display:"flex",gap:8,marginBottom:5}}><span style={{color:"#38bdf8",flexShrink:0}}>o</span>{s}</div>;})}</div></Sec>}
               {concorrentes.length>0&&<Sec title="Concorrentes Prováveis"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{concorrentes.map(function(cc,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{cc}</span>;})}</div></Sec>}
               {noticias.length>0&&<Sec title="Notícias e Contexto">{noticias.map(function(n,i){return <div key={i} style={{background:"#fbfbfd",border:"1px solid #e6e9ef",borderRadius:12,padding:"12px 14px",marginBottom:8}}>{n.url?<a href={n.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,fontWeight:700,color:"#0ea5e9",textDecoration:"none",display:"block",marginBottom:3}}>{n.titulo}</a>:<div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:3}}>{n.titulo}</div>}<div style={{fontSize:11.5,color:"#52617a",lineHeight:1.6,marginBottom:3}}>{n.resumo}</div><div style={{fontSize:10,color:"#a5b4fc",fontWeight:600}}>{"-> "+n.relevancia}</div></div>;})}</Sec>}
+              {!acc.aiMapped && (dores.length===0 || triggers.length===0) && (
+                <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#4f46e5",marginBottom:2}}>{"IA mapeando a conta..."}</div>
+                    <div style={{fontSize:11,color:"#64748b"}}>{"Dores, gatilhos, perguntas SPIN e emails estão sendo gerados. Feche e reabra o card em alguns segundos."}</div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {activeTab==="stakeholders"&&(
@@ -1380,7 +1397,12 @@ function AccountModal(props) {
           {activeTab==="spin"&&(
             <div>
               <Sec title="Perguntas SPIN">
-                {spin.map(function(q,i){
+                {spin.length === 0 ? (
+                  <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
+                    <div style={{fontSize:12,color:"#4f46e5",fontWeight:500}}>{"Perguntas SPIN sendo geradas pela IA. Feche e reabra este card em alguns segundos."}</div>
+                  </div>
+                ) : spin.map(function(q,i){
                   var tipo=q.startsWith("SITUAÇÃO")||q.startsWith("SITUAÇÃO")?"S":q.startsWith("PROBLEMA")?"P":q.startsWith("IMPLICAÇÃO")||q.startsWith("IMPLICAÇÃO")?"I":"N";
                   var tc=tipo==="S"?"#0ea5e9":tipo==="P"?"#92400e":tipo==="I"?"#991b1b":"#2d3a8c";
                   var clean=q.indexOf(": ")>-1?q.slice(q.indexOf(": ")+2):q;
@@ -1789,14 +1811,14 @@ function ContactsView(props) {
     }).catch(function(){ setSourceStatus(cid, "hunter", "err"); return null; });
 
     // ── APOLLO ───────────────────────────────────────────────────────────────
-    var pApollo = fetch("/api/hunter", {
+    var pApollo = fetch("/api/apollo", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({first_name:first, last_name:last, organization_name:org, domain:dom})
     }).then(function(r){ return r.json(); }).then(function(d){
       var email = (d.person && d.person.email) || (d.email) || null;
       var conf  = (d.person && d.person.email_confidence) || (d.confidence) || 0;
       setSourceStatus(cid, "apollo", email ? "found" : "miss");
-      return email ? {email:email, confidence:conf, source:"Hunter.io"} : null;
+      return email ? {email:email, confidence:conf, source:"Apollo.io"} : null;
     }).catch(function(){ setSourceStatus(cid, "apollo", "err"); return null; });
 
     // ── SNOV.IO ───────────────────────────────────────────────────────────────
@@ -2016,7 +2038,7 @@ function ContactsView(props) {
                                 <div style={{fontSize:10,fontWeight:700,color:"#4f46e5",marginBottom:1}}>{"Buscando em 3 fontes..."}</div>
                                 {[
                                   {key:"hunter", label:"Hunter.io"},
-                                  {key:"apollo",  label:"Hunter.io"},
+                                  {key:"apollo",  label:"Apollo.io"},
                                   {key:"snov",    label:"Snov.io"},
                                 ].map(function(src){
                                   var st = (enrichProgress[c.id]||{})[src.key] || "pending";
@@ -2967,10 +2989,10 @@ function buildData(company, searchResults) {
   var noticias = noticiasSources.length ? noticiasSources : [{titulo:"Buscar noticias recentes de "+company, resumo:"Clique para pesquisar noticias sobre a empresa.", url:"https://google.com/search?q="+encodeURIComponent(company)+" seguranca privacidade LGPD 2025", relevancia:"Pesquisa sugerida"}];
   return {
     empresa:{nome:company,setor:setor,resumo:resumo,rawContext:allText.slice(0,4000),tamanho:funcionarios||(tier==="Tier 1"?"500-1000 funcionarios":"200-500 funcionarios"),faturamento:faturamento||"Nao disponível",clientes:clientes||""},
-    fit:{score:"ALTO", justificativa:fitJust, solucoes:prodNomes.length?prodNomes:["(configure seus produtos na Home para ver aqui)"]},
+    fit:{score:"—", justificativa:fitJust, solucoes:prodNomes.length?prodNomes:[]},
     mercado:{competidores_provedor:[], concorrentes_mercado:[]},
-    dores:{principais:["(mapeamento com IA irá preencher as dores específicas)"]},
-    triggers:["(mapeamento com IA irá preencher os gatilhos de compra)"],
+    dores:{principais:[]},
+    triggers:[],
     stakeholders:[
       { cargo:"CEO / Sócio-Diretor",        angulo:"Decisão estratégica e resultados do negócio",    prioridade:"PRIMARIO",   urgencia:"Alta",  email:"", linkedin:"", phone:"" },
       { cargo:"Diretor Comercial / VP",     angulo:"Crescimento de receita e ciclo de vendas",        prioridade:"PRIMARIO",   urgencia:"Alta",  email:"", linkedin:"", phone:"" },
@@ -2985,7 +3007,7 @@ function buildData(company, searchResults) {
       inmails:[],
       whatsapps:[],
       cold_calls:[],
-      perguntas_spin:["(mapeamento com IA irá gerar perguntas SPIN específicas para "+company+")"],
+      perguntas_spin:[],
       objeções:[]
     },
     proximos_passos:{
@@ -3042,7 +3064,8 @@ function SearchView(props) {
           var emp = (stored.data && stored.data.empresa) || {};
           var raw = emp.rawContext || emp.resumo || "";
           fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-            mode:"resumo", empresa:nome, setor:emp.setor||stored.setor||"tecnologia", rawContext:raw
+            mode:"resumo", empresa:nome, setor:emp.setor||stored.setor||"tecnologia", rawContext:raw,
+            icp: getStoredIcp(), produtos: getStoredProducts(), companySite: getCompanySite(),
           })})
             .then(function(r){return r.json();})
             .then(function(d){
