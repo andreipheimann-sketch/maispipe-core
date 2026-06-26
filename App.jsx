@@ -1832,7 +1832,7 @@ function ContactsView(props) {
         </div>
       </div>
       {addModal && (
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.32)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={function(e){if(e.target===e.currentTarget)resetModal();}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.32)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"60px 20px 20px"}} onClick={function(e){if(e.target===e.currentTarget)resetModal();}}>
           <div style={{background:"#ffffff",border:"1px solid #dde1e8",borderRadius:20,width:"100%",maxWidth:460,padding:"24px",boxShadow:"0 24px 80px rgba(15,23,42,.12)",maxHeight:"90vh",overflowY:"auto"}} onClick={function(e){e.stopPropagation();}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
               <div style={{fontSize:16,fontWeight:800,color:"#0f172a"}}>{"Novo Contato"}</div>
@@ -2680,7 +2680,7 @@ function HomeView(props) {
 
       {/* ══ MODAL ICP ══════════════════════════════════════════════════════ */}
       {icpModal && (
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.4)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={function(e){if(e.target===e.currentTarget)setIcpModal(false);}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.4)",zIndex:10000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"60px 20px 20px",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget)setIcpModal(false);}}>
           <div style={{background:"#fff",borderRadius:22,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(15,23,42,.18)"}} onClick={function(e){e.stopPropagation();}}>
             <div style={{padding:"24px 28px 0",position:"sticky",top:0,background:"#fff",zIndex:2,borderBottom:"1px solid #f1f5f9",paddingBottom:16}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -2739,7 +2739,7 @@ function HomeView(props) {
 
       {/* ══ MODAL PRODUTO ══════════════════════════════════════════════════ */}
       {prodModal && (
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.4)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={function(e){if(e.target===e.currentTarget)setProdModal(false);}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.4)",zIndex:10000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"60px 20px 20px",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget)setProdModal(false);}}>
           <div style={{background:"#fff",borderRadius:22,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(15,23,42,.18)"}} onClick={function(e){e.stopPropagation();}}>
             <div style={{padding:"24px 28px 16px",position:"sticky",top:0,background:"#fff",zIndex:2,borderBottom:"1px solid #f1f5f9"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -3928,7 +3928,9 @@ function ProspectView(props) {
   var _st_filter    = useState("TODOS"); var filter = _st_filter[0]; var setFilter = _st_filter[1];
   var _st_search    = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
 
-  var icpPreenchido = !!(icp && (icp.segmento || icp.porte || icp.faturamento));
+  var icpPreenchido = (function(){
+    try { return !!localStorage.getItem("pipe_icp"); } catch(e){ return false; }
+  })();
   var mappedNames = new Set(accounts.map(function(a){ return (a.nome||"").toLowerCase().trim(); }));
 
   function gerarLista() {
