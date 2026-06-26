@@ -192,13 +192,61 @@ var TOUCH_TYPES = {
 // ── CLIENT CONFIG IMPORT ────────────────────────────────────────────────────
 // O cliente ativo e controlado pela variavel de ambiente VITE_CLIENT no Vercel.
 // Nao edite esta linha. Para adicionar um novo cliente, edite clientLoader.js.
-import { CLIENT_CONFIG } from "./src/config/clientLoader.js";
+// ── CORE CONFIG — driven entirely by localStorage (set during onboarding) ───
+// No client files needed. All data comes from user setup or sensible defaults.
+function getStoredIcp() {
+  try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):{}; } catch(e){ return {}; }
+}
+function getStoredProducts() {
+  try { var s=localStorage.getItem("pipe_produtos"); return s?JSON.parse(s):[]; } catch(e){ return []; }
+}
+function getCompanySite() {
+  try { return localStorage.getItem("pipe_company_site")||""; } catch(e){ return ""; }
+}
 
-// ── CONFIG BRIDGE ───────────────────────────────────────────────────────────
-// Mapeia CLIENT_CONFIG para as variaveis globais que o App.jsx usa internamente.
-// Voce nao precisa tocar nada abaixo — so edite o arquivo de config do cliente.
-var STAKEHOLDER_PROFILES = CLIENT_CONFIG.stakeholderProfiles;
-var SEQUENCE_TEMPLATES   = CLIENT_CONFIG.sequenceTemplates;
+// Generic stakeholder profiles — overridden by AI mapping per account
+var STAKEHOLDER_PROFILES = [
+  { id:"decisor",  label:"Decisor / C-Level",        angle:"estratégia e resultados do negócio",          pain:"pressão por resultados com menos recursos e mais risco" },
+  { id:"tecnico",  label:"Diretor / Gerente Técnico", angle:"eficiência operacional e stack tecnológico",  pain:"complexidade crescente sem equipe ou orçamento proporcional" },
+  { id:"comercial",label:"Diretor Comercial / VP",    angle:"crescimento de receita e ciclo de vendas",    pain:"ciclos longos, baixa conversão e pipeline imprevisível" },
+  { id:"financeiro",label:"CFO / Diretor Financeiro", angle:"ROI, custo e previsibilidade financeira",     pain:"dificuldade em justificar investimentos sem métricas claras" },
+  { id:"operacoes", label:"COO / Diretor de Operações",angle:"processos, escala e continuidade operacional",pain:"gargalos operacionais que limitam crescimento e margem" },
+];
+
+// Generic sequence templates — AI generates real content per account
+var SEQUENCE_TEMPLATES = {};
+STAKEHOLDER_PROFILES.forEach(function(p){
+  SEQUENCE_TEMPLATES[p.id] = [
+    { day:1,  type:"linkedin",  subject:"Sobre {empresa}", body:"Olá,\n\nVi o trabalho da {empresa} e gostaria de trocar uma ideia sobre {empresa}. Vale um papo?\n\nAbraço" },
+    { day:3,  type:"email",     subject:"[{empresa}] Uma pergunta", body:"Olá,\n\nUma pergunta direta: qual o maior desafio que você enfrenta hoje em "+p.angle+"?\n\nAbraço" },
+    { day:7,  type:"call",      subject:"Cold call — {empresa}", body:"Bom dia [Nome], tenho 30 segundos?\n\n[PAUSA]\n\nLigo porque trabalho com empresas de {setor} e gostaria de entender o cenário de vocês em "+p.angle+".\n\nVale 20 minutos?" },
+    { day:12, type:"whatsapp",  subject:"WhatsApp — {empresa}", body:"Oi [Nome], tudo bem? Trabalhamos com empresas de {setor} e acredito que temos algo relevante para a {empresa}. Posso te contar?" },
+    { day:18, type:"email",     subject:"[{empresa}] Última tentativa", body:"Olá,\n\nÚltima mensagem — prometo.\n\nSe o tema de "+p.angle+" ganhar prioridade, pode me chamar.\n\nAbraço" },
+    { day:25, type:"breakup",   subject:"Encerrando — {empresa}", body:"Olá,\n\nEncerro o contato por aqui. Se houver oportunidade de conversa futura, fico à disposição.\n\nAbraço" },
+  ];
+});
+
+// Generic one-touch variants
+var ONE_TOUCH_VARIANTS = {
+  email:[
+    { subject:"[{nome}] Uma pergunta sobre {setor}", body:"Olá,\n\nUma pergunta direta para o {cargo} da {nome}: qual o maior desafio que vocês enfrentam hoje em {angulo}?\n\nAbraço" },
+    { subject:"[{nome}] Vi algo relevante para vocês", body:"Olá,\n\nTrabalhando com empresas de {setor} percebi um padrão que pode ser relevante para a {nome}. Vale 20 minutos?\n\nAbraço" },
+  ],
+  linkedin:[
+    { subject:"Pergunta para o {cargo} da {nome}", body:"Olá!\n\nVi o trabalho da {nome} em {setor}. Uma pergunta: o que mais toma energia hoje em {angulo}?\n\nAbraço" },
+    { subject:"{nome} — oportunidade em {setor}", body:"Olá!\n\nEmpresas de {setor} com perfil da {nome} têm nos procurado para resolver {dor}. Vale um papo?\n\nAbraço" },
+  ],
+  call:[
+    { subject:"Script Cold Call — {cargo} {nome}", body:"Bom dia [Nome], tenho 30 segundos?\n\n[PAUSA]\n\nLigo porque {nome} atua em {setor} e trabalho com empresas nesse perfil. Uma pergunta: qual o maior gargalo hoje em {angulo}?\n\n[ouvir]\n\nFaz sentido eu explicar como podemos ajudar?" },
+  ],
+  whatsapp:[
+    { subject:"WhatsApp — {cargo} {nome}", body:"Oi [Nome]! Empresa de {setor} com perfil da {nome} — acredito que temos algo relevante para vocês em {angulo}. Posso te contar em 2 minutos?" },
+  ],
+  breakup:[
+    { subject:"Encerrando — {nome}", body:"Olá,\n\nNão quero continuar incomodando.\n\nSe o tema de {angulo} ganhar prioridade, pode me chamar.\n\nAbraço" },
+  ],
+};
+
 function safeArr(v) { return Array.isArray(v) ? v : []; }
 function fmtDate(ts) {
   if (!ts) return "";
@@ -273,7 +321,7 @@ function SequenceView(props) {
     var setor = (acc.data && acc.data.empresa && acc.data.empresa.setor) || acc.setor || "tecnologia";
     var pain = profile.pain || "dores do negócio";
 
-    var variants = CLIENT_CONFIG.oneTouchVariants;
+    var variants = ONE_TOUCH_VARIANTS;
 
     var pool = variants[touch.type] || variants.email;
     var variant = pool[Math.floor(Math.random() * pool.length)];
@@ -1033,7 +1081,7 @@ function exportAccountPDF(acc, d) {
     html += "</div>";
     if (prazo) html += "<p style='margin-top:12px;font-size:11px'><strong>Prazo:</strong> "+prazo+"</p>";
   }
-  html += "<div class='footer'>Account Mapper Mais Pipe Beta - "+CLIENT_CONFIG.empresa.nome+" - "+new Date().toLocaleDateString("pt-BR")+"</div>";
+  html += "<div class='footer'>Account Mapper Mais Pipe Beta - "+getCompanySite()||"Mais Pipe"+" - "+new Date().toLocaleDateString("pt-BR")+"</div>";
   html += "</body></html>";
   var w = window.open("","_blank");
   if (!w) return;
@@ -1205,7 +1253,7 @@ function AccountModal(props) {
   var bdr=safeArr(sd("proximos_passos.bdr"));
   var prazo=sd("proximos_passos.prazo")||"";
   var useCases=safeArr(sd("fit.use_cases"));
-  var solucoes=safeArr(sd("fit."+CLIENT_CONFIG.empresa.solucoesKey));
+  var solucoes=safeArr(sd("fit.solucoes"));
   var fitJust=sd("fit.justificativa")||"";
   var concorrentes=safeArr(sd("mercado.competidores_provedor"));
   var CHANNELS=[{key:"emails",label:"E-mail",color:"#0ea5e9",bg:"rgba(14,165,233,.08)",isObj:true},{key:"inmails",label:"InMail",color:"#0a66c2",bg:"rgba(10,102,194,.08)",isObj:true},{key:"whatsapps",label:"WhatsApp",color:"#16a34a",bg:"rgba(22,163,74,.08)",isObj:false},{key:"cold_calls",label:"Cold Call",color:"#92400e",bg:"#fef3c7",isObj:false}];
@@ -1244,7 +1292,7 @@ function AccountModal(props) {
           {activeTab==="overview"&&(
             <div>
               {empresa.resumo&&<Sec title={empresa.resumoAI?"Resumo da Empresa · IA":"Resumo da Empresa"}><p style={{fontSize:13,lineHeight:1.8,color:"#334155",margin:"0 0 14px"}}>{empresa.resumo}</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8}}>{[["Setor",empresa.setor],["Porte",empresa.tamanho],["Faturamento",empresa.faturamento],["Clientes",empresa.clientes],["Estágio",empresa.estagio],["Bolsa",empresa.bolsa]].filter(function(x){return x[1];}).map(function(item){return <div key={item[0]} style={{background:"rgba(99,102,241,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:10,padding:"10px 12px"}}><div style={{fontSize:8,color:"#818cf8",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:3}}>{item[0]}</div><div style={{fontSize:12,color:"#0f172a",fontWeight:600}}>{item[1]}</div></div>;})}</div></Sec>}
-              {fitJust&&<Sec title={"Fit "+CLIENT_CONFIG.empresa.nome}><p style={{fontSize:13,lineHeight:1.7,color:"#334155",marginBottom:10}}>{fitJust}</p>{solucoes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6}}>{solucoes.map(function(s,i){return <span key={i} style={{background:"rgba(99,102,241,.08)",border:"1px solid rgba(99,102,241,.25)",color:"#4f46e5",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{s}</span>;})}</div>}</Sec>}
+              {fitJust&&<Sec title={"Fit "+getCompanySite()||"Mais Pipe"}><p style={{fontSize:13,lineHeight:1.7,color:"#334155",marginBottom:10}}>{fitJust}</p>{solucoes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6}}>{solucoes.map(function(s,i){return <span key={i} style={{background:"rgba(99,102,241,.08)",border:"1px solid rgba(99,102,241,.25)",color:"#4f46e5",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{s}</span>;})}</div>}</Sec>}
               {useCases.length>0&&<Sec title="Use Cases Prioritários">{useCases.map(function(u,i){return <R key={i} icon=">" color="#6366f1">{u}</R>;})}</Sec>}
               {dores.length>0&&<Sec title="Possiveis dores para mapear">{dores.map(function(d2,i){return <R key={i} icon="!" color="#ef4444">{d2}</R>;})} {exposicao.length>0&&<div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:6}}>{exposicao.map(function(r,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{r}</span>;})}</div>}</Sec>}
               {triggers.length>0&&<Sec title="Gatilhos Comerciais">{triggers.map(function(t,i){return <R key={i} icon="T" color="#7c3aed">{t}</R>;})}</Sec>}
@@ -1443,7 +1491,7 @@ function downloadSeqPDF(seq) {
     if (t.subject) html += "<div class='day'>Assunto: "+t.subject+"</div>";
     html += "<div class='msg'>"+t.body+"</div>";
   });
-  html += "<div class='footer'>"+CLIENT_CONFIG.empresa.rodape+"</div></body></html>";
+  html += "<div class='footer'>"+"Mais Pipe Beta - "+new Date().toLocaleDateString("pt-BR")+"</div></body></html>";
   var w = window.open("","_blank");
   w.document.write(html);
   w.document.close();
@@ -1580,7 +1628,11 @@ function R(props) {
 // -- SEARCH VIEW ---------------------------------------------------------------
 function LoadingStatus() {
   var steps = [
-    ...(CLIENT_CONFIG.ui.loadingSteps),
+    { text:"Consultando fontes públicas com IA...",           icon:"🔍" },
+    { text:"Mapeando estrutura e mercado da empresa...",      icon:"🧭" },
+    { text:"Gerando fit score e análise de oportunidade...", icon:"⚡" },
+    { text:"Criando mensagens personalizadas por canal...",   icon:"✉"  },
+    { text:"Montando plano de prospecção completo...",        icon:"🎯" },
   ];
   var _st_step = useState(0); var step = _st_step[0]; var setStep = _st_step[1];
   useEffect(function() {
@@ -2204,7 +2256,7 @@ function OnboardingFlow(props) {
   var _st_siteLoading = useState(false); var siteLoading = _st_siteLoading[0]; var setSiteLoading = _st_siteLoading[1];
 
   // Step 2: ICP
-  var icpDefaults = CLIENT_CONFIG.icpDefault || {};
+  var icpDefaults = {};
   var _st_icp = useState(function(){
     try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):icpDefaults; } catch(e){ return icpDefaults; }
   }); var icp = _st_icp[0]; var setIcp = _st_icp[1];
@@ -2392,7 +2444,7 @@ function HomeView(props) {
   var _st_prodModal= useState(false); var prodModal = _st_prodModal[0]; var setProdModal = _st_prodModal[1];
 
   // ── ICP state (persisted in localStorage) ────────────────────────────────
-  var icpDefaults = CLIENT_CONFIG.icpDefault || {};
+  var icpDefaults = {};
   var _st_icp = useState(function(){
     try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):icpDefaults; } catch(e){ return icpDefaults; }
   }); var icp = _st_icp[0]; var setIcp = _st_icp[1];
@@ -2438,14 +2490,14 @@ function HomeView(props) {
      desc:"Gere uma lista de 30 empresas reais com base no seu ICP. Explore, filtre e enriqueça com um clique.",
      stat:"Grátis — sem consumir créditos", statColor:"#059669"},
     {id:"busca",  label:"Account Mapping",    emoji:"🔍", nav:"search",
-     desc:CLIENT_CONFIG.ui.cardBusca,
+     desc:"Pesquise qualquer empresa e gere inteligência de conta completa: fit score, stakeholders, dores, mensagens e plano de ação.",
      stat:total+" conta"+(total!==1?"s":"")+" mapeada"+(total!==1?"s":""), statColor:"#6366f1"},
     {id:"contas", label:"Contas",              emoji:"📁", nav:"accounts",
      desc:"Todas as empresas mapeadas organizadas por fit, tier e estágio.",
      stat:total+" no total", statColor:"#0369a1"},
     {id:"seqs",   label:"Sequências",          emoji:"📬", nav:"sequences",
-     desc:CLIENT_CONFIG.ui.cardSeqs,
-     stat:CLIENT_CONFIG.ui.statSeqs, statColor:"#7c3aed"},
+     desc:"Gere cadências de 6 toques personalizadas por stakeholder com e-mail, InMail, WhatsApp e cold call.",
+     stat:"6 toques por perfil", statColor:"#7c3aed"},
     {id:"biblio", label:"Biblioteca",          emoji:"📚", nav:"biblioteca",
      desc:"Todas as sequências salvas organizadas. Exporte qualquer cadência em PDF com um clique.",
      stat:"Sequências salvas", statColor:"#059669"},
@@ -2463,7 +2515,7 @@ function HomeView(props) {
   var greet = hr<12?"Bom dia":hr<18?"Boa tarde":"Boa noite";
 
   // ── Fit criteria from clientLoader ────────────────────────────────────────
-  var fitCriteria = CLIENT_CONFIG.fitCriteria || [];
+  var fitCriteria = [];
 
   return (
     <div>
@@ -2830,8 +2882,27 @@ function buildData(company, searchResults) {
   var faturamento = extractVal([/R$[\s]*[\d,\.]+[\s]*(bilh[oo]es?|milh[oo]es?)/i]);
   var funcionarios = extractVal([/[\d\.]+[\s]*mil[\s]*funcion[aa]rios?/i, /[\d\.]+([\s])*(funcion[aa]rios?|colaboradores?)/i]);
   var clientes = extractVal([/[\d,\.]+[\s]*(milh[oo]es?|mil)[\s]*(de[\s]*)?(clientes?|usuarios?)/i]);
-  var _setor = CLIENT_CONFIG.empresa.nome; var setor = CLIENT_CONFIG.setorConfig.fallbackLabel; var tier = CLIENT_CONFIG.setorConfig.fallbackTier1 ? "Tier 1" : "Tier 2";
-  CLIENT_CONFIG.setorConfig.regexes.forEach(function(r){ if(r.pattern.test(lower)){ setor=r.label; tier=r.tier1?"Tier 1":"Tier 2"; } });
+  // Setor detection — generic regex covering broad verticals
+  var setor = "Empresarial / Mid Market"; var tier = "Tier 2";
+  var setorRegexes = [
+    { pattern:/banco|financeira|seguradora|fintech|nubank|stone|pagbank|btg|xp|bradesco|itau|c6|inter|cielo/i, label:"Financeiro / Fintech",          tier1:true  },
+    { pattern:/software|saas|startup|tecnologia|plataforma|totvs|vtex|linx|rdstation|contaazul/i,             label:"Software / SaaS / Tech",       tier1:true  },
+    { pattern:/hospital|clinica|saude|pharma|healthtech|hapvida|unimed|dasa|fleury|amil/i,                     label:"Saúde / Healthtech",            tier1:true  },
+    { pattern:/industria|manufatura|fabrica|logistica|transporte|supply chain/i,                                label:"Industrial / Logística",        tier1:false },
+    { pattern:/varejo|retail|e-commerce|ecommerce/i,                                                            label:"Varejo / E-commerce",           tier1:false },
+    { pattern:/governo|publico|prefeitura|municipal|federal|govtech/i,                                          label:"Setor Público / Govtech",       tier1:false },
+    { pattern:/educacao|edtech|ensino|faculdade|universidade/i,                                                  label:"Educação / EdTech",             tier1:false },
+  ];
+  setorRegexes.forEach(function(r){ if(r.pattern.test(lower)){ setor=r.label; tier=r.tier1?"Tier 1":"Tier 2"; } });
+
+  // ICP from localStorage — used to enrich fit justification
+  var icp = getStoredIcp();
+  var produtos = getStoredProducts();
+  var prodNomes = produtos.map(function(p){return p.nome;}).filter(Boolean);
+  var icpSegmento = icp.segmento || setor;
+  var fitJust = company+" atua em "+setor+(icp.segmento?", segmento dentro do ICP configurado ("+icp.segmento+")":" ")+". "+
+    (prodNomes.length?"Pode ser cliente para: "+prodNomes.join(", ")+".":"Avaliar fit com base no perfil e estágio da empresa.");
+
   function buildResumo() {
     if (!tavilyAnswers.length) return company+" e uma empresa de "+setor+" com operação ativa no Brasil.";
     // Filter to best PT-BR content
@@ -2875,22 +2946,43 @@ function buildData(company, searchResults) {
   var noticias = noticiasSources.length ? noticiasSources : [{titulo:"Buscar noticias recentes de "+company, resumo:"Clique para pesquisar noticias sobre a empresa.", url:"https://google.com/search?q="+encodeURIComponent(company)+" seguranca privacidade LGPD 2025", relevancia:"Pesquisa sugerida"}];
   return {
     empresa:{nome:company,setor:setor,resumo:resumo,rawContext:allText.slice(0,4000),tamanho:funcionarios||(tier==="Tier 1"?"500-1000 funcionarios":"200-500 funcionarios"),faturamento:faturamento||"Nao disponível",clientes:clientes||""},
-    fit:{score:"ALTO",justificativa:CLIENT_CONFIG.buildData.fitJustificativa(company,setor),solucoes_mgt:CLIENT_CONFIG.buildData.solucoes},
-    mercado:{competidores_provedor:CLIENT_CONFIG.buildData.competidores,concorrentes_mercado:[]},
-    dores:{principais:CLIENT_CONFIG.buildData.dores},
-    triggers:CLIENT_CONFIG.buildData.triggers,
-    stakeholders:CLIENT_CONFIG.buildData.stakeholdersDefault(company),
+    fit:{score:"ALTO", justificativa:fitJust, solucoes:prodNomes.length?prodNomes:["(configure seus produtos na Home para ver aqui)"]},
+    mercado:{competidores_provedor:[], concorrentes_mercado:[]},
+    dores:{principais:["(mapeamento com IA irá preencher as dores específicas)"]},
+    triggers:["(mapeamento com IA irá preencher os gatilhos de compra)"],
+    stakeholders:[
+      { cargo:"CEO / Sócio-Diretor",        angulo:"Decisão estratégica e resultados do negócio",    prioridade:"PRIMARIO",   urgencia:"Alta",  email:"", linkedin:"", phone:"" },
+      { cargo:"Diretor Comercial / VP",     angulo:"Crescimento de receita e ciclo de vendas",        prioridade:"PRIMARIO",   urgencia:"Alta",  email:"", linkedin:"", phone:"" },
+      { cargo:"CFO / Diretor Financeiro",   angulo:"ROI e previsibilidade financeira",                prioridade:"SECUNDARIO", urgencia:"Média", email:"", linkedin:"", phone:"" },
+      { cargo:"Diretor de Operações / COO", angulo:"Processos, escala e continuidade",                prioridade:"SECUNDARIO", urgencia:"Média", email:"", linkedin:"", phone:"" },
+      { cargo:"Diretor / Gerente Técnico",  angulo:"Stack tecnológico e eficiência operacional",      prioridade:"TERCIARIO",  urgencia:"Baixa", email:"", linkedin:"", phone:"" },
+    ],
     noticias: noticias,
     estrategia:{
       tier:tier,
-      emails:CLIENT_CONFIG.buildData.emails(company,setor),
-      inmails:CLIENT_CONFIG.buildData.inmails(company,setor),
-      whatsapps:CLIENT_CONFIG.buildData.whatsapps(company,setor),
-      cold_calls:CLIENT_CONFIG.buildData.coldCalls(company,setor),
-      perguntas_spin:CLIENT_CONFIG.buildData.spin(company),
-      objeções:CLIENT_CONFIG.buildData.objecoes(company,setor)
+      emails:[],
+      inmails:[],
+      whatsapps:[],
+      cold_calls:[],
+      perguntas_spin:["(mapeamento com IA irá gerar perguntas SPIN específicas para "+company+")"],
+      objeções:[]
     },
-    proximos_passos:{ae:CLIENT_CONFIG.buildData.proximosPassos.ae(company),bdr:CLIENT_CONFIG.buildData.proximosPassos.bdr(company,setor),prazo:CLIENT_CONFIG.buildData.proximosPassos.prazo}
+    proximos_passos:{
+      ae:[
+        "Mapear decisores no LinkedIn — CEO, Comercial e Financeiro de "+company,
+        "Pesquisar vagas abertas em "+company+" — sinal de crescimento e momento",
+        "Buscar notícias recentes de "+company+" no Google",
+        "Preparar diagnóstico com base no setor ("+setor+") e porte",
+        "InMail ao decisor com ângulo personalizado",
+      ],
+      bdr:[
+        "Cold call focado no CEO e Diretor Comercial",
+        "WhatsApp com pergunta direta sobre desafio atual",
+        "Sequência de 3 emails: desafio, resultado, prova social",
+        "Monitorar LinkedIn — posts e movimentações da "+company,
+      ],
+      prazo:"Primeira abordagem em até 48 horas — prioridade "+tier+"."
+    }
   };
 }
 
@@ -3541,7 +3633,7 @@ function exportRelatoriosPDF(accounts, filters) {
     var fitClass = a.fit==="ALTO"?"fit-alto":a.fit==="MEDIO"?"fit-medio":"fit-baixo";
     html += "<tr><td><strong>"+a.nome+"</strong></td><td>"+a.setor+"</td><td><span class='"+fitClass+"'>"+a.fit+"</span></td><td>"+a.tier+"</td><td>"+(STATUS_CONFIG[a.status]&&STATUS_CONFIG[a.status].label||a.status)+"</td><td>"+fmtDate(a.savedAt)+"</td></tr>";
   });
-  html += "</table><div class='footer'>"+CLIENT_CONFIG.empresa.rodape+"</div></body></html>";
+  html += "</table><div class='footer'>"+"Mais Pipe Beta - "+new Date().toLocaleDateString("pt-BR")+"</div></body></html>";
   var w = window.open("","_blank");
   w.document.write(html);
   w.document.close();
@@ -3909,13 +4001,9 @@ function ProspectView(props) {
   var accounts   = props.accounts || [];
   var usage      = props.usage || {};
 
-  var _st_icp = useState(function(){
+  var icp = (function(){
     try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):{}; } catch(e){ return {}; }
-  }); var icp = _st_icp[0]; var setIcpLocal = _st_icp[1];
-  // Re-sync from storage every time ProspectView mounts or becomes active
-  useEffect(function(){
-    try { var s=localStorage.getItem("pipe_icp"); if(s) setIcpLocal(JSON.parse(s)); } catch(e){}
-  }, []);
+  })();
 
   var lista    = props.lista    || [];
   var loadingP = props.loadingP || false;
@@ -3929,7 +4017,12 @@ function ProspectView(props) {
   var _st_search    = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
 
   var icpPreenchido = (function(){
-    try { return !!localStorage.getItem("pipe_icp"); } catch(e){ return false; }
+    try {
+      var s = localStorage.getItem("pipe_icp");
+      if (!s) return false;
+      var obj = JSON.parse(s);
+      return !!(obj && (obj.segmento || obj.porte || obj.faturamento || obj.cargos));
+    } catch(e){ return false; }
   })();
   var mappedNames = new Set(accounts.map(function(a){ return (a.nome||"").toLowerCase().trim(); }));
 
@@ -3940,7 +4033,7 @@ function ProspectView(props) {
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
         icp: icp,
-        clienteNome: (CLIENT_CONFIG && CLIENT_CONFIG.empresa && CLIENT_CONFIG.empresa.nome) || "",
+        clienteNome: getCompanySite() || "",
         quantidade: 30,
       }),
     })
