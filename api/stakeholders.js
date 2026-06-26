@@ -10,6 +10,15 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
+  // Always respond with JSON — never let unhandled exceptions return HTML
+  try {
+    return await runHandler(req, res);
+  } catch (e) {
+    return res.status(200).json({ contacts: [], sources: [], errors: ["Erro interno: " + e.message], total: 0 });
+  }
+}
+
+async function runHandler(req, res) {
   const { company, domain } = req.body || {};
   if (!company) return res.status(400).json({ error: "company required" });
 
