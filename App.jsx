@@ -1117,7 +1117,16 @@ function StakeholdersFetchBtn(props) {
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({company:acc.nome, domain:domain}),
     })
-      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, status:r.status, data:d}; }); })
+      .then(function(r){
+        var status = r.status;
+        return r.text().then(function(txt){
+          try {
+            return {ok:r.ok, status:status, data:JSON.parse(txt)};
+          } catch(e) {
+            return {ok:false, status:status, data:{error:"Resposta inválida do servidor ("+status+"): "+txt.slice(0,120)}};
+          }
+        });
+      })
       .then(function(res){
         if (!res.ok) { setErr("Erro " + res.status + ": " + ((res.data&&res.data.error)||"falha na API")); return; }
         var data = res.data;
