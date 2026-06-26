@@ -1154,7 +1154,7 @@ function StakeholdersFetchBtn(props) {
     <button onClick={fetch_stk} disabled={loading} style={{display:"flex",alignItems:"center",gap:6,background:loading?"#f1f5f9":"#fff",color:loading?"#94a3b8":"#4f46e5",border:"1.5px solid "+(loading?"#e2e8f0":"rgba(99,102,241,.35)"),borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:loading?"default":"pointer",fontFamily:"inherit",transition:"all .2s"}}>
       {loading
         ? <><div style={{width:11,height:11,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite",flexShrink:0}}/>{" Buscando no LinkedIn..."}</>
-        : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>{"Buscar contatos reais"}</>
+        : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>{"Buscar Contatos no LinkedIn"}</>
       }
       {err && <span style={{fontSize:9,color:"#ef4444",marginLeft:4}}>{"erro"}</span>}
     </button>
@@ -1789,14 +1789,14 @@ function ContactsView(props) {
     }).catch(function(){ setSourceStatus(cid, "hunter", "err"); return null; });
 
     // ── APOLLO ───────────────────────────────────────────────────────────────
-    var pApollo = fetch("/api/contacts", {
+    var pApollo = fetch("/api/hunter", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({first_name:first, last_name:last, organization_name:org, domain:dom})
     }).then(function(r){ return r.json(); }).then(function(d){
       var email = (d.person && d.person.email) || (d.email) || null;
       var conf  = (d.person && d.person.email_confidence) || (d.confidence) || 0;
       setSourceStatus(cid, "apollo", email ? "found" : "miss");
-      return email ? {email:email, confidence:conf, source:"Apollo.io"} : null;
+      return email ? {email:email, confidence:conf, source:"Hunter.io"} : null;
     }).catch(function(){ setSourceStatus(cid, "apollo", "err"); return null; });
 
     // ── SNOV.IO ───────────────────────────────────────────────────────────────
@@ -2016,7 +2016,7 @@ function ContactsView(props) {
                                 <div style={{fontSize:10,fontWeight:700,color:"#4f46e5",marginBottom:1}}>{"Buscando em 3 fontes..."}</div>
                                 {[
                                   {key:"hunter", label:"Hunter.io"},
-                                  {key:"apollo",  label:"Apollo.io"},
+                                  {key:"apollo",  label:"Hunter.io"},
                                   {key:"snov",    label:"Snov.io"},
                                 ].map(function(src){
                                   var st = (enrichProgress[c.id]||{})[src.key] || "pending";
@@ -2622,7 +2622,10 @@ function HomeView(props) {
           <div onClick={function(){setIcpModal(true);}} style={{background:icpSaved?"linear-gradient(135deg,rgba(99,102,241,.07),rgba(139,92,246,.04))":"linear-gradient(135deg,#fff,rgba(99,102,241,.03))",border:"1.5px solid "+(icpSaved?"rgba(99,102,241,.4)":"rgba(99,102,241,.2)"),borderRadius:16,padding:"20px",cursor:"pointer",transition:"all .2s",position:"relative",boxShadow:icpSaved?"0 2px 12px rgba(99,102,241,.1)":"0 2px 8px rgba(99,102,241,.06)"}}
             onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.6)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(99,102,241,.15)";}}
             onMouseLeave={function(e){e.currentTarget.style.borderColor=icpSaved?"rgba(99,102,241,.4)":"rgba(99,102,241,.2)";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=icpSaved?"0 2px 12px rgba(99,102,241,.1)":"0 2px 8px rgba(99,102,241,.06)";}}>
-            {!icpSaved && <div style={{position:"absolute",top:-1,right:16,background:"linear-gradient(135deg,#f59e0b,#f97316)",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"0 0 8px 8px",padding:"3px 10px",letterSpacing:.5}}>{"RECOMENDADO"}</div>}
+            {icpSaved
+              ? <div style={{position:"absolute",top:-1,right:16,background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"0 0 8px 8px",padding:"3px 10px",letterSpacing:.5}}>{"✓ CONCLUÍDO"}</div>
+              : <div style={{position:"absolute",top:-1,right:16,background:"linear-gradient(135deg,#f59e0b,#f97316)",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"0 0 8px 8px",padding:"3px 10px",letterSpacing:.5}}>{"RECOMENDADO"}</div>
+            }
             <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
               <div style={{width:44,height:44,borderRadius:13,background:icpSaved?"linear-gradient(135deg,#6366f1,#8b5cf6)":"linear-gradient(135deg,#818cf8,#a78bfa)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:icpSaved?"0 4px 14px rgba(99,102,241,.4)":"0 4px 10px rgba(99,102,241,.2)"}}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
@@ -2657,7 +2660,10 @@ function HomeView(props) {
           <div onClick={function(){setProdModal(true);}} style={{background:produtos.length>0?"linear-gradient(135deg,rgba(5,150,105,.06),rgba(16,185,129,.03))":"linear-gradient(135deg,#fff,rgba(5,150,105,.02))",border:"1.5px solid "+(produtos.length>0?"rgba(5,150,105,.4)":"rgba(5,150,105,.2)"),borderRadius:16,padding:"20px",cursor:"pointer",transition:"all .2s",position:"relative",boxShadow:produtos.length>0?"0 2px 12px rgba(5,150,105,.08)":"0 2px 8px rgba(5,150,105,.04)"}}
             onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(5,150,105,.6)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(5,150,105,.12)";}}
             onMouseLeave={function(e){e.currentTarget.style.borderColor=produtos.length>0?"rgba(5,150,105,.4)":"rgba(5,150,105,.2)";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=produtos.length>0?"0 2px 12px rgba(5,150,105,.08)":"0 2px 8px rgba(5,150,105,.04)";}}>
-            {!produtos.length && <div style={{position:"absolute",top:-1,right:16,background:"linear-gradient(135deg,#059669,#0d9488)",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"0 0 8px 8px",padding:"3px 10px",letterSpacing:.5}}>{"RECOMENDADO"}</div>}
+            {produtos.length>0
+              ? <div style={{position:"absolute",top:-1,right:16,background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"0 0 8px 8px",padding:"3px 10px",letterSpacing:.5}}>{"✓ CONCLUÍDO"}</div>
+              : <div style={{position:"absolute",top:-1,right:16,background:"linear-gradient(135deg,#059669,#0d9488)",color:"#fff",fontSize:9,fontWeight:800,borderRadius:"0 0 8px 8px",padding:"3px 10px",letterSpacing:.5}}>{"RECOMENDADO"}</div>
+            }
             <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
               <div style={{width:44,height:44,borderRadius:13,background:produtos.length>0?"linear-gradient(135deg,#059669,#10b981)":"linear-gradient(135deg,#34d399,#6ee7b7)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:produtos.length>0?"0 4px 14px rgba(5,150,105,.35)":"0 4px 10px rgba(5,150,105,.15)"}}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
@@ -2904,29 +2910,44 @@ function buildData(company, searchResults) {
     (prodNomes.length?"Pode ser cliente para: "+prodNomes.join(", ")+".":"Avaliar fit com base no perfil e estágio da empresa.");
 
   function buildResumo() {
-    if (!tavilyAnswers.length) return company+" e uma empresa de "+setor+" com operação ativa no Brasil.";
-    // Filter to best PT-BR content
+    if (!tavilyAnswers.length) return company+" é uma empresa de "+setor+" com operação ativa no Brasil.";
     var ptAnswers = tavilyAnswers.filter(function(a) {
-      return a.length > 80 && /\b(empresa|brasil|compan|serv|produt|clientes|mercado|tecnolog|atend|fundad|operas|setor)\b/i.test(a);
+      return a.length > 80 && /\b(empresa|brasil|compan|serv|produt|clientes|mercado|tecnolog|atend|fundad|operas|setor|fundad|receita|faturamento)\b/i.test(a);
     });
     var best = (ptAnswers.length ? ptAnswers : tavilyAnswers).slice(0,3);
-    // Deduplicate: remove sentences that appear in multiple answers
     var sentences = [];
     best.forEach(function(a) {
-      a.replace(/([^.!?]+[.!?]+)/g, function(s) {
-        var clean = s.trim();
-        if (clean.length < 30) return;
-        var isDup = sentences.some(function(existing) {
-          return existing.toLowerCase().slice(0,40) === clean.toLowerCase().slice(0,40);
+      // Strip CSV-like lines (contains semicolons or lots of caps+quotes+numbers)
+      var lines = a.split(/\n/);
+      lines.forEach(function(line) {
+        // Skip lines that look like CSV, tracking params, raw data dumps
+        if (/;.*;.*;/.test(line)) return; // CSV rows
+        if (/trk=|utm_|linkedin\.com\/(feed|company|in\/)|destinatário|cnpj|cpf|cep|\bInsc\b/i.test(line)) return;
+        if ((line.match(/[A-Z]{2,}/g)||[]).length > 8) return; // too many all-caps tokens = raw data
+        if (/"[^"]{0,20}",\s*"/.test(line)) return; // quoted CSV fields
+        line.replace(/([^.!?]+[.!?]+)/g, function(s) {
+          var clean = s.trim();
+          if (clean.length < 40) return;
+          // Skip sentences that are clearly not about the company
+          if (/\bsemicolon\b|trk=|\bCNPJ\b.*\d{2}\.\d{3}|\b\d{5}-\d{3}\b/i.test(clean)) return;
+          var isDup = sentences.some(function(existing) {
+            return existing.toLowerCase().slice(0,40) === clean.toLowerCase().slice(0,40);
+          });
+          if (!isDup) sentences.push(clean);
         });
-        if (!isDup) sentences.push(clean);
       });
     });
-    var text = sentences.slice(0,5).join(" ").trim();
-    if (!text) text = best[0].slice(0,500);
-    // Remove any raw URLs, brackets, asterisks
-    text = text.replace(/https?:\/\/\S+/g,"").replace(/\[.*?\]/g,"").replace(/\*+/g,"").replace(/\s+/g," ").trim();
-    return text.slice(0,600) || company+" e uma empresa de "+setor+" no Brasil.";
+    var text = sentences.slice(0,4).join(" ").trim();
+    if (!text || text.length < 60) text = best[0].replace(/;.*|"[^"]+"/g,"").replace(/\s+/g," ").trim().slice(0,500);
+    // Final cleanup: remove URLs, brackets, asterisks, tracking remnants
+    text = text
+      .replace(/https?:\/\/\S+/g,"")
+      .replace(/\[.*?\]/g,"")
+      .replace(/\*+/g,"")
+      .replace(/\(?\s*trk=[^)]*\)?/g,"")
+      .replace(/\s{2,}/g," ")
+      .trim();
+    return text.slice(0,600) || company+" é uma empresa de "+setor+" no Brasil.";
   }
   var resumo = buildResumo();
   var allSources = [];
@@ -4171,6 +4192,18 @@ function ProspectView(props) {
       });
   }
 
+  var _st_selected = useState({}); var selected = _st_selected[0]; var setSelected = _st_selected[1];
+  function toggleSelect(nome) { setSelected(function(s){ var n=Object.assign({},s); if(n[nome]) delete n[nome]; else n[nome]=true; return n; }); }
+  function clearSelection() { setSelected({}); }
+  var selectedNomes = Object.keys(selected);
+  var selectedCount = selectedNomes.length;
+
+  function enrichSelected() {
+    var toEnrich = listaFiltrada.filter(function(e){ return selected[e.nome] && !mappedNames.has((e.nome||"").toLowerCase().trim()) && !enriched[e.nome] && !enriching[e.nome]; });
+    toEnrich.forEach(function(emp){ enriquecerEmpresa(emp); });
+    clearSelection();
+  }
+
   var listaFiltrada = lista.filter(function(e){
     if (filter !== "TODOS" && e.score_fit !== filter) return false;
     if (search) {
@@ -4252,7 +4285,7 @@ function ProspectView(props) {
             })}
             <button onClick={gerarLista} style={{background:"none",border:"1.5px solid rgba(99,102,241,.3)",color:"#6366f1",borderRadius:9,padding:"8px 14px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.44-5.5"/></svg>
-              {"Regerar"}
+              {"Refazer"}
             </button>
           </div>
 
@@ -4271,15 +4304,35 @@ function ProspectView(props) {
             ); })}
           </div>
 
+          {/* Bulk selection bar */}
+          {selectedCount > 0 && (
+            <div style={{position:"sticky",top:44,zIndex:50,background:"linear-gradient(135deg,#6366f1,#4f46e5)",borderRadius:14,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 24px rgba(99,102,241,.35)"}}>
+              <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{selectedCount + " empresa"+(selectedCount!==1?"s":"")+" selecionada"+(selectedCount!==1?"s":"")}</span>
+              <div style={{flex:1}}/>
+              <button onClick={clearSelection} style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",color:"#fff",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Limpar"}</button>
+              <button onClick={enrichSelected} style={{background:"#fff",border:"none",color:"#4f46e5",borderRadius:8,padding:"7px 16px",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,boxShadow:"0 2px 8px rgba(0,0,0,.15)"}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                {"Enriquecer " + selectedCount + " conta"+(selectedCount!==1?"s":"")}
+              </button>
+            </div>
+          )}
+
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
             {listaFiltrada.map(function(emp, idx){
               var fitStyle    = FIT_STYLE[emp.score_fit] || FIT_STYLE["MÉDIO"];
               var jaMapeada   = mappedNames.has((emp.nome||"").toLowerCase().trim());
               var jaEnriq     = !!enriched[emp.nome];
               var isEnriching = !!enriching[emp.nome];
+              var isSelected  = !!selected[emp.nome];
               return (
-                <div key={idx} style={{background:"#fff",border:"1px solid "+(jaEnriq?"rgba(99,102,241,.3)":"#e6e9ef"),borderRadius:16,padding:"18px",transition:"all .2s",boxShadow:jaEnriq?"0 4px 20px rgba(99,102,241,.1)":"none"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:10}}>
+                <div key={idx} onClick={function(){ if(!jaMapeada&&!jaEnriq&&!isEnriching) toggleSelect(emp.nome); }} style={{background:"#fff",border:"1.5px solid "+(isSelected?"#6366f1":jaEnriq?"rgba(99,102,241,.3)":"#e6e9ef"),borderRadius:16,padding:"18px",transition:"all .2s",boxShadow:isSelected?"0 0 0 3px rgba(99,102,241,.2)":jaEnriq?"0 4px 20px rgba(99,102,241,.1)":"none",cursor:(!jaMapeada&&!jaEnriq&&!isEnriching)?"pointer":"default",position:"relative"}}>
+                  {/* Checkbox */}
+                  {!jaMapeada && !jaEnriq && !isEnriching && (
+                    <div style={{position:"absolute",top:14,right:14,width:18,height:18,borderRadius:5,border:"2px solid "+(isSelected?"#6366f1":"#d1d5db"),background:isSelected?"#6366f1":"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
+                      {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                  )}
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:10,paddingRight:(!jaMapeada&&!jaEnriq&&!isEnriching)?26:0}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:800,color:"#0f172a",lineHeight:1.3,marginBottom:3}}>{emp.nome}</div>
                       <div style={{fontSize:11,color:"#64748b"}}>{[emp.setor,emp.cidade].filter(Boolean).join(" · ")}</div>
@@ -4298,7 +4351,7 @@ function ProspectView(props) {
                     </div>
                   )}
                   {emp.site && <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}><a href={"https://"+emp.site.replace(/^https?:\/\//,"")} target="_blank" rel="noopener noreferrer" style={{color:"#6366f1",textDecoration:"none"}} onClick={function(e){e.stopPropagation();}}>{"🔗 "+emp.site}</a></div>}
-                  <div style={{display:"flex",gap:8}}>
+                  <div style={{display:"flex",gap:8}} onClick={function(e){e.stopPropagation();}}>
                     {jaMapeada ? (
                       <button onClick={function(){if(props.onNav)props.onNav("accounts");}} style={{flex:1,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#475569",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Ver em Contas →"}</button>
                     ) : jaEnriq ? (
