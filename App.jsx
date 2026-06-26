@@ -2154,6 +2154,45 @@ function IntegrationsView() {
   );
 }
 
+// -- PLAN DROPDOWN ------------------------------------------------------------
+function PlanDropdown(props) {
+  var usage = props.usage;
+  var _st_open = useState(false); var open = _st_open[0]; var setOpen = _st_open[1];
+  var ref = useRef(null);
+  useEffect(function(){
+    function handler(e){ if(ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return function(){ document.removeEventListener("mousedown", handler); };
+  }, []);
+  if (!usage) return null;
+  return (
+    <div ref={ref} style={{position:"relative"}}>
+      <button onClick={function(){setOpen(!open);}} style={{display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.1)",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.2)",borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",transition:"all .2s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(255,255,255,.16)";}} onMouseLeave={function(e){e.currentTarget.style.background="rgba(255,255,255,.1)";}}>
+        <span style={{width:8,height:8,borderRadius:"50%",background:usage.planColor,flexShrink:0}}/>
+        <span style={{fontSize:12,fontWeight:700,color:"#fff"}}>{usage.planLabel}</span>
+        <span style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>{usage.used + "/" + usage.limit}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth="2.5" style={{transition:"transform .2s",transform:open?"rotate(180deg)":"rotate(0deg)"}}><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      {open && (
+        <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:"#ffffff",border:"1px solid #dde1e8",borderRadius:14,boxShadow:"0 16px 48px rgba(15,23,42,.2)",zIndex:200,minWidth:220,overflow:"hidden"}}>
+          <div style={{padding:"10px 14px",fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8,borderBottom:"1px solid #f1f5f9"}}>{"Plano (demo)"}</div>
+          {["free","starter","professional"].map(function(pid){
+            var p = PLANS[pid]; var isCurrent = usage.plan===pid;
+            return (
+              <div key={pid} onClick={function(){ if(props.onChangePlan) props.onChangePlan(pid); setOpen(false); }} style={{padding:"12px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,background:isCurrent?"#f0f3ff":"#fff",transition:"background .15s"}} onMouseEnter={function(e){if(!isCurrent)e.currentTarget.style.background="#f8fafc";}} onMouseLeave={function(e){if(!isCurrent)e.currentTarget.style.background=isCurrent?"#f0f3ff":"#fff";}}>
+                <span style={{width:10,height:10,borderRadius:"50%",background:p.color,flexShrink:0}}/>
+                <span style={{fontSize:13,fontWeight:700,color:"#0f172a",flex:1}}>{p.label}</span>
+                <span style={{fontSize:11,color:"#64748b"}}>{p.limit + "/mês"}</span>
+                {isCurrent && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // -- ONBOARDING FLOW ----------------------------------------------------------
 function OnboardingFlow(props) {
   var onFinish = props.onFinish;
@@ -2462,11 +2501,10 @@ function HomeView(props) {
       <div style={{position:"relative",borderRadius:24,overflow:"hidden",marginBottom:28,background:"linear-gradient(135deg,#0a0a14 0%,#171430 45%,#1e1b4b 100%)",border:"1px solid #e6e9ef",padding:"40px 40px 36px"}}>
         <div style={{position:"absolute",top:-80,right:-60,width:320,height:320,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.4),transparent 70%)",filter:"blur(20px)"}}/>
         <div style={{position:"absolute",bottom:-100,left:-40,width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,.3),transparent 70%)",filter:"blur(20px)"}}/>
-        {/* Plan badge — top right */}
+        {/* Plan dropdown — top right */}
         {props.usage && (
-          <div style={{position:"absolute",top:20,right:24,zIndex:3,display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:9,fontWeight:700,color:"#fff",background:props.usage.planColor,borderRadius:6,padding:"3px 10px",textTransform:"uppercase",letterSpacing:.6}}>{props.usage.planLabel}</span>
-            <span style={{fontSize:10,color:"rgba(255,255,255,.5)",fontWeight:500}}>{props.usage.used + "/" + props.usage.limit + " mapeamentos"}</span>
+          <div style={{position:"absolute",top:20,right:24,zIndex:3}}>
+            <PlanDropdown usage={props.usage} onChangePlan={props.onChangePlan}/>
           </div>
         )}
         <div style={{position:"relative",zIndex:2}}>
@@ -3025,28 +3063,7 @@ function SearchView(props) {
           <div style={{background:"#ffffff",border:"1.5px solid "+(usage.remaining<=0?"#fecdd3":"#e8edf4"),borderRadius:16,padding:"16px 18px",marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:10}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <div style={{position:"relative"}}>
-                  <button onClick={function(){setPlanMenu(!planMenu);}} title="Trocar plano (demo)" style={{display:"flex",alignItems:"center",gap:5,fontSize:9,fontWeight:700,color:"#fff",background:usage.planColor,border:"none",borderRadius:6,padding:"4px 9px",textTransform:"uppercase",letterSpacing:.5,cursor:"pointer",fontFamily:"inherit"}}>
-                    {usage.planLabel}
-                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
-                  </button>
-                  {planMenu && (
-                    <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"#ffffff",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",border:"1px solid #dde1e8",borderRadius:12,boxShadow:"0 12px 40px rgba(15,23,42,.3)",zIndex:60,minWidth:200,overflow:"hidden"}}>
-                      <div style={{padding:"8px 12px",fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.6,borderBottom:"1px solid #f1f5f9"}}>{"Plano (demo)"}</div>
-                      {["free","starter","professional"].map(function(pid) {
-                        var p = PLANS[pid]; var isCurrent = usage.plan===pid;
-                        return (
-                          <div key={pid} onClick={function(){ if(props.onChangePlan)props.onChangePlan(pid); setPlanMenu(false); }} style={{padding:"10px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:isCurrent?"#f0f3ff":"#fff"}} onMouseEnter={function(e){if(!isCurrent)e.currentTarget.style.background="#f1f3f6";}} onMouseLeave={function(e){if(!isCurrent)e.currentTarget.style.background="#fff";}}>
-                            <span style={{width:8,height:8,borderRadius:"50%",background:p.color,flexShrink:0}}/>
-                            <span style={{fontSize:12,fontWeight:700,color:"#0f172a",flex:1}}>{p.label}</span>
-                            <span style={{fontSize:10,color:"#52617a"}}>{p.limit + "/mês"}</span>
-                            {isCurrent && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <span style={{fontSize:9,fontWeight:700,color:"#fff",background:usage.planColor,borderRadius:6,padding:"4px 10px",textTransform:"uppercase",letterSpacing:.5}}>{usage.planLabel}</span>
                 <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{"Mapeamentos: " + usage.used + " / " + usage.limit}</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -3894,7 +3911,11 @@ function ProspectView(props) {
 
   var _st_icp = useState(function(){
     try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):{}; } catch(e){ return {}; }
-  }); var icp = _st_icp[0];
+  }); var icp = _st_icp[0]; var setIcpLocal = _st_icp[1];
+  // Re-sync from storage every time ProspectView mounts or becomes active
+  useEffect(function(){
+    try { var s=localStorage.getItem("pipe_icp"); if(s) setIcpLocal(JSON.parse(s)); } catch(e){}
+  }, []);
 
   var lista    = props.lista    || [];
   var loadingP = props.loadingP || false;
@@ -4485,7 +4506,7 @@ export default function App() {
             </div>
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
-              {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage}/>}
+              {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage} onChangePlan={changePlan}/>}
               {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
