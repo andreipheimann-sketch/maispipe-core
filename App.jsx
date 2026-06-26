@@ -403,12 +403,15 @@ function SequenceView(props) {
     }
 
     setGenLoading(true);
+    var _icp = getStoredIcp() || {};
+    var _produtos = getStoredProducts() || [];
+    var _site = getCompanySite() || "";
     fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
       empresa:acc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain, contato:contactName||"", touches:cadência,
-      icp: getStoredIcp(),
-      produtos: getStoredProducts(),
-      companySite: getCompanySite(),
-      assinatura: getCompanySite() ? ("Consultor | " + getCompanySite()) : "Consultor",
+      icp: _icp,
+      produtos: _produtos,
+      companySite: _site,
+      assinatura: _site ? ("Consultor | " + _site) : "Consultor",
     })})
       .then(function(r){ return r.json().then(function(d){ return {status:r.status, data:d}; }); })
       .then(function(res){
@@ -1106,15 +1109,23 @@ function StakeholdersFetchBtn(props) {
 
   function fetch_stk() {
     setLoading(true); setErr(""); setDone(false);
-    var domain = (acc.enriched && acc.enriched.domain) || extractDomain(acc.nome);
+    // Use acc.site if available, otherwise enriched domain, otherwise empty
+    var siteRaw = acc.site || (acc.data && acc.data.empresa && acc.data.empresa.site) || "";
+    var domain = (acc.enriched && acc.enriched.domain) || (siteRaw ? siteRaw.replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0] : "");
     fetch("/api/stakeholders", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({company:acc.nome, domain:domain}),
     })
-      .then(function(r){ return r.ok ? r.json() : Promise.reject("HTTP "+r.status); })
-      .then(function(data){
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, status:r.status, data:d}; }); })
+      .then(function(res){
+        if (!res.ok) { setErr("Erro " + res.status + ": " + ((res.data&&res.data.error)||"falha na API")); return; }
+        var data = res.data;
         var contacts = data.contacts || [];
+        if (data.errors && data.errors.length && !contacts.length) {
+          setErr(data.errors.join("; ").slice(0, 120));
+          return;
+        }
         setCount(contacts.length);
         setDone(true);
         // Persist into account storage
@@ -1146,7 +1157,7 @@ function StakeholdersFetchBtn(props) {
         });
         if (props.onDone) props.onDone(data);
       })
-      .catch(function(e){ setErr(String(e)); })
+      .catch(function(e){ setErr("Falha de rede: " + String(e).slice(0,80)); })
       .finally(function(){ setLoading(false); });
   }
 
@@ -1164,7 +1175,7 @@ function StakeholdersFetchBtn(props) {
         ? <><div style={{width:11,height:11,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite",flexShrink:0}}/>{" Buscando no LinkedIn..."}</>
         : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>{"Buscar Contatos no LinkedIn"}</>
       }
-      {err && <span style={{fontSize:9,color:"#ef4444",marginLeft:4}}>{"erro"}</span>}
+      {err && <span style={{fontSize:9,color:"#ef4444",marginLeft:4,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{err}</span>}
     </button>
   );
 }
@@ -4772,8 +4783,8 @@ export default function App() {
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage} onChangePlan={changePlan}/>}
-              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onOpenAccount={function(acc){setOpenAcc(acc);}} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
-              {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
+              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
+              {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts}/>}
