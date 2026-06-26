@@ -2413,7 +2413,7 @@ function OnboardingFlow(props) {
                 {key:"porte",    label:"Porte (colaboradores ou receita)", ph:"Ex: 50–1000 colaboradores"},
                 {key:"faturamento",label:"Faturamento estimado", ph:"Ex: R$ 20M – R$ 1B/ano"},
                 {key:"regiao",   label:"Região / Mercado", ph:"Ex: Brasil, LATAM, Sul e Sudeste"},
-                {key:"cargos",   label:"Cargos decisores", ph:"Ex: CTO, CEO, CISO, CFO, DPO"},
+                {key:"cargos",   label:"Cargos decisores", ph:"Ex: CEO, CFO, CTO, Diretor Comercial, VP"},
               ].map(function(f){ return (
                 <div key={f.key} style={{marginBottom:12}}>
                   <label style={labelStyle}>{f.label}</label>
@@ -2443,11 +2443,11 @@ function OnboardingFlow(props) {
             </div>
             <div style={{maxHeight:280,overflowY:"auto",paddingRight:4,marginBottom:20}}>
               {[
-                {key:"nome",       label:"Nome do produto *",         ph:"Ex: EC Governance / CISO as a Service"},
-                {key:"descricao",  label:"Descrição curta",           ph:"Ex: CISO dedicado, SGSI e KPIs de segurança como serviço"},
-                {key:"beneficios", label:"Benefícios principais",     ph:"Ex: Sem headcount, resultado em 90 dias"},
-                {key:"publico",    label:"Público-alvo",              ph:"Ex: CEO e CTO de SaaS e Fintech sem CISO interno"},
-                {key:"preco",      label:"Faixa de preço / modelo",   ph:"Ex: A partir de R$ 8k/mês"},
+                {key:"nome",       label:"Nome do produto *",         ph:"Ex: Consultoria de Segurança / Plataforma SaaS / Serviço Gerenciado"},
+                {key:"descricao",  label:"Descrição curta",           ph:"Ex: O que é e como funciona em uma linha"},
+                {key:"beneficios", label:"Benefícios principais",     ph:"Ex: Reduz tempo, elimina risco, aumenta receita"},
+                {key:"publico",    label:"Público-alvo",              ph:"Ex: CEO e CTO de empresas de 50 a 500 funcionários"},
+                {key:"preco",      label:"Faixa de preço / modelo",   ph:"Ex: A partir de R$ 5k/mês ou por projeto"},
               ].map(function(f){ return (
                 <div key={f.key} style={{marginBottom:12}}>
                   <label style={labelStyle}>{f.label}</label>
@@ -2789,7 +2789,7 @@ function HomeView(props) {
                 {key:"porte",       label:"Porte (colaboradores ou receita)",  ph:"Ex: 50–1000 colaboradores / R$ 10M–R$ 500M"},
                 {key:"faturamento", label:"Faturamento estimado",              ph:"Ex: R$ 20M – R$ 1B/ano"},
                 {key:"regiao",      label:"Região / Mercado",                  ph:"Ex: Brasil, LATAM, Sul e Sudeste"},
-                {key:"cargos",      label:"Cargos decisores",                  ph:"Ex: CTO, CEO, CISO, CFO, DPO"},
+                {key:"cargos",      label:"Cargos decisores",                  ph:"Ex: CEO, CFO, CTO, Diretor Comercial, VP"},
               ].map(function(f){ return (
                 <div key={f.key} style={{marginBottom:14}}>
                   <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:5,textTransform:"uppercase",letterSpacing:.5}}>{f.label}</div>
@@ -2862,10 +2862,11 @@ function HomeView(props) {
               <div style={{background:"rgba(5,150,105,.03)",border:"1px solid rgba(5,150,105,.15)",borderRadius:14,padding:"16px"}}>
                 <div style={{fontSize:11,fontWeight:700,color:"#059669",marginBottom:12,textTransform:"uppercase",letterSpacing:.5}}>{"Adicionar produto / serviço"}</div>
                 {[
-                  {key:"nome",       label:"Nome do produto *",         ph:"Ex: EC Governance / CISO as a Service"},
-                  {key:"descricao",  label:"Descrição curta",           ph:"Ex: Entrega CISO dedicado, SGSI e KPIs de segurança como serviço"},
-                  {key:"beneficios", label:"Benefícios principais",     ph:"Ex: Sem headcount, resultado em 90 dias, pass em auditorias enterprise"},
-                  {key:"publico",    label:"Público-alvo",              ph:"Ex: CEO e CTO de empresas de SaaS e Fintech sem CISO interno"},
+                  {key:"nome",       label:"Nome do produto *",         ph:"Ex: Consultoria / Plataforma SaaS / Serviço Gerenciado"},
+                  {key:"descricao",  label:"Descrição curta",           ph:"Ex: O que é e como funciona em uma linha"},
+                  {key:"beneficios", label:"Benefícios principais",     ph:"Ex: Reduz custo, elimina risco, escala receita"},
+                  {key:"publico",    label:"Público-alvo",              ph:"Ex: CEO e CTO de empresas de 50 a 500 funcionários"},
+                  {key:"preco",      label:"Faixa de preço / modelo",   ph:"Ex: A partir de R$ 5k/mês ou por projeto"},
                   {key:"preco",      label:"Faixa de preço / modelo",   ph:"Ex: A partir de R$ 8k/mês · as-a-service"},
                 ].map(function(f){ return (
                   <div key={f.key} style={{marginBottom:10}}>
