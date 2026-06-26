@@ -1,7 +1,7 @@
 {
   "name": "+ Pipe Account Mapping com IA",
   "version": "1.0.0",
-  "description": "+ Pipe \u2014 Prospecting Tool for Sales Teams",
+  "description": "+ Pipe — Prospecting Tool for Sales Teams",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -15,5 +15,6 @@
   "devDependencies": {
     "@vitejs/plugin-react": "4.2.1",
     "vite": "5.1.4"
-  }
+  },
+  "type": "module"
 }
