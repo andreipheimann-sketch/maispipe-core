@@ -81,7 +81,12 @@ export default async function handler(req, res) {
           p.preco      ? "   Preço: "      + p.preco      : "",
         ].filter(Boolean).join("\n");
       }).join("\n\n")
-    : "Produto não configurado — gere mensagens genéricas de discovery.";
+    : null; // null = not configured, triggers discovery mode
+
+  const temProduto = !!produtosDesc;
+  const produtosPrompt = temProduto
+    ? produtosDesc
+    : "NENHUM PRODUTO CADASTRADO — faça perguntas de discovery abertas para entender os problemas da empresa, sem assumir nenhuma solução específica.";
 
   // ── MODO RESUMO ─────────────────────────────────────────────────────────────
   if (mode === "resumo") {
@@ -91,7 +96,7 @@ export default async function handler(req, res) {
       ``,
       `CONTEXTO DO VENDEDOR:`,
       `Empresa do vendedor: ${vendedorEmpresa}`,
-      `Produtos/soluções:\n${produtosDesc}`,
+      `Produtos/soluções:\n${produtosPrompt}`,
       `ICP:\n${icpDesc}`,
       ``,
       `ESTRUTURA OBRIGATÓRIA (2 parágrafos curtos e densos, prosa fluida, sem bullets nem markdown):`,
@@ -129,7 +134,7 @@ export default async function handler(req, res) {
       `Empresa do vendedor: ${vendedorEmpresa}`,
       ``,
       `PRODUTOS/SOLUÇÕES QUE O VENDEDOR OFERECE:`,
-      produtosDesc,
+      produtosPrompt,
       ``,
       `ICP DO VENDEDOR:`,
       icpDesc,
@@ -225,7 +230,7 @@ export default async function handler(req, res) {
     `Você representa: ${vendedorEmpresa}`,
     ``,
     `PRODUTOS/SOLUÇÕES:`,
-    produtosDesc,
+    produtosPrompt,
     ``,
     `ICP:`,
     icpDesc,
