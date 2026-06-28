@@ -195,7 +195,29 @@ var TOUCH_TYPES = {
 // ── CORE CONFIG — driven entirely by localStorage (set during onboarding) ───
 // No client files needed. All data comes from user setup or sensible defaults.
 function getStoredIcp() {
-  try { var s=localStorage.getItem("pipe_icp"); return s?JSON.parse(s):{}; } catch(e){ return {}; }
+  try {
+    // Prefer DNA-refined ICP if setup was completed with Claude
+    var dna = localStorage.getItem("pipe_setup_dna");
+    if (dna) {
+      var parsed = JSON.parse(dna);
+      if (parsed && parsed.icp_refinado) {
+        var r = parsed.icp_refinado;
+        return {
+          segmento:    r.segmento    || "",
+          porte:       r.porte       || "",
+          faturamento: "",
+          regiao:      r.regiao      || "",
+          cargos:      (r.cargos_primarios || []).join(", "),
+          observacoes: (r.sinais_de_compra || []).join("; "),
+          _dna: parsed,
+        };
+      }
+    }
+    var s = localStorage.getItem("pipe_icp"); return s ? JSON.parse(s) : {};
+  } catch(e){ return {}; }
+}
+function getStoredDna() {
+  try { var s = localStorage.getItem("pipe_setup_dna"); return s ? JSON.parse(s) : null; } catch(e){ return null; }
 }
 function getStoredProducts() {
   try { var s=localStorage.getItem("pipe_produtos"); return s?JSON.parse(s):[]; } catch(e){ return []; }
@@ -347,7 +369,7 @@ function SequenceView(props) {
       empresa:selAcc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain, touches:[{day:touch.day,type:touch.type}],
       icp: getStoredIcp(),
       produtos: getStoredProducts(),
-      companySite: getCompanySite(),
+      companySite: getCompanySite(), dna: getStoredDna(),
       assinatura: getCompanySite() ? ("Consultor | " + getCompanySite()) : "Consultor",
     })})
       .then(function(r){return r.json();})
@@ -406,11 +428,10 @@ function SequenceView(props) {
     var _icp = getStoredIcp() || {};
     var _produtos = getStoredProducts() || [];
     var _site = getCompanySite() || "";
+    var _dna = getStoredDna();
     fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
       empresa:acc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain, contato:contactName||"", touches:cadência,
-      icp: _icp,
-      produtos: _produtos,
-      companySite: _site,
+      icp: _icp, produtos: _produtos, companySite: _site, dna: _dna,
       assinatura: _site ? ("Consultor | " + _site) : "Consultor",
     })})
       .then(function(r){ return r.json().then(function(d){ return {status:r.status, data:d}; }); })
@@ -2317,24 +2338,65 @@ function OnboardingFlow(props) {
     if (site.trim()) {
       setSiteLoading(true);
       try { localStorage.setItem("pipe_company_site", site.trim()); } catch(e){}
-      // Give a brief moment to feel responsive
-      setTimeout(function(){ setSiteLoading(false); advanceTo(1); }, 800);
+      // Call Claude to generate company DNA in background (continues even if slow)
+      var icp = {};
+      var produtos = [];
+      try { var s=localStorage.getItem("pipe_icp"); if(s) icp=JSON.parse(s); } catch(e){}
+      try { var s2=localStorage.getItem("pipe_produtos"); if(s2) produtos=JSON.parse(s2); } catch(e){}
+      fetch("/api/setup", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ companySite: site.trim(), icp: icp, produtos: produtos }),
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d && d.ok && d.dna) {
+          try { localStorage.setItem("pipe_setup_dna", JSON.stringify(d.dna)); } catch(e){}
+        }
+      })
+      .catch(function(){})
+      .finally(function(){ setSiteLoading(false); advanceTo(1); });
     } else {
       advanceTo(1);
     }
   }
 
   function handleIcpNext() {
+    // Re-run setup with ICP now filled in
+    var site2 = getCompanySite();
+    var produtos2 = getStoredProducts();
+    if (site2 && Object.values(icp).some(Boolean)) {
+      fetch("/api/setup", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ companySite: site2, icp: icp, produtos: produtos2 }),
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if(d&&d.ok&&d.dna){ try{localStorage.setItem("pipe_setup_dna",JSON.stringify(d.dna));}catch(e){} } })
+      .catch(function(){});
+    }
     advanceTo(2);
   }
 
   function handleProdNext() {
+    var produtosFinais = [];
     if (prod.nome.trim()) {
       var existing = [];
       try { var s = localStorage.getItem("pipe_produtos"); existing = s?JSON.parse(s):[]; } catch(e){}
-      var updated = existing.concat([Object.assign({id:Date.now()},prod)]);
-      try { localStorage.setItem("pipe_produtos",JSON.stringify(updated)); } catch(e){}
+      produtosFinais = existing.concat([Object.assign({id:Date.now()},prod)]);
+      try { localStorage.setItem("pipe_produtos",JSON.stringify(produtosFinais)); } catch(e){}
+    } else {
+      try { var s2 = localStorage.getItem("pipe_produtos"); produtosFinais = s2?JSON.parse(s2):[]; } catch(e){}
     }
+    // Final Claude setup call with complete context — most precise version
+    var site3 = getCompanySite();
+    var icp3 = {};
+    try { var s3=localStorage.getItem("pipe_icp"); if(s3) icp3=JSON.parse(s3); } catch(e){}
+    fetch("/api/setup", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ companySite: site3, icp: icp3, produtos: produtosFinais }),
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if(d&&d.ok&&d.dna){ try{localStorage.setItem("pipe_setup_dna",JSON.stringify(d.dna));}catch(e){} } })
+    .catch(function(){});
     setExiting(true);
     setTimeout(function(){ if (onFinish) onFinish(); }, 350);
   }
@@ -3086,7 +3148,7 @@ function SearchView(props) {
           var raw = emp.rawContext || emp.resumo || "";
           fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
             mode:"resumo", empresa:nome, setor:emp.setor||stored.setor||"tecnologia", rawContext:raw,
-            icp: getStoredIcp(), produtos: getStoredProducts(), companySite: getCompanySite(),
+            icp: getStoredIcp(), produtos: getStoredProducts(), companySite: getCompanySite(), dna: getStoredDna(),
           })})
             .then(function(r){return r.json();})
             .then(function(d){
@@ -3133,7 +3195,7 @@ function SearchView(props) {
               rawContext: rawContext,
               icp: icp,
               produtos: produtos,
-              companySite: getCompanySite(),
+              companySite: getCompanySite(), dna: getStoredDna(),
               assinatura: assinatura,
             })
           })
@@ -4201,7 +4263,7 @@ function ProspectView(props) {
             var setorLocal = (acc && acc.data && acc.data.empresa && acc.data.empresa.setor) || "tecnologia";
             fetch("/api/gemini", {
               method:"POST", headers:{"Content-Type":"application/json"},
-              body: JSON.stringify({ mode:"mapeamento", empresa:emp.nome, setor:setorLocal, rawContext:rawCtx, icp:icpLocal, produtos:produtosLocal, companySite:getCompanySite(), assinatura:getCompanySite()?("Consultor | "+getCompanySite()):"Consultor" })
+              body: JSON.stringify({ mode:"mapeamento", empresa:emp.nome, setor:setorLocal, rawContext:rawCtx, icp:icpLocal, produtos:produtosLocal, companySite:getCompanySite(), assinatura:getCompanySite()?("Consultor | "+getCompanySite()):"Consultor", dna:getStoredDna() })
             })
             .then(function(r2){ return r2.ok?r2.json():null; })
             .then(function(mapped){
@@ -4477,6 +4539,7 @@ export default function App() {
       localStorage.removeItem("pipe_icp");
       localStorage.removeItem("pipe_produtos");
       localStorage.removeItem("pipe_company_site");
+      localStorage.removeItem("pipe_setup_dna");
     } catch(e){}
     setSetupDone(false);
     setSetupUnlocking(false);
