@@ -1308,33 +1308,31 @@ function AccountModal(props) {
   var CHANNELS=[{key:"emails",label:"E-mail",color:"#0ea5e9",bg:"rgba(14,165,233,.08)",isObj:true},{key:"inmails",label:"InMail",color:"#0a66c2",bg:"rgba(10,102,194,.08)",isObj:true},{key:"whatsapps",label:"WhatsApp",color:"#16a34a",bg:"rgba(22,163,74,.08)",isObj:false},{key:"cold_calls",label:"Cold Call",color:"#92400e",bg:"#fef3c7",isObj:false}];
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.32)",zIndex:200,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px 16px",overflowY:"auto",backdropFilter:"blur(10px)"}}>
-      <div className="modal-box" style={{background:"rgba(255,255,255,.99)",borderRadius:24,width:"100%",maxWidth:820,boxShadow:"0 32px 100px rgba(15,23,42,.3)"}}>
-        <div style={{padding:"22px 28px 0",borderBottom:"1px solid #f1f5f9",position:"relative"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16,paddingRight:32}}>
+      <div className="account-modal modal-box" style={{background:"rgba(255,255,255,.99)",borderRadius:24,width:"100%",maxWidth:820,boxShadow:"0 32px 100px rgba(15,23,42,.3)"}}>
+        <div style={{padding:"18px 20px 0",borderBottom:"1px solid #f1f5f9",position:"relative"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14,paddingRight:36}}>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-                <div style={{fontSize:21,fontWeight:800,color:"#0f172a",lineHeight:1.2}}>{acc.nome}</div>
-                {acc.liveMode&&<span style={{background:"rgba(99,102,241,.12)",border:"1px solid rgba(52,211,153,.35)",color:"#4f46e5",borderRadius:6,padding:"2px 8px",fontSize:8,fontWeight:700}}>LIVE</span>}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                <div style={{fontSize:18,fontWeight:800,color:"#0f172a",lineHeight:1.2,wordBreak:"break-word"}}>{acc.nome}</div>
+                {acc.liveMode&&<span style={{background:"rgba(99,102,241,.12)",border:"1px solid rgba(52,211,153,.35)",color:"#4f46e5",borderRadius:6,padding:"2px 8px",fontSize:8,fontWeight:700,flexShrink:0}}>LIVE</span>}
               </div>
-              <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>{acc.setor}</div>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:8}}>{acc.setor}</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:8,padding:"4px 12px",fontSize:9,fontWeight:700}}>{"FIT "+fit}</span>
-                <span style={{background:"#fbfbfd",border:"1px solid "+(TIER_COLOR[acc.tier]||"#e2e8f0"),color:TIER_COLOR[acc.tier]||"#94a3b8",borderRadius:8,padding:"4px 12px",fontSize:9,fontWeight:700}}>{acc.tier}</span>
-                <span style={{background:"#fbfbfd",color:"#64748b",borderRadius:8,padding:"4px 12px",fontSize:9}}>{"Salvo "+fmtDate(acc.savedAt)}</span>
+                <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:8,padding:"3px 10px",fontSize:9,fontWeight:700}}>{"FIT "+fit}</span>
+                <span style={{background:"#fbfbfd",border:"1px solid "+(TIER_COLOR[acc.tier]||"#e2e8f0"),color:TIER_COLOR[acc.tier]||"#94a3b8",borderRadius:8,padding:"3px 10px",fontSize:9,fontWeight:700}}>{acc.tier}</span>
+                <span style={{background:"#fbfbfd",color:"#64748b",borderRadius:8,padding:"3px 10px",fontSize:9}}>{"Salvo "+fmtDate(acc.savedAt)}</span>
               </div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"flex-end"}}>
-              <div style={{display:"flex",gap:6}}>
-                <button onClick={function(){exportAccountPDF(acc,d);}} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",borderRadius:10,padding:"7px 14px",cursor:"pointer",color:"#0369a1",fontSize:12,fontWeight:600,fontFamily:"inherit"}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                  {"PDF"}
-                </button>
-              </div>
-              <button onClick={props.onClose} title="Fechar" style={{position:"absolute",top:16,right:20,background:"none",border:"none",cursor:"pointer",color:"#94a3b8",padding:4,lineHeight:1,fontSize:20,fontWeight:300,fontFamily:"inherit"}} onMouseEnter={function(e){e.currentTarget.style.color="#0f172a";}} onMouseLeave={function(e){e.currentTarget.style.color="#94a3b8";}}>{"✕"}</button>
+            <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"flex-start"}}>
+              <button onClick={function(){exportAccountPDF(acc,d);}} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",borderRadius:10,padding:"7px 12px",cursor:"pointer",color:"#0369a1",fontSize:11,fontWeight:600,fontFamily:"inherit"}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                {"PDF"}
+              </button>
+              <button onClick={props.onClose} title="Fechar" style={{background:"rgba(241,245,249,.8)",border:"1px solid #e2e8f0",cursor:"pointer",color:"#64748b",padding:"6px 9px",lineHeight:1,fontSize:16,fontWeight:600,fontFamily:"inherit",borderRadius:8}} onMouseEnter={function(e){e.currentTarget.style.background="#f1f5f9";e.currentTarget.style.color="#0f172a";}} onMouseLeave={function(e){e.currentTarget.style.background="rgba(241,245,249,.8)";e.currentTarget.style.color="#64748b";}}>{"✕"}</button>
             </div>
           </div>
-          <div className="modal-tabs" style={{display:"flex",gap:0,overflowX:"auto"}}>
-            {tabs.map(function(tab){var active=activeTab===tab.id;return <button key={tab.id} onClick={function(){setActiveTab(tab.id);}} style={{padding:"10px 16px",border:"none",borderBottom:"2.5px solid "+(active?"#6366f1":"transparent"),background:"transparent",color:active?"#4f46e5":"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:active?700:500,transition:"all .15s",whiteSpace:"nowrap"}}>{tab.label}</button>;})}
+          <div className="modal-tabs" style={{display:"flex",gap:0,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+            {tabs.map(function(tab){var active=activeTab===tab.id;return <button key={tab.id} onClick={function(){setActiveTab(tab.id);}} style={{padding:"10px 14px",border:"none",borderBottom:"2.5px solid "+(active?"#6366f1":"transparent"),background:"transparent",color:active?"#4f46e5":"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:active?700:500,transition:"all .15s",whiteSpace:"nowrap",flexShrink:0}}>{tab.label}</button>;})}
           </div>
         </div>
         <div style={{padding:"22px 28px",maxHeight:"60vh",overflowY:"auto"}}>
@@ -3656,21 +3654,21 @@ function AccountsView(props) {
           </div>
         </div>
       )}
-      <div className="status-chips" style={{display:"flex",gap:10,marginBottom:24,overflowX:"auto",paddingBottom:4}}>
+      <div className="stats-row" style={{display:"flex",gap:10,marginBottom:24,overflowX:"auto",paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
         {STATUS_ORDER.map(function(s) {
           var sc = STATUS_CONFIG[s];
           var cnt = statCounts[s];
           var isActive = filter.status === s;
           return (
-            <div key={s} onClick={function(){toggleStatus(s);}} style={{flexShrink:0,background:isActive?sc.bg:"#fff",border:"1.5px solid "+(isActive?sc.border:"#e8edf4"),borderRadius:14,padding:"12px 16px",cursor:"pointer",transition:"all .2s",textAlign:"center",minWidth:100}}>
+            <div key={s} onClick={function(){toggleStatus(s);}} style={{flexShrink:0,background:isActive?sc.bg:"#fff",border:"1.5px solid "+(isActive?sc.border:"#e8edf4"),borderRadius:14,padding:"10px 14px",cursor:"pointer",transition:"all .2s",textAlign:"center",minWidth:90}}>
               <div style={{fontSize:20,fontWeight:800,color:isActive?sc.color:"#52617a"}}>{cnt}</div>
               <div style={{fontSize:9,fontWeight:600,color:isActive?sc.color:"#64748b",textTransform:"uppercase",letterSpacing:.8,marginTop:2}}>{sc.label}</div>
             </div>
           );
         })}
       </div>
-      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Buscar por nome ou setor..." style={{flex:1,minWidth:200,background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 14px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none",transition:"border-color .2s"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+      <div className="filter-row" style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Buscar por nome ou setor..." style={{flex:1,minWidth:160,background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 14px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none",transition:"border-color .2s"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
         <select value={filter.fit} onChange={function(e){changeFit(e.target.value);}} style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 14px",fontSize:12,color:filter.fit?"#0f172a":"#94a3b8",fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
           <option value="">Fit</option>
           <option value="ALTO">Fit Alto</option>
@@ -3696,7 +3694,7 @@ function AccountsView(props) {
           <div style={{fontSize:12,color:"#64748b"}}>{accounts.length===0?"Importe uma lista CSV ou va para Busca para analisar empresas":"Tente limpar os filtros"}</div>
         </div>
       ) : viewMode==="cards" ? (
-        <div className="card-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
+        <div className="card-grid acc-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
           {filtered.map(function(acc) {
             return <AccountCard key={acc.id} acc={acc} onOpen={props.onOpen} onStatusChange={props.onStatusChange} onDelete={props.onDelete} onMap={props.onMap} mapping={props.mappingId===acc.id} selected={!!selected[acc.id]} onToggleSelect={toggleSelect}/>;
           })}
@@ -4423,7 +4421,7 @@ function ProspectView(props) {
             </div>
           )}
 
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
+          <div className="prospect-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
             {listaFiltrada.map(function(emp, idx){
               var fitStyle    = FIT_STYLE[emp.score_fit] || FIT_STYLE["MÉDIO"];
               var jaMapeada   = mappedNames.has((emp.nome||"").toLowerCase().trim());
@@ -4760,6 +4758,41 @@ export default function App() {
     ".gradient-border::before{content:'';position:absolute;inset:-1.5px;border-radius:19px;background:linear-gradient(135deg,#6366f1,#8b5cf6,#22d3ee);z-index:-1;opacity:.4}",
     ".badge-glow{animation:glow 2.5s ease-in-out infinite}",
     "input::placeholder,textarea::placeholder{color:#9aa5b4}",
+    // ── Mobile responsive ────────────────────────────────────────────────────
+    "@media(max-width:767px){",
+    // Hide desktop sidebar
+    ".sidebar-desktop{display:none!important}",
+    // Full width content
+    ".main-content{padding:12px 12px 80px!important}",
+    // Bottom nav bar
+    ".mobile-nav{display:flex!important}",
+    // Account cards — full width list
+    ".acc-grid{grid-template-columns:1fr!important;gap:10px!important}",
+    ".acc-card-row{flex-wrap:wrap;gap:6px!important}",
+    // Prospect cards grid
+    ".prospect-grid{grid-template-columns:1fr!important;gap:10px!important}",
+    // Filters — stack vertically
+    ".filter-row{flex-wrap:wrap!important;gap:8px!important}",
+    // Hero banner — compact
+    ".hero-banner{padding:20px 16px!important}",
+    ".hero-stats{gap:8px!important}",
+    ".hero-stat{padding:10px 14px!important;min-width:80px!important}",
+    ".hero-title{font-size:26px!important}",
+    // Home config grid
+    ".config-grid{grid-template-columns:1fr!important}",
+    // Account modal — full screen
+    ".account-modal{width:100%!important;max-width:100%!important;height:100vh!important;max-height:100vh!important;border-radius:0!important;margin:0!important}",
+    // Tabs — scrollable
+    ".modal-tabs{overflow-x:auto!important;flex-wrap:nowrap!important;-webkit-overflow-scrolling:touch}",
+    ".modal-tabs button{white-space:nowrap!important;flex-shrink:0!important}",
+    // Sequence view
+    ".seq-grid{grid-template-columns:1fr!important}",
+    // Stats row in accounts
+    ".stats-row{gap:8px!important}",
+    ".stats-card{padding:12px!important;min-width:0!important}",
+    "}",
+    // Show mobile nav only on mobile (hidden by default)
+    ".mobile-nav{display:none}",
   ].join("");
   var NAV = [
     {id:"home",         emoji:"🏠", label:"Home"},
@@ -4778,7 +4811,7 @@ export default function App() {
       <BetaBanner/>
     <div style={{display:"flex",flex:1,overflowX:"clip",minWidth:0,width:"100%"}}>
       <style>{css}</style>
-      <div className="sidebar" style={{width:sidebarExpanded?224:64,background:"linear-gradient(180deg,#15192b 0%,#10131f 100%)",borderRight:"1px solid #1f2438",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"4px 0 24px rgba(15,23,42,.18)",position:"relative",overflow:"hidden",transition:"width .35s cubic-bezier(.4,0,.2,1)",zIndex:2}}>
+      <div className="sidebar sidebar-desktop" style={{width:sidebarExpanded?224:64,background:"linear-gradient(180deg,#15192b 0%,#10131f 100%)",borderRight:"1px solid #1f2438",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"4px 0 24px rgba(15,23,42,.18)",position:"relative",overflow:"hidden",transition:"width .35s cubic-bezier(.4,0,.2,1)",zIndex:2}}>
         <div style={{height:3,background:"linear-gradient(90deg,#6366f1,#7c3aed,#a78bfa)",flexShrink:0}}/>
         {sidebarExpanded ? (
           <div style={{padding:"14px 14px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -4887,6 +4920,29 @@ export default function App() {
           {toast.msg}
         </div>
       )}
+      {/* ── Mobile bottom nav ─────────────────────────────────────────────── */}
+      <nav className="mobile-nav" style={{position:"fixed",bottom:0,left:0,right:0,background:"linear-gradient(180deg,#15192b,#10131f)",borderTop:"1px solid #1f2438",zIndex:500,paddingBottom:"max(8px,env(safe-area-inset-bottom))",boxShadow:"0 -4px 24px rgba(15,23,42,.3)"}}>
+        <div style={{display:"flex",justifyContent:"space-around",alignItems:"center",maxWidth:500,margin:"0 auto",padding:"6px 0 0"}}>
+          {[
+            {id:"home",      emoji:"🏠", label:"Home"},
+            {id:"prospect",  emoji:"🎯", label:"Busca"},
+            {id:"search",    emoji:"🔍", label:"Mapping"},
+            {id:"accounts",  emoji:"📁", label:"Contas"},
+            {id:"contacts",  emoji:"👥", label:"Contatos"},
+            {id:"sequences", emoji:"📬", label:"Sequências"},
+          ].map(function(item){
+            var active = nav === item.id;
+            var locked = !setupDone && item.id !== "home";
+            return (
+              <button key={item.id} onClick={function(){ if(!locked) setNav(item.id); }} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:locked?"default":"pointer",padding:"4px 6px",borderRadius:10,opacity:locked?.28:1,minWidth:44,flexShrink:0}}>
+                <span style={{fontSize:20,lineHeight:1,filter:active?"none":"grayscale(.3)"}}>{item.emoji}</span>
+                <span style={{fontSize:9,fontWeight:active?700:400,color:active?"#818cf8":"#5a6478",letterSpacing:.2}}>{item.label}</span>
+                {active && <div style={{width:14,height:2,background:"#6366f1",borderRadius:2}}/>}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </div>
     </div>
   );
