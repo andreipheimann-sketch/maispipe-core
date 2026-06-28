@@ -54,39 +54,64 @@ export default async function handler(req, res) {
 
   const {
     mode, empresa, setor, cargo, angulo, pain, touches, rawContext, contato,
-    // Setup context — sent from App.jsx for mapping and resumo modes
-    icp, produtos, companySite, assinatura,
+    icp, produtos, companySite, assinatura, dna,
   } = req.body || {};
 
-  // ── Build seller context from setup data ───────────────────────────────────
-  const vendedorEmpresa  = companySite || "minha empresa";
+  // ── Build seller context — DNA (Claude-generated) takes priority ───────────
+  const vendedorEmpresa    = (dna && dna.empresa && dna.empresa.nome) || companySite || "minha empresa";
   const vendedorAssinatura = assinatura || "Consultor";
-  const icpDesc = icp
-    ? [
-        icp.segmento   ? "Segmento-alvo: "   + icp.segmento   : "",
-        icp.porte      ? "Porte: "            + icp.porte      : "",
-        icp.faturamento? "Faturamento: "      + icp.faturamento: "",
-        icp.regiao     ? "Região: "           + icp.regiao     : "",
-        icp.cargos     ? "Cargos decisores: " + icp.cargos     : "",
-        icp.observacoes? "Observações ICP: "  + icp.observacoes: "",
-      ].filter(Boolean).join("\n")
-    : "ICP não configurado — use bom senso para o setor da empresa.";
-  const produtosDesc = (Array.isArray(produtos) && produtos.length)
-    ? produtos.map(function(p, i) {
-        return [
-          (i+1) + ". " + (p.nome || "Produto"),
-          p.descricao  ? "   Descrição: "  + p.descricao  : "",
-          p.beneficios ? "   Benefícios: " + p.beneficios : "",
-          p.publico    ? "   Público: "    + p.publico    : "",
-          p.preco      ? "   Preço: "      + p.preco      : "",
-        ].filter(Boolean).join("\n");
-      }).join("\n\n")
-    : null; // null = not configured, triggers discovery mode
 
-  const temProduto = !!produtosDesc;
-  const produtosPrompt = temProduto
-    ? produtosDesc
-    : "NENHUM PRODUTO CADASTRADO — faça perguntas de discovery abertas para entender os problemas da empresa, sem assumir nenhuma solução específica.";
+  const dnaContext = dna ? [
+    `PERFIL DA EMPRESA VENDEDORA:`,
+    `- Nome: ${dna.empresa?.nome || vendedorEmpresa}`,
+    `- O que faz: ${dna.empresa?.descricao || ""}`,
+    `- Proposta de valor: ${dna.empresa?.proposta_valor || ""}`,
+    `- Diferenciais: ${(dna.empresa?.diferenciais || []).join(", ")}`,
+    ``,
+    `ICP REFINADO:`,
+    `- Segmento: ${dna.icp_refinado?.segmento || ""}`,
+    `- Porte: ${dna.icp_refinado?.porte || ""}`,
+    `- Cargos primários: ${(dna.icp_refinado?.cargos_primarios || []).join(", ")}`,
+    `- Sinais de compra: ${(dna.icp_refinado?.sinais_de_compra || []).join("; ")}`,
+    ``,
+    `GATILHOS DE COMPRA:`,
+    ...(dna.gatilhos_de_compra || []).map((g,i) => `${i+1}. ${g}`),
+    ``,
+    `OBJEÇÕES COMUNS:`,
+    ...(dna.objecoes_e_respostas || []).map(o => `- "${o.objecao}" → ${o.resposta}`),
+  ].join("\n") : "";
+
+  const icpDesc = dna?.icp_refinado
+    ? [
+        dna.icp_refinado.segmento ? `Segmento: ${dna.icp_refinado.segmento}` : "",
+        dna.icp_refinado.porte    ? `Porte: ${dna.icp_refinado.porte}`       : "",
+        dna.icp_refinado.regiao   ? `Região: ${dna.icp_refinado.regiao}`     : "",
+        (dna.icp_refinado.cargos_primarios||[]).length
+          ? `Cargos: ${dna.icp_refinado.cargos_primarios.join(", ")}` : "",
+      ].filter(Boolean).join("\n")
+    : icp ? [
+        icp.segmento    ? `Segmento: ${icp.segmento}`       : "",
+        icp.porte       ? `Porte: ${icp.porte}`             : "",
+        icp.faturamento ? `Faturamento: ${icp.faturamento}` : "",
+        icp.regiao      ? `Região: ${icp.regiao}`           : "",
+        icp.cargos      ? `Cargos: ${icp.cargos}`           : "",
+      ].filter(Boolean).join("\n")
+    : "ICP não configurado.";
+
+  const produtosPrompt = dna?.empresa?.descricao
+    ? [
+        `${dna.empresa.nome} — ${dna.empresa.descricao}`,
+        dna.empresa.proposta_valor ? `Proposta de valor: ${dna.empresa.proposta_valor}` : "",
+        (dna.empresa.diferenciais||[]).length ? `Diferenciais: ${dna.empresa.diferenciais.join(", ")}` : "",
+      ].filter(Boolean).join("\n")
+    : Array.isArray(produtos) && produtos.length
+    ? produtos.map((p,i) => [
+        `${i+1}. ${p.nome||"Produto"}`,
+        p.descricao  ? `   O que é: ${p.descricao}`   : "",
+        p.beneficios ? `   Benefícios: ${p.beneficios}` : "",
+        p.publico    ? `   Público: ${p.publico}`       : "",
+      ].filter(Boolean).join("\n")).join("\n\n")
+    : "NENHUM PRODUTO CADASTRADO — faça perguntas abertas de discovery.";
 
   // ── MODO RESUMO ─────────────────────────────────────────────────────────────
   if (mode === "resumo") {
@@ -95,9 +120,7 @@ export default async function handler(req, res) {
       `Sua tarefa: transformar informações coletadas sobre uma empresa em um RESUMO DE CONTA acionável para um vendedor — o briefing que ele lê 5 minutos antes de uma call e já sabe como atacar.`,
       ``,
       `CONTEXTO DO VENDEDOR:`,
-      `Empresa do vendedor: ${vendedorEmpresa}`,
-      `Produtos/soluções:\n${produtosPrompt}`,
-      `ICP:\n${icpDesc}`,
+      dnaContext || `Empresa do vendedor: ${vendedorEmpresa}\nProdutos/soluções:\n${produtosPrompt}\nICP:\n${icpDesc}`,
       ``,
       `ESTRUTURA OBRIGATÓRIA (2 parágrafos curtos e densos, prosa fluida, sem bullets nem markdown):`,
       `Parágrafo 1: o que a empresa faz de fato, modelo de negócio, porte e momento (crescimento, expansão, M&A).`,
@@ -131,13 +154,7 @@ export default async function handler(req, res) {
       `Sua tarefa: gerar inteligência de conta COMPLETA e personalizada para o vendedor abordar esta empresa com máxima precisão.`,
       ``,
       `CONTEXTO DO VENDEDOR:`,
-      `Empresa do vendedor: ${vendedorEmpresa}`,
-      ``,
-      `PRODUTOS/SOLUÇÕES QUE O VENDEDOR OFERECE:`,
-      produtosPrompt,
-      ``,
-      `ICP DO VENDEDOR:`,
-      icpDesc,
+      dnaContext || `Empresa do vendedor: ${vendedorEmpresa}\nProdutos/soluções:\n${produtosPrompt}\nICP:\n${icpDesc}`,
       ``,
       `REGRAS:`,
       `- Português do Brasil, tom de especialista em vendas enterprise. Direto e acionável.`,
@@ -229,11 +246,7 @@ export default async function handler(req, res) {
     `Você é um copywriter de outbound B2B brasileiro, especialista em mensagens que convertem para vendas enterprise.`,
     `Você representa: ${vendedorEmpresa}`,
     ``,
-    `PRODUTOS/SOLUÇÕES:`,
-    produtosPrompt,
-    ``,
-    `ICP:`,
-    icpDesc,
+    dnaContext || `PRODUTOS/SOLUÇÕES:\n${produtosPrompt}\n\nICP:\n${icpDesc}`,
     ``,
     `REGRAS:`,
     `- Abra com um gancho que prenda em 1 linha. Use dados de mercado ou uma verdade incômoda do setor.`,
