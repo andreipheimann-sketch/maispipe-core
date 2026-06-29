@@ -1,4 +1,4 @@
-l// api/gemini.js — Vercel serverless
+// api/gemini.js — Vercel serverless
 // Powered by Claude (Anthropic) — resumo, mapeamento e sequencias de prospeccao.
 // Variavel de ambiente necessaria: ANTHROPIC_API_KEY
 
