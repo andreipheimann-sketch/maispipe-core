@@ -167,18 +167,62 @@ export default async function handler(req, res) {
             const titleParts = (result.title || "").split(/\s*[-–|]\s*/);
             const name = (titleParts[0] || "").trim();
             if (!name || name.length < 4) continue;
-            const snippet     = result.content || result.snippet || "";
-            const snippetLow  = snippet.toLowerCase();
-            const companyLow  = company.toLowerCase();
-            const companyWords = companyLow.split(/\s+/).filter(w => w.length > 3);
-            const allMatch = companyWords.length > 0 && companyWords.every(w => snippetLow.includes(w));
-            const domainMatch = domain && result.url?.toLowerCase().includes(domain.toLowerCase().split(".")[0]);
-            if (!allMatch && !domainMatch) continue;
-            if (/\b(ex-|former|anteriormente|previously)\b/i.test(snippet.slice(0, 200))) continue;
+
+            const snippet    = result.content || result.snippet || "";
+            const snippetLow = snippet.toLowerCase();
+            const titleLow   = (result.title || "").toLowerCase();
+            const companyLow = company.toLowerCase();
+
+            // Strategy 1: exact company name in title or snippet
+            const exactInTitle   = titleLow.includes(companyLow);
+            const exactInSnippet = snippetLow.includes(companyLow);
+
+            // Strategy 2: if company name is long (≥3 words), require all significant words
+            // but only words that are truly unique (skip generic words like "brasil", "ltda", "do", "de")
+            const genericWords = new Set(["brasil","brazil","ltda","s.a","s/a","do","de","da","das","dos","em","no","na","and","the","inc","corp","group","grupo"]);
+            const significantWords = companyLow.split(/[\s.\/]+/).filter(w => w.length > 3 && !genericWords.has(w));
+            const allSignificantMatch = significantWords.length > 0 &&
+              significantWords.every(w => snippetLow.includes(w) || titleLow.includes(w));
+
+            // Strategy 3: domain match (most reliable)
+            const domainWord = domain ? domain.toLowerCase().split(".")[0] : "";
+            const domainMatch = domainWord.length > 3 && (
+              snippetLow.includes(domainWord) || titleLow.includes(domainWord)
+            );
+
+            // Must match at least one strategy
+            if (!exactInTitle && !exactInSnippet && !allSignificantMatch && !domainMatch) continue;
+
+            // Reject if company appears only in "past experience" context
+            const first300 = snippet.slice(0, 300).toLowerCase();
+            if (/\b(ex-|former|anteriormente|previously|worked at|trabalhou na)\b/i.test(first300)) continue;
+
+            // Extra check: if we matched by significant words only, verify the snippet
+            // doesn't mention a clearly different company more prominently
+            if (!exactInTitle && !exactInSnippet && !domainMatch && allSignificantMatch) {
+              // Check title includes at least one significant word of the company
+              const titleHasCompanyWord = significantWords.some(w => titleLow.includes(w));
+              if (!titleHasCompanyWord) continue;
+            }
             const role = extractRole(result.title, snippet, name, company);
+            // Translate common English titles to Portuguese
+            const rolePt = role
+              .replace(/\bChief Executive Officer\b/gi, "CEO")
+              .replace(/\bChief Financial Officer\b/gi, "CFO")
+              .replace(/\bChief Technology Officer\b/gi, "CTO")
+              .replace(/\bChief Operating Officer\b/gi, "COO")
+              .replace(/\bManaging Director\b/gi, "Diretor Geral")
+              .replace(/\bManager Director\b/gi, "Diretor Geral")
+              .replace(/\bGeneral Manager\b/gi, "Gerente Geral")
+              .replace(/\bSales Director\b/gi, "Diretor Comercial")
+              .replace(/\bFinance Director\b/gi, "Diretor Financeiro")
+              .replace(/\bHuman Resources\b/gi, "Recursos Humanos")
+              .replace(/\bat\s+/gi, "na ")
+              .replace(/\bLtda\.\b/gi, "Ltda.")
+              .trim();
             add({
               nome:     name,
-              cargo:    role,
+              cargo:    rolePt,
               linkedin: result.url,
               email:    "",
               email_confidence: 0,
