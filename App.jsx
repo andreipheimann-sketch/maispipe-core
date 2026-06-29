@@ -437,15 +437,22 @@ function SequenceView(props) {
       .then(function(r){ return r.json().then(function(d){ return {status:r.status, data:d}; }); })
       .then(function(res){
         var data = res.data;
-        if (data && data.touches && data.touches.length) {
-          var norm = data.touches.map(function(t){ return {day:(t&&t.day)||1, type:(t&&t.type)||"email", subject:applyVars(String((t&&t.subject)||""), acc, contactName), body:applyVars(String((t&&t.body!=null)?t.body:""), acc, contactName)}; });
+        // Handle various response shapes from Claude
+        var touches = null;
+        if (data && Array.isArray(data.touches) && data.touches.length) {
+          touches = data.touches;
+        } else if (data && Array.isArray(data) && data.length && data[0].day) {
+          touches = data; // Claude returned array directly
+        }
+        if (touches && touches.length) {
+          var norm = touches.map(function(t){ return {day:(t&&t.day)||1, type:(t&&t.type)||"email", subject:applyVars(String((t&&t.subject)||""), acc, contactName), body:applyVars(String((t&&t.body!=null)?t.body:""), acc, contactName)}; });
           var seq = {id:"seq:"+Date.now()+"-"+Math.random().toString(36).slice(2,6), account:acc, profile:p, contactName:contactName||"", touches:norm, createdAt:Date.now(), engine:"ai"};
           setGenerated(seq);
           persistSeq(seq);
           props.showToast("Sequência gerada com IA e salva na biblioteca.", "#10b981");
         } else {
           var reason = (data && (data.error || data.message)) || ("HTTP " + res.status);
-          props.showToast("IA indisponível, usando templates. Motivo: " + reason, "#f59e0b");
+          props.showToast("IA indisponível (" + reason.slice(0,60) + "), usando templates.", "#f59e0b");
           localFallback();
         }
       })
@@ -3130,10 +3137,18 @@ function SearchView(props) {
       keys.forEach(function(k){
         storageGet(k).then(function(stored){
           if(!stored || stored.nome.toLowerCase()!==nome.toLowerCase()) return;
+          if(stored.data && stored.data.empresa && stored.data.empresa.resumoAI) return; // already have AI resumo
           var emp = (stored.data && stored.data.empresa) || {};
-          var raw = emp.rawContext || emp.resumo || "";
+          var raw = emp.rawContext || "";
+          // Strip lines that are clearly not Portuguese content
+          var cleanRaw = raw.split("\n").filter(function(line){
+            if (!line.trim() || line.length < 20) return false;
+            if (/;.*;/.test(line)) return false;
+            if (/trk=|utm_|cnpj|\d{5}-\d{3}/i.test(line)) return false;
+            return true;
+          }).join("\n").slice(0, 3000);
           fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-            mode:"resumo", empresa:nome, setor:emp.setor||stored.setor||"tecnologia", rawContext:raw,
+            mode:"resumo", empresa:nome, setor:emp.setor||stored.setor||"tecnologia", rawContext:cleanRaw,
             icp: getStoredIcp(), produtos: getStoredProducts(), companySite: getCompanySite(), dna: getStoredDna(),
           })})
             .then(function(r){return r.json();})
@@ -3539,7 +3554,7 @@ function AccountsView(props) {
   var _st_filter = useState({fit:"",tier:"",status:""}); var filter = _st_filter[0]; var setFilter = _st_filter[1];
   var _st_search = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
   var _st_viewMode = useState("list"); var viewMode = _st_viewMode[0]; var setViewMode = _st_viewMode[1];
-  var _st_sortOrder = useState("date"); var sortOrder = _st_sortOrder[0]; var setSortOrder = _st_sortOrder[1];
+  var _st_sortOrder = useState("az"); var sortOrder = _st_sortOrder[0]; var setSortOrder = _st_sortOrder[1];
   var _st_csvPreview = useState(null); var csvPreview = _st_csvPreview[0]; var setCsvPreview = _st_csvPreview[1];
   var _st_selected = useState({}); var selected = _st_selected[0]; var setSelected = _st_selected[1];
   var _st_planMenu = useState(false); var planMenu = _st_planMenu[0]; var setPlanMenu = _st_planMenu[1];
@@ -4485,7 +4500,10 @@ function ProspectView(props) {
                     {jaMapeada ? (
                       <button onClick={function(){if(props.onNav)props.onNav("accounts");}} style={{flex:1,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#475569",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Ver em Contas →"}</button>
                     ) : jaEnriq ? (
-                      <button onClick={function(){if(props.onOpenAccount)props.onOpenAccount(enriched[emp.nome]);}} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>{"Ver mapeamento →"}</button>
+                      <button onClick={function(){
+                        if(props.onNav) props.onNav("accounts");
+                        if(props.onOpenAccount) setTimeout(function(){ props.onOpenAccount(enriched[emp.nome]); }, 100);
+                      }} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>{"Ver conta mapeada →"}</button>
                     ) : (
                       <button onClick={function(){enriquecerEmpresa(emp);}} disabled={isEnriching} style={{flex:1,background:isEnriching?"#f1f5f9":"linear-gradient(135deg,#6366f1,#4f46e5)",color:isEnriching?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:isEnriching?"default":"pointer",fontFamily:"inherit",boxShadow:isEnriching?"none":"0 4px 12px rgba(99,102,241,.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .2s"}}>
                         {isEnriching
