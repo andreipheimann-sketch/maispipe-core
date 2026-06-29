@@ -260,7 +260,7 @@ export default async function handler(req, res) {
       `- CTA leve e específico. Nunca genérico.`,
       `- Personalize com empresa, setor e cargo.`,
       `- Assine como "${vendedorAssinatura}" quando fizer sentido.`,
-      `- Responda APENAS com JSON válido, sem markdown.`,
+      `- RESPONDA APENAS COM O JSON ABAIXO. NENHUM TEXTO ANTES OU DEPOIS. NENHUM MARKDOWN.`,
     ].join("\n");
 
     const user = [
@@ -284,8 +284,19 @@ export default async function handler(req, res) {
     if (!out.ok) return res.status(502).json({ error: "Claude erro: " + out.error });
 
     let parsed;
-    try { parsed = parseJSON(out.text); }
-    catch (e) { return res.status(200).json({ touches: null, message: "Falha ao interpretar resposta." }); }
+    try {
+      // Try direct parse first
+      parsed = parseJSON(out.text);
+    } catch (e1) {
+      // Try to extract JSON object from the text
+      try {
+        const match = out.text.match(/\{[\s\S]*"touches"[\s\S]*\}/);
+        if (match) parsed = JSON.parse(match[0]);
+        else throw new Error("No touches object found");
+      } catch (e2) {
+        return res.status(200).json({ touches: null, message: "Falha ao interpretar resposta: " + e1.message, raw: out.text.slice(0, 200) });
+      }
+    }
     return res.status(200).json({ touches: (parsed && parsed.touches) || null });
 
   } catch (e) {
