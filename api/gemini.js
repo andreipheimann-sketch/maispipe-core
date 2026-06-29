@@ -1,4 +1,4 @@
-// api/gemini.js — Vercel serverless
+l// api/gemini.js — Vercel serverless
 // Powered by Claude (Anthropic) — resumo, mapeamento e sequencias de prospeccao.
 // Variavel de ambiente necessaria: ANTHROPIC_API_KEY
 
@@ -151,13 +151,15 @@ export default async function handler(req, res) {
         .slice(0, 4000);
 
       const user = [
+        `INSTRUÇÃO CRÍTICA: Responda EXCLUSIVAMENTE em Português do Brasil. Não escreva nenhuma palavra em inglês.`,
+        ``,
         `EMPRESA-ALVO: ${empresa || "a empresa"}`,
         `SETOR: ${setor || "tecnologia"}`,
         ``,
-        `INFORMAÇÕES COLETADAS (pode estar em inglês — escreva o resumo em português):`,
+        `INFORMAÇÕES COLETADAS (pode estar em inglês — seu resumo deve ser em português):`,
         cleanCtx || "Sem dados adicionais.",
         ``,
-        `Escreva agora o resumo em Português do Brasil, 2 parágrafos, sem markdown.`,
+        `Escreva agora o resumo em Português do Brasil, 2 parágrafos, sem markdown, sem inglês.`,
       ].join("\n");
 
       const out = await callClaude(apiKey, system, user, 1024, false);
@@ -176,8 +178,8 @@ export default async function handler(req, res) {
         ``,
         `REGRAS ABSOLUTAS:`,
         `- Responda APENAS com JSON válido, sem markdown, sem texto antes ou depois.`,
-        `- Português do Brasil. Tom direto e acionável.`,
-        `- NUNCA use placeholders ou frases genéricas. Tudo específico para esta empresa.`,
+        `- IDIOMA: todo o conteúdo do JSON deve estar em Português do Brasil. Não use inglês em nenhum campo.`,
+        `- Tudo específico para esta empresa. NUNCA use placeholders ou frases genéricas.`,
         `- Assine mensagens como: "${vendedorAssinatura}"`,
       ].join("\n");
 
