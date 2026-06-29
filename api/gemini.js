@@ -263,45 +263,63 @@ export default async function handler(req, res) {
     ];
 
     const contactFirstName = contato ? contato.split(" ")[0] : null;
+    const nomeUsar = contactFirstName || null;
 
     const system = [
-      `Você é um copywriter de outbound B2B brasileiro especialista em mensagens que convertem em reuniões.`,
+      `Você é o melhor copywriter de outbound B2B do Brasil. Não o mais educado — o mais eficaz.`,
+      ``,
+      `Você escreve mensagens que as pessoas PARAM para ler no meio do scroll do celular. Mensagens que fazem o decisor pensar "caramba, como esse cara sabe isso?" ou dar uma risada antes de responder.`,
+      ``,
       `Você representa: ${vendedorEmpresa}`,
       ``,
       sellerCtx,
       ``,
-      `REGRAS DE OURO:`,
-      `- Todo conteúdo em Português do Brasil. NUNCA em inglês.`,
-      `- NUNCA use [Nome], [Empresa], [Cargo] ou qualquer placeholder. Use os nomes reais fornecidos.`,
-      contactFirstName ? `- O nome do decisor é ${contactFirstName}. Use-o nas mensagens.` : `- Nome do decisor desconhecido — NÃO use [Nome]. Inicie de outra forma (ex: "Oi", "Olá", "Tudo bem?").`,
-      `- Cada touch tem ângulo, abertura e gancho COMPLETAMENTE diferentes. Zero repetição de fórmula.`,
-      `- Emails: 60-100 palavras. Abra com provocação, dado de mercado ou insight do setor. CTA específico e leve.`,
-      `- LinkedIn InMail: 40-60 palavras. Direto. Sem longas introduções. Termine com pergunta ou CTA curto.`,
-      `- WhatsApp: máx 2 frases. Tom informal. Pergunta direta no final.`,
-      `- Cold call: script falado real com abertura impactante de 10s, pausa, pergunta de qualificação, ponte e CTA para reunião de 20 min.`,
-      `- Breakup: com classe e leveza. Deixe porta aberta. Pode usar humor sutil. Nunca ressentido.`,
-      `- Mencione ${empresa} e contexto do setor nas mensagens para mostrar que não é mensagem genérica.`,
-      `- RESPONDA APENAS COM O JSON. NENHUM TEXTO ANTES OU DEPOIS.`,
+      `SEU ESTILO:`,
+      `- Cada touch começa de forma INESPERADA. Não com "Olá, meu nome é..." nem com "Espero que esteja bem".`,
+      `- Use dados reais do setor, provocações inteligentes, perguntas que incomodam (de forma positiva), ou humor contextual sobre o cargo ou empresa.`,
+      `- Tom: colega de setor, não vendedor. Alguém que entende o jogo deles por dentro.`,
+      `- Referências diretas ao cargo, empresa ou setor da pessoa — mostre que você fez a lição de casa.`,
+      `- Humor quando cabível: ironia leve, autoironia, exagero calculado. Nunca piada forçada.`,
+      `- Cada touch é uma peça de conteúdo, não um template preenchido.`,
+      ``,
+      `REGRAS ABSOLUTAS:`,
+      `- Português do Brasil. Nunca inglês.`,
+      `- ZERO placeholders. Nem [Nome], nem [Empresa], nem [Cargo]. Use os dados reais.`,
+      nomeUsar ? `- O nome do contato é ${nomeUsar}. Use nas mensagens quando natural.` : `- Nome desconhecido. Comece sem nome — com gancho direto ou "Oi," casual.`,
+      `- 6 touches = 6 abordagens COMPLETAMENTE diferentes. Mesma pessoa, 6 ângulos distintos.`,
+      `- Email: 80-120 palavras. Rico, específico, com história ou dado. CTA que não parece CTA.`,
+      `- LinkedIn: 50-70 palavras. Mais íntimo, menos formal. Pode ser mais direto e até ousado.`,
+      `- WhatsApp: 1-3 frases curtas. Casual. Como mandaria pra um amigo do setor.`,
+      `- Cold call: script real, como se fosse falado. Abertura de 8 segundos. Pausa. Pergunta cirúrgica. Sem "tudo bem?".`,
+      `- Breakup: a mensagem mais criativa de todas. Pode ter ironia, leveza, ou um insight final que faz pensar. Porta aberta com classe.`,
+      `- RESPONDA APENAS COM O JSON. ZERO texto antes ou depois.`,
     ].join("\n");
 
     const user = [
-      `INSTRUÇÃO: Responda SOMENTE com JSON válido. Nenhum texto fora do JSON. Nenhum placeholder.`,
+      `JSON APENAS. Nenhum texto fora do JSON. Nenhum placeholder.`,
       ``,
-      `Sequência de prospecção para:`,
+      `CONTEXTO DA SEQUÊNCIA:`,
       `- Empresa-alvo: ${empresa || "a empresa"}`,
       `- Setor: ${setor || "tecnologia"}`,
       `- Cargo do decisor: ${cargo || "Decisor"}`,
-      contactFirstName ? `- Nome: ${contato}` : `- Nome: desconhecido`,
-      `- Ângulo: ${angulo || "impacto no negócio"}`,
-      `- Dor principal: ${pain || "dor a ser descoberta"}`,
+      nomeUsar ? `- Nome do contato: ${contato}` : `- Nome: não informado`,
+      `- Ângulo de abordagem: ${angulo || "impacto no negócio"}`,
+      `- Dor principal: ${pain || "a descobrir — explore pelo setor e cargo"}`,
       ``,
-      `Cadência (${cadencia.length} touches — cada um com abordagem criativa e diferente):`,
-      cadencia.map((t, i) => `${i + 1}) Dia ${t.day} — ${t.type}`).join("\n"),
+      `EXEMPLOS DE ABERTURAS DISRUPTIVAS (use como inspiração, não como template):`,
+      `• Email: "Existe uma crença no setor de [setor] que [insight contraintuitivo]. Ela está errada — e você provavelmente já sabe disso."`,
+      `• LinkedIn: "Vi que a ${empresa} [algo específico]. Fiquei curioso: isso é intenção ou consequência?"`,
+      `• WhatsApp: "Oi ${nomeUsar||""}! Vi uma coisa sobre a ${empresa} que me fez pensar em você. Posso te mandar 2 linhas?"`,
+      `• Cold call: "[Pausa proposital] Desculpa a ligação sem aviso — mas ligo porque achei que seria mais honesto do que mais um e-mail. Tenho 30 segundos?"`,
+      `• Breakup: "Ok, vou parar de insistir. Mas antes — uma última pergunta que pode valer seu tempo: [pergunta genuinamente interessante sobre o negócio]"`,
       ``,
-      `{"touches":[{"day":1,"type":"linkedin","subject":"assunto","body":"mensagem completa aqui"},...]}`,
+      `Cadência (${cadencia.length} touches — cada um COMPLETAMENTE diferente em tom, formato e ângulo):`,
+      cadencia.map((t, i) => `${i + 1}) Dia ${t.day} — canal: ${t.type}`).join("\n"),
+      ``,
+      `{"touches":[{"day":1,"type":"linkedin","subject":"assunto impactante","body":"mensagem completa e disruptiva aqui"},...]}`,
     ].join("\n");
 
-    const out = await callGroq(apiKey, system, user, 4096, true);
+    const out = await callGroq(apiKey, system, user, 8192, true);
     if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
 
     let parsed;
