@@ -1346,7 +1346,7 @@ function AccountModal(props) {
               {sinais.length>0&&<Sec title="Sinais de Intenção"><div style={{background:"#0c2340",borderRadius:12,padding:"12px 16px"}}>{sinais.map(function(s,i){return <div key={i} style={{fontSize:11.5,color:"#7dd3fc",lineHeight:1.6,display:"flex",gap:8,marginBottom:5}}><span style={{color:"#38bdf8",flexShrink:0}}>o</span>{s}</div>;})}</div></Sec>}
               {concorrentes.length>0&&<Sec title="Concorrentes Prováveis"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{concorrentes.map(function(cc,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{cc}</span>;})}</div></Sec>}
               {noticias.length>0&&<Sec title="Notícias e Contexto">{noticias.map(function(n,i){return <div key={i} style={{background:"#fbfbfd",border:"1px solid #e6e9ef",borderRadius:12,padding:"12px 14px",marginBottom:8}}>{n.url?<a href={n.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,fontWeight:700,color:"#0ea5e9",textDecoration:"none",display:"block",marginBottom:3}}>{n.titulo}</a>:<div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:3}}>{n.titulo}</div>}<div style={{fontSize:11.5,color:"#52617a",lineHeight:1.6,marginBottom:3}}>{n.resumo}</div><div style={{fontSize:10,color:"#a5b4fc",fontWeight:600}}>{"-> "+n.relevancia}</div></div>;})}</Sec>}
-              {(dores.length===0 || triggers.length===0) && !acc.aiMapped && (acc.aiMappingInProgress || (Date.now() - (acc.savedAt||0)) < 180000) && (
+              {(dores.length===0 || triggers.length===0) && !acc.aiMapped && (_mappingInProgress.has((acc.nome||"").toLowerCase()) || (Date.now() - (acc.savedAt||0)) < 180000) && (
                 <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
                   <div>
@@ -1437,7 +1437,7 @@ function AccountModal(props) {
             <div>
               <Sec title="Perguntas SPIN">
                 {spin.length === 0 ? (
-                  (acc.aiMappingInProgress || (!acc.aiMapped && (Date.now() - (acc.savedAt||0)) < 180000)) ? (
+                  (_mappingInProgress.has((acc.nome||"").toLowerCase()) || (!acc.aiMapped && (Date.now() - (acc.savedAt||0)) < 180000)) ? (
                     <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
                       <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
                       <div style={{fontSize:12,color:"#4f46e5",fontWeight:500}}>{"IA gerando perguntas SPIN... Feche e reabra este card em alguns segundos."}</div>
@@ -2656,19 +2656,17 @@ function HomeView(props) {
       {setupDone && (
       <div>
       {/* ── Hero ── */}
-      <div style={{position:"relative",borderRadius:24,overflow:"hidden",marginBottom:28,background:"linear-gradient(135deg,#0a0a14 0%,#171430 45%,#1e1b4b 100%)",border:"1px solid #e6e9ef",padding:"40px 40px 36px"}}>
+      <div style={{position:"relative",borderRadius:24,overflow:"hidden",marginBottom:28,background:"linear-gradient(135deg,#0a0a14 0%,#171430 45%,#1e1b4b 100%)",border:"1px solid #e6e9ef",padding:"28px 24px 28px"}}>
         <div style={{position:"absolute",top:-80,right:-60,width:320,height:320,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.4),transparent 70%)",filter:"blur(20px)"}}/>
         <div style={{position:"absolute",bottom:-100,left:-40,width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,.3),transparent 70%)",filter:"blur(20px)"}}/>
-        {/* Plan dropdown — top right */}
-        {props.usage && (
-          <div style={{position:"absolute",top:20,right:24,zIndex:3}}>
-            <PlanDropdown usage={props.usage} onChangePlan={props.onChangePlan}/>
-          </div>
-        )}
         <div style={{position:"relative",zIndex:2}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}>
-            <span style={{fontSize:10,fontWeight:700,color:"#4f46e5",background:"rgba(99,102,241,.15)",border:"1px solid rgba(129,140,248,.3)",borderRadius:20,padding:"4px 12px",letterSpacing:.5}}>{"PROSPECTING TOOL"}</span>
-            <span style={{fontSize:12,color:"#94a3b8"}}>{greet + ", vamos gerar pipeline"}</span>
+          {/* Top row: label + plan badge */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <span style={{fontSize:10,fontWeight:700,color:"#4f46e5",background:"rgba(99,102,241,.15)",border:"1px solid rgba(129,140,248,.3)",borderRadius:20,padding:"4px 12px",letterSpacing:.5}}>{"PROSPECTING TOOL"}</span>
+              <span style={{fontSize:12,color:"#94a3b8"}}>{greet + ", vamos gerar pipeline"}</span>
+            </div>
+            {props.usage && <PlanDropdown usage={props.usage} onChangePlan={props.onChangePlan}/>}
           </div>
           <div style={{fontSize:38,fontWeight:900,letterSpacing:"-1.2px",lineHeight:1.05,color:"#fff",marginBottom:10}}>
             <span style={{color:"#818cf8"}}>{"+"}</span>{"pipe"}
@@ -3114,6 +3112,9 @@ function buildData(company, searchResults) {
   };
 }
 
+// In-memory set of account names currently being AI-mapped (never persisted)
+var _mappingInProgress = new Set();
+
 function SearchView(props) {
   var _st_inputVal = useState(""); var inputVal = _st_inputVal[0]; var setInputVal = _st_inputVal[1];
   var _st_loading = useState(false); var loading = _st_loading[0]; var setLoading = _st_loading[1];
@@ -3183,14 +3184,14 @@ function SearchView(props) {
       keys.forEach(function(k){
         storageGet(k).then(function(stored){
           if (!stored || stored.nome.toLowerCase() !== nome.toLowerCase()) return;
-          // Guard: skip if already mapping or mapped
-          if (stored.aiMapped || stored.aiMappingInProgress) return;
+          // Guard: skip if already mapped or in-progress (in-memory — clears on reload)
+          var nomeKey = stored.nome.toLowerCase();
+          if (stored.aiMapped || _mappingInProgress.has(nomeKey)) return;
+          _mappingInProgress.add(nomeKey);
+
           var emp = (stored.data && stored.data.empresa) || {};
           var rawContext = emp.rawContext || emp.resumo || "";
           var setor = emp.setor || stored.setor || "tecnologia";
-
-          // Mark in-progress immediately to prevent duplicate calls
-          storageSet(k, Object.assign({}, stored, { aiMappingInProgress: true }));
 
           fetch("/api/gemini", {
             method:"POST",
@@ -3208,8 +3209,8 @@ function SearchView(props) {
           })
           .then(function(r){ return r.ok ? r.json() : null; })
           .then(function(mapped){
+            _mappingInProgress.delete(nomeKey);
             if (!mapped || mapped.error) return;
-            // Normalize: Gemini may return estrategia with or without accent, objeções with accent
             var est = mapped.estrategia || mapped["estratégia"] || {};
             storageGet(k).then(function(cur){
               if (!cur) return;
@@ -3237,7 +3238,7 @@ function SearchView(props) {
               if (props.onUpdateAccount) props.onUpdateAccount(updated);
             });
           })
-          .catch(function(){});
+          .catch(function(){ _mappingInProgress.delete(nomeKey); });
         });
       });
     });
@@ -4276,15 +4277,10 @@ function ProspectView(props) {
         if (props.onSaveRaw) {
           props.onSaveRaw(emp.nome, resp.results, true, null, "", function(acc){
             setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
-            if (acc && (acc.aiMapped || acc.aiMappingInProgress)) return; // already mapped/in-progress
-            // Mark in-progress immediately to prevent loop
-            if (acc && acc.id) {
-              storageGet(acc.id).then(function(cur){
-                if (cur && !cur.aiMapped && !cur.aiMappingInProgress) {
-                  storageSet(acc.id, Object.assign({},cur,{aiMappingInProgress:true}));
-                }
-              });
-            }
+            var nomeKeyP = emp.nome.toLowerCase();
+            if (acc && acc.aiMapped) return;
+            if (_mappingInProgress.has(nomeKeyP)) return;
+            _mappingInProgress.add(nomeKeyP);
             // Trigger full AI mapping after account saved
             var icpLocal = getStoredIcp();
             var produtosLocal = getStoredProducts();
@@ -4296,6 +4292,7 @@ function ProspectView(props) {
             })
             .then(function(r2){ return r2.ok?r2.json():null; })
             .then(function(mapped){
+              _mappingInProgress.delete(nomeKeyP);
               if (!mapped||mapped.error) return;
               var est = mapped.estrategia || mapped["estratégia"] || {};
               storageList("acc:").then(function(ks){
@@ -4319,7 +4316,7 @@ function ProspectView(props) {
                   });
                 });
               });
-            }).catch(function(){});
+            }).catch(function(){ _mappingInProgress.delete(nomeKeyP); });
           }, null);
         }
       })
