@@ -3714,30 +3714,32 @@ function AccountsView(props) {
             if (!acc.mapped) {
               var isMapping = props.mappingId===acc.id;
               return (
-                <div key={acc.id} style={{background:"#ffffff",border:"1px solid "+(selected[acc.id]?"#6366f1":"#e8edf4"),borderRadius:14,padding:"12px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                <div key={acc.id} style={{background:"#ffffff",border:"1px solid "+(selected[acc.id]?"#6366f1":"#e8edf4"),borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"nowrap"}}>
                   <input type="checkbox" checked={!!selected[acc.id]} onChange={function(){toggleSelect(acc.id);}} disabled={isMapping} style={{width:16,height:16,accentColor:"#6366f1",cursor:"pointer",flexShrink:0}}/>
-                  <div style={{flex:1,minWidth:120}}>
-                    <div style={{fontSize:13.5,fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{acc.nome}</div>
-                    <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{acc.site||"Importada da lista"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>{acc.nome}</div>
+                    <div style={{fontSize:10,color:"#94a3b8"}}>{acc.site||"Importada da lista"}</div>
                   </div>
-                  <span style={{fontSize:8,fontWeight:700,color:"#92400e",background:"rgba(251,191,36,.14)",border:"1px solid rgba(251,191,36,.3)",borderRadius:6,padding:"3px 8px",flexShrink:0,textTransform:"uppercase",letterSpacing:.5}}>{"Não mapeada"}</span>
-                  <button onClick={function(){if(!isMapping)props.onMap(acc);}} disabled={isMapping} style={{background:isMapping?"#f1f5f9":"linear-gradient(135deg,#6366f1,#4f46e5)",color:isMapping?"#94a3b8":"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:isMapping?"default":"pointer",fontFamily:"inherit",flexShrink:0}}>{isMapping?"Mapeando...":"Mapear"}</button>
-                  <button onClick={function(){props.onDelete(acc.id);}} disabled={isMapping} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"6px 9px",fontSize:10,cursor:isMapping?"default":"pointer",fontFamily:"inherit",flexShrink:0}}>x</button>
+                  <button onClick={function(){if(!isMapping)props.onMap(acc);}} disabled={isMapping} style={{background:isMapping?"#f1f5f9":"linear-gradient(135deg,#6366f1,#4f46e5)",color:isMapping?"#94a3b8":"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:isMapping?"default":"pointer",fontFamily:"inherit",flexShrink:0}}>{isMapping?"Mapeando...":"Mapear"}</button>
+                  <button onClick={function(){props.onDelete(acc.id);}} disabled={isMapping} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"6px 9px",fontSize:11,cursor:isMapping?"default":"pointer",fontFamily:"inherit",flexShrink:0}}>{"×"}</button>
                 </div>
               );
             }
             return (
-              <div key={acc.id} onClick={function(){props.onOpen(acc);}} style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:14,padding:"12px 18px",display:"flex",alignItems:"center",gap:14,transition:"all .2s",cursor:"pointer"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.boxShadow="0 2px 12px rgba(99,102,241,.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.boxShadow="";}}>
+              <div key={acc.id} onClick={function(){props.onOpen(acc);}} style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,transition:"all .2s",cursor:"pointer"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.boxShadow="0 2px 12px rgba(99,102,241,.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.boxShadow="";}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13.5,fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{acc.nome}</div>
-                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{acc.setor}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:5}}>{acc.nome}</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
+                    <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:6,padding:"2px 7px",fontSize:8,fontWeight:700,flexShrink:0}}>{"FIT "+acc.fit}</span>
+                    <span style={{background:"#fbfbfd",border:"1px solid "+(TIER_COLOR[acc.tier]||"#e2e8f0"),color:TIER_COLOR[acc.tier]||"#94a3b8",borderRadius:6,padding:"2px 7px",fontSize:8,fontWeight:700,flexShrink:0}}>{acc.tier}</span>
+                    <span style={{background:sc.bg,border:"1px solid "+sc.border,color:sc.color,borderRadius:6,padding:"2px 7px",fontSize:8,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>{sc.label}</span>
+                    <span style={{fontSize:9,color:"#94a3b8",flexShrink:0}}>{fmtDate(acc.savedAt)}</span>
+                  </div>
                 </div>
-                <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:7,padding:"3px 9px",fontSize:9,fontWeight:700,flexShrink:0}}>{"FIT "+acc.fit}</span>
-                <span style={{background:"#fbfbfd",border:"1px solid "+(TIER_COLOR[acc.tier]||"#e2e8f0"),color:TIER_COLOR[acc.tier]||"#94a3b8",borderRadius:7,padding:"3px 9px",fontSize:9,fontWeight:700,flexShrink:0}}>{acc.tier}</span>
-                <span style={{background:sc.bg,border:"1px solid "+sc.border,color:sc.color,borderRadius:7,padding:"3px 9px",fontSize:9,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>{sc.label}</span>
-                <span style={{fontSize:10,color:"#64748b",flexShrink:0}}>{fmtDate(acc.savedAt)}</span>
-                <button onClick={function(e){e.stopPropagation();props.onOpen(acc);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"5px 12px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>Ver</button>
-                <button onClick={function(e){e.stopPropagation();props.onDelete(acc.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>x</button>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button onClick={function(e){e.stopPropagation();props.onOpen(acc);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>{"Ver"}</button>
+                  <button onClick={function(e){e.stopPropagation();props.onDelete(acc.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"6px 9px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>{"×"}</button>
+                </div>
               </div>
             );
           })}
@@ -4492,6 +4494,80 @@ function ProspectView(props) {
   );
 }
 
+// -- MOBILE NAV ---------------------------------------------------------------
+var ALL_NAV = [
+  {id:"home",       emoji:"🏠", label:"Home"},
+  {id:"prospect",   emoji:"🎯", label:"Busca"},
+  {id:"search",     emoji:"🔍", label:"Mapping"},
+  {id:"accounts",   emoji:"📁", label:"Contas"},
+  {id:"contacts",   emoji:"👥", label:"Contatos"},
+  {id:"sequences",  emoji:"📬", label:"Sequências"},
+  {id:"biblioteca", emoji:"📚", label:"Biblioteca"},
+  {id:"pipeline",   emoji:"📊", label:"Pipeline"},
+  {id:"relatorios", emoji:"📈", label:"Relatórios"},
+  {id:"integracoes",emoji:"🔌", label:"Integrações"},
+];
+var PRIMARY_NAV = ALL_NAV.slice(0, 5);
+var MORE_NAV    = ALL_NAV.slice(5);
+
+function MobileNav(props) {
+  var nav = props.nav; var setNav = props.setNav; var setupDone = props.setupDone;
+  var _st_open = useState(false); var open = _st_open[0]; var setOpen = _st_open[1];
+  var moreActive = MORE_NAV.some(function(i){ return i.id === nav; });
+
+  function goTo(id) {
+    if (!setupDone && id !== "home") return;
+    setNav(id); setOpen(false);
+  }
+
+  return (
+    <>
+      {/* Drawer backdrop */}
+      {open && <div onClick={function(){setOpen(false);}} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.5)",zIndex:498,backdropFilter:"blur(2px)"}}/>}
+
+      {/* More drawer — slides up */}
+      <div style={{position:"fixed",bottom:open?64:"-100%",left:0,right:0,background:"linear-gradient(180deg,#1a1f35,#10131f)",borderRadius:"20px 20px 0 0",zIndex:499,padding:"8px 0 12px",transition:"bottom .3s cubic-bezier(.22,1,.36,1)",boxShadow:"0 -8px 32px rgba(15,23,42,.4)"}}>
+        <div style={{width:36,height:4,background:"rgba(255,255,255,.2)",borderRadius:2,margin:"0 auto 16px"}}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:4,padding:"0 8px"}}>
+          {MORE_NAV.map(function(item){
+            var active = nav === item.id;
+            var locked = !setupDone;
+            return (
+              <button key={item.id} onClick={function(){goTo(item.id);}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,background:active?"rgba(99,102,241,.15)":"none",border:active?"1px solid rgba(99,102,241,.3)":"1px solid transparent",cursor:locked?"default":"pointer",padding:"10px 4px",borderRadius:12,opacity:locked?.3:1}}>
+                <span style={{fontSize:22,lineHeight:1}}>{item.emoji}</span>
+                <span style={{fontSize:9,fontWeight:active?700:400,color:active?"#818cf8":"#7c869b"}}>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Bottom tab bar */}
+      <nav className="mobile-nav" style={{position:"fixed",bottom:0,left:0,right:0,background:"linear-gradient(180deg,#15192b,#10131f)",borderTop:"1px solid #1f2438",zIndex:500,paddingBottom:"max(8px,env(safe-area-inset-bottom))",boxShadow:"0 -4px 24px rgba(15,23,42,.3)"}}>
+        <div style={{display:"flex",justifyContent:"space-around",alignItems:"center",maxWidth:500,margin:"0 auto",padding:"6px 0 0"}}>
+          {PRIMARY_NAV.map(function(item){
+            var active = nav === item.id;
+            var locked = !setupDone && item.id !== "home";
+            return (
+              <button key={item.id} onClick={function(){ if(!locked){ setOpen(false); goTo(item.id); } }} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:locked?"default":"pointer",padding:"4px 6px",borderRadius:10,opacity:locked?.28:1,minWidth:44,flexShrink:0}}>
+                <span style={{fontSize:20,lineHeight:1}}>{item.emoji}</span>
+                <span style={{fontSize:9,fontWeight:active?700:400,color:active?"#818cf8":"#5a6478"}}>{item.label}</span>
+                {active && <div style={{width:14,height:2,background:"#6366f1",borderRadius:2}}/>}
+              </button>
+            );
+          })}
+          {/* Mais button */}
+          <button onClick={function(){setOpen(!open);}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:"pointer",padding:"4px 6px",borderRadius:10,minWidth:44,flexShrink:0}}>
+            <span style={{fontSize:20,lineHeight:1,color:moreActive||open?"#818cf8":"#5a6478"}}>{"⋯"}</span>
+            <span style={{fontSize:9,fontWeight:moreActive||open?700:400,color:moreActive||open?"#818cf8":"#5a6478"}}>{"Mais"}</span>
+            {(moreActive||open) && <div style={{width:14,height:2,background:"#6366f1",borderRadius:2}}/>}
+          </button>
+        </div>
+      </nav>
+    </>
+  );
+}
+
 export default function App() {
   var _st_nav = useState("home"); var nav = _st_nav[0]; var setNav = _st_nav[1];
   var _st_accounts = useState([]); var accounts = _st_accounts[0]; var setAccounts = _st_accounts[1];
@@ -4917,28 +4993,7 @@ export default function App() {
         </div>
       )}
       {/* ── Mobile bottom nav ─────────────────────────────────────────────── */}
-      <nav className="mobile-nav" style={{position:"fixed",bottom:0,left:0,right:0,background:"linear-gradient(180deg,#15192b,#10131f)",borderTop:"1px solid #1f2438",zIndex:500,paddingBottom:"max(8px,env(safe-area-inset-bottom))",boxShadow:"0 -4px 24px rgba(15,23,42,.3)"}}>
-        <div style={{display:"flex",justifyContent:"space-around",alignItems:"center",maxWidth:500,margin:"0 auto",padding:"6px 0 0"}}>
-          {[
-            {id:"home",      emoji:"🏠", label:"Home"},
-            {id:"prospect",  emoji:"🎯", label:"Busca"},
-            {id:"search",    emoji:"🔍", label:"Mapping"},
-            {id:"accounts",  emoji:"📁", label:"Contas"},
-            {id:"contacts",  emoji:"👥", label:"Contatos"},
-            {id:"sequences", emoji:"📬", label:"Sequências"},
-          ].map(function(item){
-            var active = nav === item.id;
-            var locked = !setupDone && item.id !== "home";
-            return (
-              <button key={item.id} onClick={function(){ if(!locked) setNav(item.id); }} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:locked?"default":"pointer",padding:"4px 6px",borderRadius:10,opacity:locked?.28:1,minWidth:44,flexShrink:0}}>
-                <span style={{fontSize:20,lineHeight:1,filter:active?"none":"grayscale(.3)"}}>{item.emoji}</span>
-                <span style={{fontSize:9,fontWeight:active?700:400,color:active?"#818cf8":"#5a6478",letterSpacing:.2}}>{item.label}</span>
-                {active && <div style={{width:14,height:2,background:"#6366f1",borderRadius:2}}/>}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      <MobileNav nav={nav} setNav={setNav} setupDone={setupDone}/>
     </div>
     </div>
   );
