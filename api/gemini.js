@@ -120,29 +120,44 @@ export default async function handler(req, res) {
     if (mode === "resumo") {
       const system = [
         `Você é um especialista sênior em ACCOUNT MAPPING e outbound B2B enterprise no Brasil.`,
-        `Sua tarefa: transformar informações coletadas sobre uma empresa em um RESUMO DE CONTA acionável para um vendedor — o briefing que ele lê 5 minutos antes de uma call e já sabe como atacar.`,
+        `Sua tarefa: escrever um RESUMO DE CONTA em Português do Brasil — o briefing que um vendedor lê 5 minutos antes de uma call.`,
+        ``,
+        `REGRA ABSOLUTA DE IDIOMA: Escreva SEMPRE em Português do Brasil, independentemente do idioma das informações coletadas. Se as fontes estiverem em inglês, traduza e reescreva em português.`,
         ``,
         `CONTEXTO DO VENDEDOR:`,
         sellerCtx,
         ``,
-        `ESTRUTURA OBRIGATÓRIA (2 parágrafos curtos e densos, prosa fluida, sem bullets nem markdown):`,
+        `ESTRUTURA (2 parágrafos curtos e densos, prosa fluida, sem bullets, sem markdown, SEM inglês):`,
         `Parágrafo 1: o que a empresa faz de fato, modelo de negócio, porte e momento atual.`,
-        `Parágrafo 2: por que os produtos do vendedor são relevantes para ESTA empresa — dor mais provável, ângulo de entrada mais forte, urgência.`,
+        `Parágrafo 2: por que os produtos do vendedor são relevantes — dor mais provável, ângulo de entrada, urgência.`,
         ``,
-        `REGRAS:`,
-        `- Português do Brasil, tom direto de quem entende de vendas enterprise.`,
-        `- NUNCA invente números ou fatos. Trabalhe com o que dá para inferir do setor e porte.`,
-        `- Sem URLs, sem markdown, sem frases genéricas. Só texto corrido.`,
+        `OUTRAS REGRAS:`,
+        `- Tom direto, de especialista em vendas enterprise.`,
+        `- NUNCA invente números ou fatos.`,
+        `- Sem URLs, sem markdown, sem frases genéricas.`,
+        `- Ignore dados claramente irrelevantes (CSV, endereços, códigos internos).`,
       ].join("\n");
+
+      // Strip obvious junk from rawContext before sending
+      const cleanCtx = (rawContext || "")
+        .split("\n")
+        .filter(function(line) {
+          if ((line.match(/;/g) || []).length > 2) return false; // CSV rows
+          if (/trk=|utm_|cnpj|cep|\d{5}-\d{3}/i.test(line)) return false;
+          if ((line.match(/[A-Z]{3,}/g) || []).length > 6) return false; // raw data
+          return line.trim().length > 10;
+        })
+        .join("\n")
+        .slice(0, 4000);
 
       const user = [
         `EMPRESA-ALVO: ${empresa || "a empresa"}`,
         `SETOR: ${setor || "tecnologia"}`,
         ``,
-        `INFORMAÇÕES COLETADAS:`,
-        (rawContext || "Sem dados adicionais.").slice(0, 5000),
+        `INFORMAÇÕES COLETADAS (pode estar em inglês — escreva o resumo em português):`,
+        cleanCtx || "Sem dados adicionais.",
         ``,
-        `Escreva o resumo agora, 2 parágrafos, sem markdown.`,
+        `Escreva agora o resumo em Português do Brasil, 2 parágrafos, sem markdown.`,
       ].join("\n");
 
       const out = await callClaude(apiKey, system, user, 1024, false);
