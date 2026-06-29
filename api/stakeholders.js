@@ -67,17 +67,18 @@ export default async function handler(req, res) {
     // ── LAYER 2: Apollo.io ────────────────────────────────────────────────────
     if (apolloKey) {
       try {
+        // Use people/search v1 — works on free/basic plans unlike mixed_people/search
         const body = {
           api_key: apolloKey,
-          person_titles: ["CEO","CFO","COO","CTO","Diretor","Diretor Comercial","Diretor Financeiro","VP","Vice-Presidente","Head","Gerente","Founder","Sócio","Presidente","Superintendente"],
+          person_titles: ["CEO","CFO","COO","CTO","Diretor","VP","Head","Founder","Presidente","Gerente"],
           person_locations: ["Brazil","Brasil"],
           page: 1,
-          per_page: 15,
+          per_page: 10,
         };
         if (domain) body.q_organization_domains = [domain];
         else body.q_organization_name = company;
 
-        const r = await fetch("https://api.apollo.io/v1/mixed_people/search", {
+        const r = await fetch("https://api.apollo.io/v1/people/search", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey, "Cache-Control": "no-cache" },
           body: JSON.stringify(body),
@@ -115,9 +116,12 @@ export default async function handler(req, res) {
           }
           const apolloCount = contacts.filter(c => c.source === "Apollo.io").length;
           if (apolloCount) sources.push(`Apollo.io (${apolloCount} perfis)`);
+        } else if (r.status === 403 || r.status === 401) {
+          // Plan doesn't support this endpoint — skip silently, don't show error
+          // Hunter.io and Tavily will still run
         } else {
           const txt = await r.text();
-          errors.push(`Apollo.io: HTTP ${r.status} — ${txt.slice(0, 100)}`);
+          errors.push(`Apollo.io: HTTP ${r.status} — ${txt.slice(0, 80)}`);
         }
       } catch (e) {
         errors.push(`Apollo.io: ${e.message}`);
