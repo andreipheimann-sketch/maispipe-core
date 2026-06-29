@@ -1,23 +1,24 @@
 // api/gemini.js — Vercel serverless
-// Powered by Claude (Anthropic) — resumo, mapeamento e sequencias de prospeccao.
-// Variavel de ambiente necessaria: ANTHROPIC_API_KEY
+// Powered by Groq (Llama 3.3 70B) — resumo, mapeamento e sequencias.
+// Variavel de ambiente necessaria: GROQ_API_KEY
 
-async function callClaude(apiKey, systemText, userText, maxTokens, jsonMode) {
-  const messages = [{ role: "user", content: userText }];
-
+async function callGroq(apiKey, systemText, userText, maxTokens, forceJson) {
   const body = {
-    model: "claude-sonnet-4-6",
+    model: "llama-3.3-70b-versatile",
     max_tokens: maxTokens || 4096,
-    messages,
+    temperature: 0.7,
+    messages: [
+      { role: "system", content: systemText },
+      { role: "user",   content: userText   },
+    ],
   };
-  if (systemText) body.system = systemText;
+  if (forceJson) body.response_format = { type: "json_object" };
 
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "Content-Type":  "application/json",
+      "Authorization": "Bearer " + apiKey,
     },
     body: JSON.stringify(body),
   });
@@ -28,25 +29,29 @@ async function callClaude(apiKey, systemText, userText, maxTokens, jsonMode) {
     return { ok: false, status: r.status, error: msg };
   }
 
-  const text = (data.content || []).map(b => b.text || "").join("").trim();
+  const text = ((data.choices || [])[0]?.message?.content || "").trim();
   if (!text) return { ok: false, status: 200, error: "Resposta vazia da IA." };
   return { ok: true, text };
 }
 
 function parseJSON(raw) {
-  const clean = (raw || "").replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+  const clean = (raw || "")
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i,    "")
+    .replace(/```\s*$/i,    "")
+    .trim();
   return JSON.parse(clean);
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Origin",  "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Metodo nao permitido." });
+  if (req.method !== "POST")   return res.status(405).json({ error: "Metodo nao permitido." });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY nao configurada." });
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "GROQ_API_KEY nao configurada." });
 
   try {
     const {
@@ -54,8 +59,8 @@ export default async function handler(req, res) {
       icp, produtos, companySite, assinatura, dna,
     } = req.body || {};
 
-    // ── Seller context — DNA takes priority ─────────────────────────────────
-    const vendedorEmpresa    = (dna && dna.empresa && dna.empresa.nome) || companySite || "minha empresa";
+    // ── Seller context — DNA takes priority ───────────────────────────────────
+    const vendedorEmpresa    = (dna?.empresa?.nome) || companySite || "minha empresa";
     const vendedorAssinatura = assinatura || "Consultor";
 
     const dnaContext = dna ? [
@@ -86,7 +91,8 @@ export default async function handler(req, res) {
           (dna.icp_refinado.cargos_primarios || []).length
             ? `Cargos: ${dna.icp_refinado.cargos_primarios.join(", ")}` : "",
         ].filter(Boolean).join("\n")
-      : icp ? [
+      : icp
+      ? [
           icp.segmento    ? `Segmento: ${icp.segmento}`       : "",
           icp.porte       ? `Porte: ${icp.porte}`             : "",
           icp.faturamento ? `Faturamento: ${icp.faturamento}` : "",
@@ -99,7 +105,8 @@ export default async function handler(req, res) {
       ? [
           `${dna.empresa.nome} — ${dna.empresa.descricao}`,
           dna.empresa.proposta_valor ? `Proposta de valor: ${dna.empresa.proposta_valor}` : "",
-          (dna.empresa.diferenciais || []).length ? `Diferenciais: ${dna.empresa.diferenciais.join(", ")}` : "",
+          (dna.empresa.diferenciais || []).length
+            ? `Diferenciais: ${dna.empresa.diferenciais.join(", ")}` : "",
         ].filter(Boolean).join("\n")
       : Array.isArray(produtos) && produtos.length
       ? produtos.map((p, i) => [
@@ -116,185 +123,168 @@ export default async function handler(req, res) {
       `ICP:\n${icpDesc}`,
     ].join("\n");
 
-    // ── MODO RESUMO ────────────────────────────────────────────────────────────
+    // ── MODO RESUMO ───────────────────────────────────────────────────────────
     if (mode === "resumo") {
       const system = [
-        `Você é um especialista sênior em ACCOUNT MAPPING e outbound B2B enterprise no Brasil.`,
-        `Sua tarefa: escrever um RESUMO DE CONTA em Português do Brasil — o briefing que um vendedor lê 5 minutos antes de uma call.`,
-        ``,
-        `REGRA ABSOLUTA DE IDIOMA: Escreva SEMPRE em Português do Brasil, independentemente do idioma das informações coletadas. Se as fontes estiverem em inglês, traduza e reescreva em português.`,
+        `Você é um especialista em account mapping e outbound B2B enterprise no Brasil.`,
+        `REGRA ABSOLUTA: Escreva SEMPRE em Português do Brasil. Nunca em inglês.`,
         ``,
         `CONTEXTO DO VENDEDOR:`,
         sellerCtx,
         ``,
-        `ESTRUTURA (2 parágrafos curtos e densos, prosa fluida, sem bullets, sem markdown, SEM inglês):`,
-        `Parágrafo 1: o que a empresa faz de fato, modelo de negócio, porte e momento atual.`,
-        `Parágrafo 2: por que os produtos do vendedor são relevantes — dor mais provável, ângulo de entrada, urgência.`,
-        ``,
-        `OUTRAS REGRAS:`,
-        `- Tom direto, de especialista em vendas enterprise.`,
-        `- NUNCA invente números ou fatos.`,
-        `- Sem URLs, sem markdown, sem frases genéricas.`,
-        `- Ignore dados claramente irrelevantes (CSV, endereços, códigos internos).`,
+        `Sua tarefa: escrever um resumo de conta em 2 parágrafos curtos e diretos (sem markdown, sem bullets):`,
+        `Parágrafo 1: o que a empresa-alvo faz, modelo de negócio, porte e momento atual.`,
+        `Parágrafo 2: por que os produtos do vendedor são relevantes — dor provável, ângulo de entrada, urgência.`,
       ].join("\n");
 
-      // Strip obvious junk from rawContext before sending
+      // Clean English noise from context
       const cleanCtx = (rawContext || "")
         .split("\n")
-        .filter(function(line) {
-          if ((line.match(/;/g) || []).length > 2) return false; // CSV rows
-          if (/trk=|utm_|cnpj|cep|\d{5}-\d{3}/i.test(line)) return false;
-          if ((line.match(/[A-Z]{3,}/g) || []).length > 6) return false; // raw data
-          return line.trim().length > 10;
-        })
+        .filter(l => l.trim().length > 20 && !(/;.*;/.test(l)) && !(/trk=|utm_|cnpj/i.test(l)))
         .join("\n")
-        .slice(0, 4000);
+        .slice(0, 3000);
 
       const user = [
-        `INSTRUÇÃO CRÍTICA: Responda EXCLUSIVAMENTE em Português do Brasil. Não escreva nenhuma palavra em inglês.`,
+        `INSTRUÇÃO: Responda EXCLUSIVAMENTE em Português do Brasil.`,
         ``,
         `EMPRESA-ALVO: ${empresa || "a empresa"}`,
         `SETOR: ${setor || "tecnologia"}`,
         ``,
-        `INFORMAÇÕES COLETADAS (pode estar em inglês — seu resumo deve ser em português):`,
+        `CONTEXTO COLETADO (pode estar em inglês — escreva o resumo em português):`,
         cleanCtx || "Sem dados adicionais.",
         ``,
-        `Escreva agora o resumo em Português do Brasil, 2 parágrafos, sem markdown, sem inglês.`,
+        `Escreva o resumo agora em Português do Brasil. Apenas texto corrido, 2 parágrafos.`,
       ].join("\n");
 
-      const out = await callClaude(apiKey, system, user, 1024, false);
-      if (!out.ok) return res.status(502).json({ error: "Claude erro: " + out.error });
+      const out = await callGroq(apiKey, system, user, 1024, false);
+      if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
       return res.status(200).json({ resumo: out.text || null });
     }
 
-    // ── MODO MAPEAMENTO ────────────────────────────────────────────────────────
+    // ── MODO MAPEAMENTO ───────────────────────────────────────────────────────
     if (mode === "mapeamento") {
       const system = [
-        `Você é um especialista sênior em ACCOUNT MAPPING e outbound B2B enterprise no Brasil.`,
-        `Gere inteligência de conta COMPLETA e personalizada para o vendedor abordar esta empresa.`,
+        `Você é um especialista em account mapping e outbound B2B enterprise no Brasil.`,
+        `REGRA ABSOLUTA: Responda APENAS com JSON válido. Todo conteúdo em Português do Brasil. Sem markdown.`,
         ``,
         `CONTEXTO DO VENDEDOR:`,
         sellerCtx,
-        ``,
-        `REGRAS ABSOLUTAS:`,
-        `- Responda APENAS com JSON válido, sem markdown, sem texto antes ou depois.`,
-        `- IDIOMA: todo o conteúdo do JSON deve estar em Português do Brasil. Não use inglês em nenhum campo.`,
-        `- Tudo específico para esta empresa. NUNCA use placeholders ou frases genéricas.`,
-        `- Assine mensagens como: "${vendedorAssinatura}"`,
       ].join("\n");
 
       const user = [
-        `INSTRUÇÃO CRÍTICA: Responda EXCLUSIVAMENTE em Português do Brasil. Nenhuma palavra em inglês.`,
+        `INSTRUÇÃO: Responda SOMENTE com o JSON abaixo. Nenhum texto antes ou depois. Tudo em Português do Brasil.`,
         ``,
         `EMPRESA-ALVO: ${empresa || "a empresa"}`,
         `SETOR: ${setor || "tecnologia"}`,
         ``,
-        `CONTEXTO COLETADO (pode estar em inglês — sua resposta deve ser em português):`,
-        (rawContext || "Sem dados — infira pelo nome e setor.").slice(0, 4000),
+        `CONTEXTO (pode estar em inglês — sua resposta deve ser em português):`,
+        (rawContext || "Sem dados.").slice(0, 3500),
         ``,
-        `Responda com este JSON exato (sem campos extras, tudo em português):`,
+        `JSON de resposta:`,
         `{`,
-        `  "resumo": "2 parágrafos em português descrevendo o que a empresa faz e por que é relevante para o vendedor",`,
-        `  "fit": { "score": "ALTO|MÉDIO|BAIXO", "justificativa": "2-3 frases específicas em português" },`,
+        `  "resumo": "2 parágrafos em português sobre a empresa e relevância para o vendedor",`,
+        `  "fit": { "score": "ALTO|MÉDIO|BAIXO", "justificativa": "2-3 frases em português" },`,
         `  "dores": { "principais": ["dor 1","dor 2","dor 3","dor 4","dor 5"] },`,
         `  "triggers": ["gatilho 1","gatilho 2","gatilho 3","gatilho 4"],`,
         `  "stakeholders": [`,
-        `    {"cargo":"cargo real","angulo":"ângulo específico","prioridade":"PRIMARIO","urgencia":"Alta","email":"","linkedin":"","phone":""},`,
-        `    {"cargo":"...","angulo":"...","prioridade":"SECUNDARIO","urgencia":"Média","email":"","linkedin":"","phone":""},`,
-        `    {"cargo":"...","angulo":"...","prioridade":"TERCIARIO","urgencia":"Baixa","email":"","linkedin":"","phone":""}`,
+        `    {"cargo":"cargo","angulo":"ângulo","prioridade":"PRIMARIO","urgencia":"Alta","email":"","linkedin":"","phone":""},`,
+        `    {"cargo":"cargo","angulo":"ângulo","prioridade":"SECUNDARIO","urgencia":"Média","email":"","linkedin":"","phone":""},`,
+        `    {"cargo":"cargo","angulo":"ângulo","prioridade":"TERCIARIO","urgencia":"Baixa","email":"","linkedin":"","phone":""}`,
         `  ],`,
         `  "estrategia": {`,
         `    "emails": [{"assunto":"...","corpo":"email completo em português"},{"assunto":"...","corpo":"..."},{"assunto":"...","corpo":"..."}],`,
-        `    "inmails": [{"assunto":"...","corpo":"InMail curto LinkedIn em português"},{"assunto":"...","corpo":"..."}],`,
-        `    "whatsapps": ["msg WhatsApp informal em português 1","msg 2"],`,
+        `    "inmails": [{"assunto":"...","corpo":"InMail LinkedIn em português"},{"assunto":"...","corpo":"..."}],`,
+        `    "whatsapps": ["msg whatsapp 1","msg 2"],`,
         `    "cold_calls": ["script cold call completo em português 1","script 2"],`,
         `    "perguntas_spin": [`,
-        `      "SITUAÇÃO: pergunta sobre contexto atual de ${empresa}",`,
-        `      "SITUAÇÃO: segunda pergunta de situação",`,
-        `      "PROBLEMA: pergunta que revela a dor principal",`,
-        `      "PROBLEMA: segunda pergunta de problema",`,
-        `      "IMPLICAÇÃO: pergunta sobre consequência da dor",`,
-        `      "IMPLICAÇÃO: segunda pergunta de implicação",`,
-        `      "NECESSIDADE: pergunta que leva ao valor da solução",`,
-        `      "NECESSIDADE: segunda pergunta de necessidade"`,
+        `      "SITUAÇÃO: pergunta 1","SITUAÇÃO: pergunta 2",`,
+        `      "PROBLEMA: pergunta 1","PROBLEMA: pergunta 2",`,
+        `      "IMPLICAÇÃO: pergunta 1","IMPLICAÇÃO: pergunta 2",`,
+        `      "NECESSIDADE: pergunta 1","NECESSIDADE: pergunta 2"`,
         `    ],`,
         `    "objecoes": [`,
-        `      {"objecao":"objeção comum em português","resposta":"resposta usando diferenciais do produto"},`,
-        `      {"objecao":"...","resposta":"..."},`,
-        `      {"objecao":"...","resposta":"..."}`,
+        `      {"objecao":"...","resposta":"..."},{"objecao":"...","resposta":"..."},{"objecao":"...","resposta":"..."}`,
         `    ]`,
         `  },`,
         `  "proximos_passos": {`,
-        `    "ae": ["ação AE 1","ação 2","ação 3","ação 4"],`,
-        `    "bdr": ["ação BDR 1","ação 2","ação 3"],`,
-        `    "prazo": "prazo e prioridade"`,
+        `    "ae": ["ação 1","ação 2","ação 3"],`,
+        `    "bdr": ["ação 1","ação 2","ação 3"],`,
+        `    "prazo": "prazo recomendado"`,
         `  }`,
         `}`,
       ].join("\n");
 
-      const out = await callClaude(apiKey, system, user, 4096, false);
-      if (!out.ok) return res.status(502).json({ error: "Claude erro: " + out.error });
+      const out = await callGroq(apiKey, system, user, 4096, true);
+      if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
 
       let parsed;
       try { parsed = parseJSON(out.text); }
-      catch (e) { return res.status(200).json({ error: "Falha ao interpretar resposta da IA.", raw: out.text.slice(0, 300) }); }
+      catch (e) {
+        // Try extracting JSON object if wrapped in text
+        try {
+          const m = out.text.match(/\{[\s\S]+\}/);
+          if (m) parsed = JSON.parse(m[0]);
+          else throw e;
+        } catch (e2) {
+          return res.status(200).json({ error: "Falha ao interpretar resposta.", raw: out.text.slice(0, 200) });
+        }
+      }
       return res.status(200).json(parsed);
     }
 
-    // ── MODO SEQUÊNCIA ─────────────────────────────────────────────────────────
+    // ── MODO SEQUÊNCIA ────────────────────────────────────────────────────────
     const cadencia = Array.isArray(touches) && touches.length ? touches : [
-      { day: 1, type: "linkedin" }, { day: 3, type: "email"    }, { day: 6,  type: "call"    },
-      { day: 10, type: "email"   }, { day: 15, type: "whatsapp"}, { day: 21, type: "breakup" },
+      { day:1,  type:"linkedin" }, { day:3,  type:"email"    },
+      { day:6,  type:"call"     }, { day:10, type:"email"    },
+      { day:15, type:"whatsapp" }, { day:21, type:"breakup"  },
     ];
 
     const system = [
-      `Você é um copywriter de outbound B2B brasileiro, especialista em mensagens que convertem para vendas enterprise.`,
+      `Você é um copywriter de outbound B2B brasileiro especialista em mensagens que convertem.`,
       `Você representa: ${vendedorEmpresa}`,
       ``,
       sellerCtx,
       ``,
       `REGRAS:`,
-      `- Abra cada touch com um gancho que prenda em 1 linha.`,
-      `- Frases curtas, ritmo. Português do Brasil, tom entre especialistas, nunca robótico.`,
-      `- Cada touch com ângulo e abertura DIFERENTES. Zero repetição de fórmula.`,
-      `- CTA leve e específico. Nunca genérico.`,
-      `- Personalize com empresa, setor e cargo.`,
+      `- Todo conteúdo em Português do Brasil. Nunca em inglês.`,
+      `- Cada touch com ângulo e abertura diferentes. Zero repetição.`,
+      `- Tom direto, entre especialistas, nunca robótico.`,
+      `- CTA leve e específico.`,
       `- Assine como "${vendedorAssinatura}" quando fizer sentido.`,
-      `- RESPONDA APENAS COM O JSON ABAIXO. NENHUM TEXTO ANTES OU DEPOIS. NENHUM MARKDOWN.`,
+      `- RESPONDA APENAS COM O JSON. NENHUM TEXTO ANTES OU DEPOIS.`,
     ].join("\n");
 
     const user = [
-      `Crie uma sequência de prospecção:`,
+      `INSTRUÇÃO: Responda SOMENTE com JSON válido. Nada mais.`,
+      ``,
+      `Crie sequência de prospecção:`,
       `- Empresa: ${empresa || "a empresa"}`,
       `- Setor: ${setor || "tecnologia"}`,
-      `- Cargo do decisor: ${cargo || "Decisor"}`,
-      contato ? `- Nome do contato: ${contato}` : `- Nome do contato: use [Nome]`,
+      `- Cargo: ${cargo || "Decisor"}`,
+      contato ? `- Contato: ${contato}` : `- Contato: use [Nome]`,
       `- Ângulo: ${angulo || "impacto no negócio"}`,
-      `- Dor principal: ${pain || "não especificada"}`,
+      `- Dor: ${pain || "não especificada"}`,
       ``,
       `Cadência (${cadencia.length} touches):`,
-      cadencia.map((t, i) => `${i + 1}) Dia ${t.day} — canal: ${t.type}`).join("\n"),
+      cadencia.map((t, i) => `${i + 1}) Dia ${t.day} — ${t.type}`).join("\n"),
       ``,
-      `Canais: email (com assunto), linkedin (InMail curto), call (script falado), whatsapp (curtíssimo, informal), breakup (última tentativa, com classe).`,
+      `Canais: email (com assunto), linkedin (InMail curto), call (script falado), whatsapp (curtíssimo), breakup (com classe).`,
       ``,
-      `Responda APENAS com: {"touches":[{"day":1,"type":"linkedin","subject":"...","body":"..."}]}`,
+      `{"touches":[{"day":1,"type":"linkedin","subject":"...","body":"..."},...]}`,
     ].join("\n");
 
-    const out = await callClaude(apiKey, system, user, 4096, false);
-    if (!out.ok) return res.status(502).json({ error: "Claude erro: " + out.error });
+    const out = await callGroq(apiKey, system, user, 4096, true);
+    if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
 
     let parsed;
-    try {
-      // Try direct parse first
-      parsed = parseJSON(out.text);
-    } catch (e1) {
-      // Try to extract JSON object from the text
+    try { parsed = parseJSON(out.text); }
+    catch (e) {
       try {
-        const match = out.text.match(/\{[\s\S]*"touches"[\s\S]*\}/);
-        if (match) parsed = JSON.parse(match[0]);
-        else throw new Error("No touches object found");
+        const m = out.text.match(/\{[\s\S]*"touches"[\s\S]*\}/);
+        if (m) parsed = JSON.parse(m[0]);
+        else throw e;
       } catch (e2) {
-        return res.status(200).json({ touches: null, message: "Falha ao interpretar resposta: " + e1.message, raw: out.text.slice(0, 200) });
+        return res.status(200).json({ touches: null, message: "Falha ao interpretar: " + e.message, raw: out.text.slice(0, 200) });
       }
     }
     return res.status(200).json({ touches: (parsed && parsed.touches) || null });
