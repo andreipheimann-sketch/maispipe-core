@@ -3183,9 +3183,15 @@ function SearchView(props) {
       keys.forEach(function(k){
         storageGet(k).then(function(stored){
           if (!stored || stored.nome.toLowerCase() !== nome.toLowerCase()) return;
+          // Guard: skip if already mapped to prevent loops
+          if (stored.aiMapped) return;
           var emp = (stored.data && stored.data.empresa) || {};
           var rawContext = emp.rawContext || emp.resumo || "";
           var setor = emp.setor || stored.setor || "tecnologia";
+
+          // Mark as mapped immediately to prevent duplicate calls
+          storageSet(k, Object.assign({}, stored, { aiMapped: true }));
+          if (props.onUpdateAccount) props.onUpdateAccount(Object.assign({}, stored, { aiMapped: true }));
 
           fetch("/api/gemini", {
             method:"POST",
@@ -4263,6 +4269,14 @@ function ProspectView(props) {
         if (props.onSaveRaw) {
           props.onSaveRaw(emp.nome, resp.results, true, null, "", function(acc){
             setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
+            if (acc && acc.aiMapped) return; // already mapped, skip
+            // Mark immediately to prevent loop
+            if (acc && acc.id) {
+              storageGet(acc.id).then(function(cur){
+                if (cur && !cur.aiMapped) storageSet(acc.id, Object.assign({},cur,{aiMapped:true}));
+              });
+              if (props.onUpdateAccount) props.onUpdateAccount(Object.assign({},acc,{aiMapped:true}));
+            }
             // Trigger full AI mapping after account saved
             var icpLocal = getStoredIcp();
             var produtosLocal = getStoredProducts();
