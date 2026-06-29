@@ -1346,7 +1346,7 @@ function AccountModal(props) {
               {sinais.length>0&&<Sec title="Sinais de Intenção"><div style={{background:"#0c2340",borderRadius:12,padding:"12px 16px"}}>{sinais.map(function(s,i){return <div key={i} style={{fontSize:11.5,color:"#7dd3fc",lineHeight:1.6,display:"flex",gap:8,marginBottom:5}}><span style={{color:"#38bdf8",flexShrink:0}}>o</span>{s}</div>;})}</div></Sec>}
               {concorrentes.length>0&&<Sec title="Concorrentes Prováveis"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{concorrentes.map(function(cc,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{cc}</span>;})}</div></Sec>}
               {noticias.length>0&&<Sec title="Notícias e Contexto">{noticias.map(function(n,i){return <div key={i} style={{background:"#fbfbfd",border:"1px solid #e6e9ef",borderRadius:12,padding:"12px 14px",marginBottom:8}}>{n.url?<a href={n.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,fontWeight:700,color:"#0ea5e9",textDecoration:"none",display:"block",marginBottom:3}}>{n.titulo}</a>:<div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:3}}>{n.titulo}</div>}<div style={{fontSize:11.5,color:"#52617a",lineHeight:1.6,marginBottom:3}}>{n.resumo}</div><div style={{fontSize:10,color:"#a5b4fc",fontWeight:600}}>{"-> "+n.relevancia}</div></div>;})}</Sec>}
-              {(dores.length===0 || triggers.length===0) && !acc.aiMapped && (Date.now() - (acc.savedAt||0)) < 180000 && (
+              {(dores.length===0 || triggers.length===0) && !acc.aiMapped && (acc.aiMappingInProgress || (Date.now() - (acc.savedAt||0)) < 180000) && (
                 <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
                   <div>
@@ -1437,7 +1437,7 @@ function AccountModal(props) {
             <div>
               <Sec title="Perguntas SPIN">
                 {spin.length === 0 ? (
-                  (Date.now() - (acc.savedAt||0)) < 180000 ? (
+                  (acc.aiMappingInProgress || (!acc.aiMapped && (Date.now() - (acc.savedAt||0)) < 180000)) ? (
                     <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
                       <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
                       <div style={{fontSize:12,color:"#4f46e5",fontWeight:500}}>{"IA gerando perguntas SPIN... Feche e reabra este card em alguns segundos."}</div>
@@ -3183,15 +3183,14 @@ function SearchView(props) {
       keys.forEach(function(k){
         storageGet(k).then(function(stored){
           if (!stored || stored.nome.toLowerCase() !== nome.toLowerCase()) return;
-          // Guard: skip if already mapped to prevent loops
-          if (stored.aiMapped) return;
+          // Guard: skip if already mapping or mapped
+          if (stored.aiMapped || stored.aiMappingInProgress) return;
           var emp = (stored.data && stored.data.empresa) || {};
           var rawContext = emp.rawContext || emp.resumo || "";
           var setor = emp.setor || stored.setor || "tecnologia";
 
-          // Mark as mapped immediately to prevent duplicate calls
-          storageSet(k, Object.assign({}, stored, { aiMapped: true }));
-          if (props.onUpdateAccount) props.onUpdateAccount(Object.assign({}, stored, { aiMapped: true }));
+          // Mark in-progress immediately to prevent duplicate calls
+          storageSet(k, Object.assign({}, stored, { aiMappingInProgress: true }));
 
           fetch("/api/gemini", {
             method:"POST",
@@ -3504,7 +3503,15 @@ function SearchView(props) {
                   {"Ver mapeamento"}
                 </button>
               )}
-              <button onClick={function(){ if(props.onNav) props.onNav("contacts"); }} style={{background:"#fff",color:"#4f46e5",border:"1.5px solid rgba(99,102,241,.4)",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              <button onClick={function(){
+                storageList("contact:").then(function(keys){
+                  if (keys.length > 0) {
+                    if(props.onNav) props.onNav("contacts");
+                  } else {
+                    alert("Nenhum contato mapeado ainda. Clique em \"Buscar Contatos no LinkedIn\" dentro do mapeamento de uma conta.");
+                  }
+                });
+              }} style={{background:"#fff",color:"#4f46e5",border:"1.5px solid rgba(99,102,241,.4)",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                 {"Ver contatos mapeados"}
               </button>
             </div>
@@ -4269,13 +4276,14 @@ function ProspectView(props) {
         if (props.onSaveRaw) {
           props.onSaveRaw(emp.nome, resp.results, true, null, "", function(acc){
             setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
-            if (acc && acc.aiMapped) return; // already mapped, skip
-            // Mark immediately to prevent loop
+            if (acc && (acc.aiMapped || acc.aiMappingInProgress)) return; // already mapped/in-progress
+            // Mark in-progress immediately to prevent loop
             if (acc && acc.id) {
               storageGet(acc.id).then(function(cur){
-                if (cur && !cur.aiMapped) storageSet(acc.id, Object.assign({},cur,{aiMapped:true}));
+                if (cur && !cur.aiMapped && !cur.aiMappingInProgress) {
+                  storageSet(acc.id, Object.assign({},cur,{aiMappingInProgress:true}));
+                }
               });
-              if (props.onUpdateAccount) props.onUpdateAccount(Object.assign({},acc,{aiMapped:true}));
             }
             // Trigger full AI mapping after account saved
             var icpLocal = getStoredIcp();
