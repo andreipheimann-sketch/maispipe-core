@@ -1,7 +1,7 @@
 // api/setup.js — Vercel serverless
-// Usa a API do Claude (Anthropic) para gerar o "DNA" completo da empresa vendedora.
+// Usa a API do Groq (Llama 3.3 70B) para gerar o "DNA" completo da empresa vendedora.
 // Chamado uma única vez no onboarding. Resultado salvo em localStorage pipe_setup_dna.
-// Variavel de ambiente necessaria: ANTHROPIC_API_KEY
+// Variavel de ambiente necessaria: GROQ_API_KEY
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -10,8 +10,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY não configurada." });
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "GROQ_API_KEY não configurada." });
 
   try {
     const { companySite, icp, produtos } = req.body || {};
@@ -170,35 +170,46 @@ Gere um JSON válido com EXATAMENTE esta estrutura. Seja extremamente específic
 
 Responda APENAS com o JSON — sem texto antes ou depois, sem markdown extra além das backticks do bloco.`;
 
-    // ── Call Claude API ────────────────────────────────────────────────────────
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // ── Call Groq API ──────────────────────────────────────────────────────────
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type":            "application/json",
-        "x-api-key":               apiKey,
-        "anthropic-version":       "2023-06-01",
+        "Content-Type":  "application/json",
+        "Authorization": "Bearer " + apiKey,
       },
       body: JSON.stringify({
-        model:      "claude-sonnet-4-6",
-        max_tokens: 4096,
-        messages:   [{ role: "user", content: prompt }],
+        model:           "llama-3.3-70b-versatile",
+        max_tokens:      4096,
+        temperature:     0.7,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "Você é um especialista em vendas B2B enterprise no Brasil. Responda APENAS com JSON válido, sem texto antes ou depois, sem markdown. Todo conteúdo em Português do Brasil." },
+          { role: "user",   content: prompt },
+        ],
       }),
     });
 
     if (!response.ok) {
       const txt = await response.text();
-      return res.status(502).json({ error: `Claude API erro ${response.status}: ${txt.slice(0, 200)}` });
+      return res.status(502).json({ error: `Groq API erro ${response.status}: ${txt.slice(0, 200)}` });
     }
 
     const data = await response.json();
-    const raw  = (data.content || []).map(b => b.text || "").join("").trim();
+    const raw  = ((data.choices || [])[0]?.message?.content || "").trim();
     const json = raw.replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/```\s*$/,"").trim();
 
     let parsed;
     try {
       parsed = JSON.parse(json);
     } catch (e) {
-      return res.status(200).json({ error: "Falha ao interpretar resposta do Claude.", raw: raw.slice(0, 500) });
+      // Try extracting JSON object
+      try {
+        const m = json.match(/\{[\s\S]+\}/);
+        if (m) parsed = JSON.parse(m[0]);
+        else throw e;
+      } catch (e2) {
+        return res.status(200).json({ error: "Falha ao interpretar resposta.", raw: raw.slice(0, 500) });
+      }
     }
 
     return res.status(200).json({ ok: true, dna: parsed });
