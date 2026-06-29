@@ -791,6 +791,7 @@ function PipelineView(props) {
   var _st_dragAcc = useState(null); var dragAcc = _st_dragAcc[0]; var setDragAcc = _st_dragAcc[1];
   var _st_ghostPos = useState({x:0, y:0}); var ghostPos = _st_ghostPos[0]; var setGhostPos = _st_ghostPos[1];
   var _st_ghostW = useState(160); var ghostW = _st_ghostW[0]; var setGhostW = _st_ghostW[1];
+  var _st_pipeSort = useState("az"); var pipeSort = _st_pipeSort[0]; var setPipeSort = _st_pipeSort[1];
   var dragFrom = useRef(null);
   var colRefs = useRef({});
   function getColAtPoint(x, y) {
@@ -890,11 +891,24 @@ function PipelineView(props) {
   var ghostFc = dragAcc ? (FIT_CONFIG[dragAcc.fit]||FIT_CONFIG.ALTO) : null;
   return (
     <div ref={rootRef} style={{position:"relative"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:10}}>
+        <div>
+          <div style={{fontSize:24,fontWeight:800,color:"#0f172a",letterSpacing:"-.5px"}}>{"Pipeline"}</div>
+          <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{props.accounts.length + " conta" + (props.accounts.length!==1?"s":"") + " no pipeline"}</div>
+        </div>
+        <button onClick={function(){setPipeSort(function(s){ return s==="az"?"za":"az"; });}} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"7px 14px",fontSize:12,fontWeight:600,color:"#475569",cursor:"pointer",fontFamily:"inherit",transition:"all .2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#6366f1";e.currentTarget.style.color="#4f46e5";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.color="#475569";}}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 6h18M6 12h12M9 18h6"/></svg>
+          {pipeSort==="az"?"A → Z":"Z → A"}
+        </button>
+      </div>
       <div className="fluxo de atendimento-scroll" style={{overflowX:"auto",paddingBottom:16,userSelect:"none"}}>
         <div style={{display:"flex",gap:14,minWidth:900}}>
           {STATUS_ORDER.map(function(col) {
             var sc = STATUS_CONFIG[col];
-            var cards = props.accounts.filter(function(a){return a.status===col;});
+            var cards = props.accounts.filter(function(a){return a.status===col;}).slice().sort(function(a,b){
+              var na=(a.nome||"").toLowerCase(), nb=(b.nome||"").toLowerCase();
+              return pipeSort==="az" ? na.localeCompare(nb,"pt-BR") : nb.localeCompare(na,"pt-BR");
+            });
             var isOver = overCol===col && dragFrom.current!==null && dragFrom.current!==col;
             return (
               <div key={col} ref={function(el){colRefs.current[col]=el;}} style={{flex:1,minWidth:155,background:isOver?"rgba(99,102,241,.06)":"#f8fafc",borderRadius:16,padding:14,border:"1.5px solid "+(isOver?"#6366f1":"#e8edf4"),transition:"border-color .15s,background .15s",boxShadow:isOver?"0 0 0 3px rgba(99,102,241,.15)":"none"}}>
@@ -3861,6 +3875,19 @@ function InsightsView(props) {
   var accounts = props.accounts;
   var total = accounts.length;
   var _st_pdfFilters = useState({fit:"",tier:"",nome:"",from:"",to:""}); var pdfFilters = _st_pdfFilters[0]; var setPdfFilters = _st_pdfFilters[1];
+
+  var ALL_METRICS = [
+    {id:"funil",     label:"Funil de Status",         emoji:"📊"},
+    {id:"fit",       label:"Distribuição de Fit",      emoji:"🎯"},
+    {id:"tier",      label:"Distribuição por Tier",    emoji:"🏆"},
+    {id:"velocidade",label:"Velocidade de Mapeamento", emoji:"⚡"},
+    {id:"setor",     label:"Top Setores",              emoji:"🏭"},
+    {id:"lista",     label:"Lista de Contas",          emoji:"📋"},
+    {id:"conversao", label:"Taxa de Conversão",        emoji:"📈"},
+  ];
+  var _st_selMetrics = useState({"funil":true,"fit":true,"tier":true,"lista":true}); var selMetrics = _st_selMetrics[0]; var setSelMetrics = _st_selMetrics[1];
+  var _st_showMetricPicker = useState(false); var showMetricPicker = _st_showMetricPicker[0]; var setShowMetricPicker = _st_showMetricPicker[1];
+  function toggleMetric(id) { setSelMetrics(function(s){ var n=Object.assign({},s); if(n[id]) delete n[id]; else n[id]=true; return n; }); }
   // -- SVG Donut chart helper
   function buildDonutPaths(segments, cx, cy, r, innerR) {
     var total2=segments.reduce(function(s,seg){return s+(seg.value||0);},0)||1;
@@ -3987,13 +4014,39 @@ function InsightsView(props) {
           <div style={{fontSize:28,fontWeight:800,color:"#0f172a",letterSpacing:"-0.6px"}}>{"Relatórios"}</div>
           <div style={{fontSize:13,color:"#52617a",marginTop:2}}>{"Dashboard de performance da sua prospecção."}</div>
         </div>
-        <button onClick={function(){exportRelatoriosPDF(accounts,pdfFilters);}} style={{display:"flex",alignItems:"center",gap:7,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:11,padding:"10px 18px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          {"Exportar PDF"}
-        </button>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+          {/* Metric picker */}
+          <div style={{position:"relative"}}>
+            <button onClick={function(){setShowMetricPicker(!showMetricPicker);}} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:600,color:"#475569",cursor:"pointer",fontFamily:"inherit"}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              {"Métricas (" + Object.keys(selMetrics).length + ")"}
+            </button>
+            {showMetricPicker && (
+              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:"#fff",border:"1px solid #e6e9ef",borderRadius:14,boxShadow:"0 12px 40px rgba(15,23,42,.15)",zIndex:100,minWidth:230,padding:"8px 0",overflow:"hidden"}}>
+                <div style={{padding:"8px 14px 6px",fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8}}>{"Selecionar métricas"}</div>
+                {ALL_METRICS.map(function(m){
+                  var checked = !!selMetrics[m.id];
+                  return (
+                    <div key={m.id} onClick={function(){toggleMetric(m.id);}} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",cursor:"pointer",background:checked?"#f0f3ff":"transparent",transition:"background .15s"}} onMouseEnter={function(e){if(!checked)e.currentTarget.style.background="#f8fafc";}} onMouseLeave={function(e){if(!checked)e.currentTarget.style.background="transparent";}}>
+                      <div style={{width:16,height:16,borderRadius:4,border:"2px solid "+(checked?"#6366f1":"#d1d5db"),background:checked?"#6366f1":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
+                        {checked && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                      </div>
+                      <span style={{fontSize:12}}>{m.emoji}</span>
+                      <span style={{fontSize:12,fontWeight:checked?600:400,color:checked?"#1e293b":"#475569"}}>{m.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <button onClick={function(){setShowMetricPicker(false); exportRelatoriosPDF(accounts,pdfFilters);}} style={{display:"flex",alignItems:"center",gap:7,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:11,padding:"10px 18px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {"Exportar PDF"}
+          </button>
+        </div>
       </div>
 
-      {/* KPI ROW */}
+      {/* KPI ROW — always shown */}
       <div className="kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:18}}>
         {kpis.map(function(k, i) {
           return (
@@ -4008,7 +4061,7 @@ function InsightsView(props) {
       </div>
 
       {/* ROW: Funnel + Conversion */}
-      <div className="chart-grid" style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:16,marginBottom:16}}>
+      {(selMetrics.funil||selMetrics.conversao) && <div className="chart-grid" style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:16,marginBottom:16}}>
         <div style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:20,padding:"22px 24px",boxShadow:"0 2px 12px rgba(15,23,42,.05)",animation:"repFadeUp .5s ease .1s both"}}>
           <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:4}}>{"Funil de Conversão"}</div>
           <div style={{fontSize:11,color:"#94a3b8",marginBottom:18}}>{"Jornada do mapeamento ao ganho"}</div>
@@ -4045,10 +4098,10 @@ function InsightsView(props) {
             );})}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ROW: Velocity line + Tier donut */}
-      <div className="chart-grid" style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:16,marginBottom:16}}>
+      {(selMetrics.velocidade||selMetrics.tier) && <div className="chart-grid" style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:16,marginBottom:16}}>
         <div style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:20,padding:"22px 24px",boxShadow:"0 2px 12px rgba(15,23,42,.05)",animation:"repFadeUp .5s ease .24s both"}}>
           <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:4}}>{"Velocidade de Mapeamento"}</div>
           <div style={{fontSize:11,color:"#94a3b8",marginBottom:16}}>{"Contas mapeadas nas últimas 8 semanas"}</div>
@@ -4087,10 +4140,10 @@ function InsightsView(props) {
             );})}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ROW: Sector bar chart + Status pipeline */}
-      <div className="chart-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+      {(selMetrics.setor||selMetrics.funil) && <div className="chart-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
         <div style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:20,padding:"22px 24px",boxShadow:"0 2px 12px rgba(15,23,42,.05)",animation:"repFadeUp .5s ease .36s both"}}>
           <div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:4}}>{"Top Setores"}</div>
           <div style={{fontSize:11,color:"#94a3b8",marginBottom:18}}>{"Concentração da carteira"}</div>
@@ -4126,7 +4179,7 @@ function InsightsView(props) {
             })}
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -4503,7 +4556,11 @@ function ProspectView(props) {
                   {emp.site && <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}><a href={"https://"+emp.site.replace(/^https?:\/\//,"")} target="_blank" rel="noopener noreferrer" style={{color:"#6366f1",textDecoration:"none"}} onClick={function(e){e.stopPropagation();}}>{"🔗 "+emp.site}</a></div>}
                   <div style={{display:"flex",gap:8}} onClick={function(e){e.stopPropagation();}}>
                     {jaMapeada ? (
-                      <button onClick={function(){if(props.onNav)props.onNav("accounts");}} style={{flex:1,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#475569",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Ver em Contas →"}</button>
+                      <button onClick={function(){
+                        if(props.onNav) props.onNav("accounts");
+                        var found = props.accounts.find(function(a){ return a.nome.toLowerCase()===emp.nome.toLowerCase(); });
+                        if(found && props.onOpenAccount) props.onOpenAccount(found);
+                      }} style={{flex:1,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#475569",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Ver em Contas →"}</button>
                     ) : jaEnriq ? (
                       <button onClick={function(){
                         if(props.onNav) props.onNav("accounts");
