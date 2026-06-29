@@ -1368,7 +1368,10 @@ function AccountModal(props) {
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8,flexWrap:"wrap"}}>
                 <StakeholdersFetchBtn acc={acc} onContactsRefresh={props.onContactsRefresh} onDone={function(data){setEnrichedContacts(data.contacts||[]);setEnrichedSources(data.sources||[]);}}/>
-                <button onClick={function(){if(onNav){props.onClose();onNav("contacts");}}} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.25)"}}>
+                <button onClick={function(){
+                  if(props.onSetContactSearch) props.onSetContactSearch(acc.nome);
+                  if(onNav){ props.onClose(); onNav("contacts"); }
+                }} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.25)"}}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                   {"Ver contatos mapeados"}
                 </button>
@@ -1737,7 +1740,7 @@ function ContactsView(props) {
   var _st_contacts = useState([]); var contacts = _st_contacts[0]; var setContacts = _st_contacts[1];
   var _st_loading = useState(true); var loadingC = _st_loading[0]; var setLoadingC = _st_loading[1];
   var _st_csort = useState("az"); var csort = _st_csort[0]; var setCsort = _st_csort[1];
-  var _st_search = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
+  var _st_search = useState(props.defaultSearch||""); var search = _st_search[0]; var setSearch = _st_search[1];
   var _st_enriching = useState({}); var enriching = _st_enriching[0]; var setEnriching = _st_enriching[1];
   var _st_toast = useState(null); var toastC = _st_toast[0]; var setToastC = _st_toast[1];
   var _st_expanded = useState({}); var expandedGroups = _st_expanded[0]; var setExpandedGroups = _st_expanded[1];
@@ -1790,6 +1793,7 @@ function ContactsView(props) {
   }
 
   useEffect(function() {
+    if (props.onMounted) props.onMounted();
     setLoadingC(true);
     storageList("contact:").then(function(keys) {
       if (!keys.length) { setContacts([]); setLoadingC(false); return; }
@@ -3511,6 +3515,7 @@ function SearchView(props) {
               <button onClick={function(){
                 storageList("contact:").then(function(keys){
                   if (keys.length > 0) {
+                    if(props.onSetContactSearch && done) props.onSetContactSearch(done);
                     if(props.onNav) props.onNav("contacts");
                   } else {
                     alert("Nenhum contato mapeado ainda. Clique em \"Buscar Contatos no LinkedIn\" dentro do mapeamento de uma conta.");
@@ -4502,7 +4507,7 @@ function ProspectView(props) {
                     ) : jaEnriq ? (
                       <button onClick={function(){
                         if(props.onNav) props.onNav("accounts");
-                        if(props.onOpenAccount) setTimeout(function(){ props.onOpenAccount(enriched[emp.nome]); }, 100);
+                        if(props.onOpenAccount) props.onOpenAccount(enriched[emp.nome]);
                       }} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>{"Ver conta mapeada →"}</button>
                     ) : (
                       <button onClick={function(){enriquecerEmpresa(emp);}} disabled={isEnriching} style={{flex:1,background:isEnriching?"#f1f5f9":"linear-gradient(135deg,#6366f1,#4f46e5)",color:isEnriching?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:isEnriching?"default":"pointer",fontFamily:"inherit",boxShadow:isEnriching?"none":"0 4px 12px rgba(99,102,241,.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .2s"}}>
@@ -4610,6 +4615,7 @@ export default function App() {
     try { return !!localStorage.getItem("pipe_setup_done"); } catch(e){ return false; }
   }); var setupDone = _st_setupDone[0]; var setSetupDone = _st_setupDone[1];
   var _st_setupUnlocking = useState(false); var setupUnlocking = _st_setupUnlocking[0]; var setSetupUnlocking = _st_setupUnlocking[1];
+  var _st_pendingContactSearch = useState(""); var pendingContactSearch = _st_pendingContactSearch[0]; var setPendingContactSearch = _st_pendingContactSearch[1];
   var _st_openAcc = useState(null); var openAcc = _st_openAcc[0]; var setOpenAcc = _st_openAcc[1];
   var _st_toast = useState(null); var toast = _st_toast[0]; var setToast = _st_toast[1];
   var _st_sidebarOpen = useState(false); var sidebarOpen = _st_sidebarOpen[0]; var setSidebarOpen = _st_sidebarOpen[1];
@@ -4994,13 +5000,13 @@ export default function App() {
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage} onChangePlan={changePlan}/>}
-              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
+              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts}/>}
               {nav==="biblioteca" && <BibliotecaView showToast={showToast} onCountChange={setSeqCount} onOpenSeq={setOpenSeq}/>}
-              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} onCreateAccount={function(nome){
+              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} defaultSearch={pendingContactSearch} onMounted={function(){ setPendingContactSearch(""); }} onCreateAccount={function(nome){
                 var id="acc:"+Date.now()+"-"+Math.random().toString(36).slice(2,7);
                 var acc={id:id,nome:nome,setor:"Criada manualmente",fit:"-",tier:"-",status:"prospecting",mapped:false,manualOnly:true,savedAt:Date.now(),data:null};
                 storageSet(id,acc).then(function(){setAccounts(function(prev){return [acc].concat(prev);});});
@@ -5018,7 +5024,7 @@ export default function App() {
           )}
         </div>
       </div>
-      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh}/>}
+      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch}/>}
       {openSeq && <SequenceModal seq={openSeq} onClose={function(){setOpenSeq(null);}}/>}
       {toast && (
         <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:340,display:"flex",alignItems:"center",gap:10}}>
