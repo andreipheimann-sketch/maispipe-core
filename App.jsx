@@ -1346,12 +1346,12 @@ function AccountModal(props) {
               {sinais.length>0&&<Sec title="Sinais de Intenção"><div style={{background:"#0c2340",borderRadius:12,padding:"12px 16px"}}>{sinais.map(function(s,i){return <div key={i} style={{fontSize:11.5,color:"#7dd3fc",lineHeight:1.6,display:"flex",gap:8,marginBottom:5}}><span style={{color:"#38bdf8",flexShrink:0}}>o</span>{s}</div>;})}</div></Sec>}
               {concorrentes.length>0&&<Sec title="Concorrentes Prováveis"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{concorrentes.map(function(cc,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{cc}</span>;})}</div></Sec>}
               {noticias.length>0&&<Sec title="Notícias e Contexto">{noticias.map(function(n,i){return <div key={i} style={{background:"#fbfbfd",border:"1px solid #e6e9ef",borderRadius:12,padding:"12px 14px",marginBottom:8}}>{n.url?<a href={n.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,fontWeight:700,color:"#0ea5e9",textDecoration:"none",display:"block",marginBottom:3}}>{n.titulo}</a>:<div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:3}}>{n.titulo}</div>}<div style={{fontSize:11.5,color:"#52617a",lineHeight:1.6,marginBottom:3}}>{n.resumo}</div><div style={{fontSize:10,color:"#a5b4fc",fontWeight:600}}>{"-> "+n.relevancia}</div></div>;})}</Sec>}
-              {!acc.aiMapped && (dores.length===0 || triggers.length===0) && (
+              {(dores.length===0 || triggers.length===0) && !acc.aiMapped && (Date.now() - (acc.savedAt||0)) < 180000 && (
                 <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
                   <div>
                     <div style={{fontSize:12,fontWeight:700,color:"#4f46e5",marginBottom:2}}>{"IA mapeando a conta..."}</div>
-                    <div style={{fontSize:11,color:"#64748b"}}>{"Dores, gatilhos, perguntas SPIN e emails estão sendo gerados. Feche e reabra o card em alguns segundos."}</div>
+                    <div style={{fontSize:11,color:"#64748b"}}>{"Feche e reabra este card em alguns segundos para ver os resultados."}</div>
                   </div>
                 </div>
               )}
@@ -1437,10 +1437,14 @@ function AccountModal(props) {
             <div>
               <Sec title="Perguntas SPIN">
                 {spin.length === 0 ? (
-                  <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
-                    <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
-                    <div style={{fontSize:12,color:"#4f46e5",fontWeight:500}}>{"Perguntas SPIN sendo geradas pela IA. Feche e reabra este card em alguns segundos."}</div>
-                  </div>
+                  (Date.now() - (acc.savedAt||0)) < 180000 ? (
+                    <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
+                      <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
+                      <div style={{fontSize:12,color:"#4f46e5",fontWeight:500}}>{"IA gerando perguntas SPIN... Feche e reabra este card em alguns segundos."}</div>
+                    </div>
+                  ) : (
+                    <div style={{fontSize:12,color:"#94a3b8",padding:"16px 0"}}>{"Nenhuma pergunta SPIN gerada. Tente enriquecer novamente via Account Mapping."}</div>
+                  )
                 ) : spin.map(function(q,i){
                   var tipo=q.startsWith("SITUAÇÃO")||q.startsWith("SITUAÇÃO")?"S":q.startsWith("PROBLEMA")?"P":q.startsWith("IMPLICAÇÃO")||q.startsWith("IMPLICAÇÃO")?"I":"N";
                   var tc=tipo==="S"?"#0ea5e9":tipo==="P"?"#92400e":tipo==="I"?"#991b1b":"#2d3a8c";
@@ -3200,6 +3204,8 @@ function SearchView(props) {
           .then(function(r){ return r.ok ? r.json() : null; })
           .then(function(mapped){
             if (!mapped || mapped.error) return;
+            // Normalize: Gemini may return estrategia with or without accent, objeções with accent
+            var est = mapped.estrategia || mapped["estratégia"] || {};
             storageGet(k).then(function(cur){
               if (!cur) return;
               var updated = Object.assign({}, cur, {
@@ -3209,12 +3215,13 @@ function SearchView(props) {
                   triggers:      mapped.triggers      || cur.data.triggers,
                   stakeholders:  mapped.stakeholders  || cur.data.stakeholders,
                   estrategia:    Object.assign({}, (cur.data.estrategia||{}), {
-                    emails:         mapped.estrategia && mapped.estrategia.emails         || [],
-                    inmails:        mapped.estrategia && mapped.estrategia.inmails        || [],
-                    whatsapps:      mapped.estrategia && mapped.estrategia.whatsapps      || [],
-                    cold_calls:     mapped.estrategia && mapped.estrategia.cold_calls     || [],
-                    perguntas_spin: mapped.estrategia && mapped.estrategia.perguntas_spin || [],
-                    "objeções":     mapped.estrategia && mapped.estrategia["objeções"]    || [],
+                    emails:         est.emails         || [],
+                    inmails:        est.inmails        || [],
+                    whatsapps:      est.whatsapps      || [],
+                    cold_calls:     est.cold_calls     || [],
+                    perguntas_spin: est.perguntas_spin || [],
+                    "objeções":     est["objeções"]    || est.objecoes || [],
+                    objecoes:       est["objeções"]    || est.objecoes || [],
                     tier: (cur.data.estrategia && cur.data.estrategia.tier) || "Tier 2",
                   }),
                   proximos_passos: mapped.proximos_passos || cur.data.proximos_passos,
@@ -4266,6 +4273,7 @@ function ProspectView(props) {
             .then(function(r2){ return r2.ok?r2.json():null; })
             .then(function(mapped){
               if (!mapped||mapped.error) return;
+              var est = mapped.estrategia || mapped["estratégia"] || {};
               storageList("acc:").then(function(ks){
                 ks.forEach(function(k){
                   storageGet(k).then(function(stored){
@@ -4274,9 +4282,10 @@ function ProspectView(props) {
                       fit:mapped.fit||stored.data.fit, dores:mapped.dores||stored.data.dores,
                       triggers:mapped.triggers||stored.data.triggers, stakeholders:mapped.stakeholders||stored.data.stakeholders,
                       estrategia:Object.assign({},(stored.data.estrategia||{}),{
-                        emails:mapped.estrategia&&mapped.estrategia.emails||[], inmails:mapped.estrategia&&mapped.estrategia.inmails||[],
-                        whatsapps:mapped.estrategia&&mapped.estrategia.whatsapps||[], cold_calls:mapped.estrategia&&mapped.estrategia.cold_calls||[],
-                        perguntas_spin:mapped.estrategia&&mapped.estrategia.perguntas_spin||[], "objeções":mapped.estrategia&&mapped.estrategia["objeções"]||[],
+                        emails:est.emails||[], inmails:est.inmails||[],
+                        whatsapps:est.whatsapps||[], cold_calls:est.cold_calls||[],
+                        perguntas_spin:est.perguntas_spin||[], "objeções":est["objeções"]||est.objecoes||[],
+                        objecoes:est["objeções"]||est.objecoes||[],
                         tier:(stored.data.estrategia&&stored.data.estrategia.tier)||"Tier 2",
                       }),
                       proximos_passos:mapped.proximos_passos||stored.data.proximos_passos,
@@ -4758,41 +4767,28 @@ export default function App() {
     ".gradient-border::before{content:'';position:absolute;inset:-1.5px;border-radius:19px;background:linear-gradient(135deg,#6366f1,#8b5cf6,#22d3ee);z-index:-1;opacity:.4}",
     ".badge-glow{animation:glow 2.5s ease-in-out infinite}",
     "input::placeholder,textarea::placeholder{color:#9aa5b4}",
-    // ── Mobile responsive ────────────────────────────────────────────────────
-    "@media(max-width:767px){",
-    // Hide desktop sidebar
-    ".sidebar-desktop{display:none!important}",
-    // Full width content
-    ".main-content{padding:12px 12px 80px!important}",
-    // Bottom nav bar
-    ".mobile-nav{display:flex!important}",
-    // Account cards — full width list
-    ".acc-grid{grid-template-columns:1fr!important;gap:10px!important}",
-    ".acc-card-row{flex-wrap:wrap;gap:6px!important}",
-    // Prospect cards grid
-    ".prospect-grid{grid-template-columns:1fr!important;gap:10px!important}",
-    // Filters — stack vertically
-    ".filter-row{flex-wrap:wrap!important;gap:8px!important}",
-    // Hero banner — compact
-    ".hero-banner{padding:20px 16px!important}",
-    ".hero-stats{gap:8px!important}",
-    ".hero-stat{padding:10px 14px!important;min-width:80px!important}",
-    ".hero-title{font-size:26px!important}",
-    // Home config grid
-    ".config-grid{grid-template-columns:1fr!important}",
-    // Account modal — full screen
-    ".account-modal{width:100%!important;max-width:100%!important;height:100vh!important;max-height:100vh!important;border-radius:0!important;margin:0!important}",
-    // Tabs — scrollable
-    ".modal-tabs{overflow-x:auto!important;flex-wrap:nowrap!important;-webkit-overflow-scrolling:touch}",
-    ".modal-tabs button{white-space:nowrap!important;flex-shrink:0!important}",
-    // Sequence view
-    ".seq-grid{grid-template-columns:1fr!important}",
-    // Stats row in accounts
-    ".stats-row{gap:8px!important}",
-    ".stats-card{padding:12px!important;min-width:0!important}",
-    "}",
-    // Show mobile nav only on mobile (hidden by default)
     ".mobile-nav{display:none}",
+    "@media(max-width:767px){" +
+      ".sidebar-desktop{display:none!important}" +
+      ".main-content{padding:12px 12px 84px!important;width:100%!important;box-sizing:border-box!important}" +
+      ".mobile-nav{display:flex!important}" +
+      ".acc-grid,.card-grid,.prospect-grid{grid-template-columns:1fr!important;gap:10px!important}" +
+      ".filter-row{flex-wrap:wrap!important;gap:8px!important}" +
+      ".hero-banner{padding:20px 16px!important}" +
+      ".hero-title{font-size:24px!important;letter-spacing:-.5px!important}" +
+      ".hero-stats{gap:8px!important;flex-wrap:wrap!important}" +
+      ".hero-stat{padding:10px 12px!important;min-width:72px!important}" +
+      ".config-grid{grid-template-columns:1fr!important}" +
+      ".account-modal{width:100vw!important;max-width:100vw!important;border-radius:0!important;margin:0!important}" +
+      ".modal-tabs{overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}" +
+      ".modal-tabs button{white-space:nowrap!important;flex-shrink:0!important;font-size:11px!important;padding:9px 11px!important}" +
+      ".seq-grid{grid-template-columns:1fr!important}" +
+      ".stats-row{gap:8px!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}" +
+      ".modal-grid{grid-template-columns:1fr!important}" +
+      ".kpi-grid{grid-template-columns:1fr 1fr!important}" +
+      ".chart-grid{grid-template-columns:1fr!important}" +
+      ".g2{grid-template-columns:1fr!important}" +
+    "}",
   ].join("");
   var NAV = [
     {id:"home",         emoji:"🏠", label:"Home"},
