@@ -11,12 +11,23 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { company, domain } = req.body || {};
+    const { company, domain, dna } = req.body || {};
     if (!company) return res.status(400).json({ error: "company required" });
 
     const hunterKey = process.env.HUNTER_API_KEY;
     const apolloKey = process.env.APOLLO_API_KEY;
     const tavilyKey = process.env.TAVILY_API_KEY;
+
+    // Build relevant titles from seller DNA — falls back to generic C-level if no DNA
+    const dnaPrimary   = dna?.icp_refinado?.cargos_primarios   || [];
+    const dnaSecondary = dna?.icp_refinado?.cargos_secundarios || [];
+    const dnaTitles = [...dnaPrimary, ...dnaSecondary].filter(Boolean);
+
+    const relevantTitles = dnaTitles.length
+      ? dnaTitles
+      : ["CEO","CFO","COO","CTO","Diretor","VP","Head","Founder","Presidente","Gerente"];
+
+    const titlesQueryGroup = relevantTitles.slice(0, 8).join(" OR ");
 
     const contacts = [];
     const sources  = [];
@@ -70,7 +81,7 @@ export default async function handler(req, res) {
         // Use people/search v1 — works on free/basic plans unlike mixed_people/search
         const body = {
           api_key: apolloKey,
-          person_titles: ["CEO","CFO","COO","CTO","Diretor","VP","Head","Founder","Presidente","Gerente"],
+          person_titles: relevantTitles.slice(0, 10),
           person_locations: ["Brazil","Brasil"],
           page: 1,
           per_page: 10,
@@ -131,8 +142,13 @@ export default async function handler(req, res) {
     // ── LAYER 3: Tavily — LinkedIn public profiles ────────────────────────────
     if (tavilyKey) {
       const companyQ = `"${company}"`;
+      // First query uses relevant titles from seller DNA (specific to their ICP)
+      // Second query is a broader decision-maker net as fallback/complement
+      const primaryQuery = dnaTitles.length
+        ? `${companyQ} (${relevantTitles.slice(0,6).map(t=>`"${t}"`).join(" OR ")}) site:linkedin.com/in Brasil`
+        : `${companyQ} (CEO OR CFO OR CTO OR COO OR Diretor OR VP OR Fundador OR Presidente) site:linkedin.com/in Brasil`;
       const queries = [
-        `${companyQ} (CEO OR CFO OR CTO OR COO OR Diretor OR VP OR Fundador OR Presidente) site:linkedin.com/in Brasil`,
+        primaryQuery,
         `${companyQ} (Gerente OR "Head de" OR Superintendente OR Sócio OR "Diretor Comercial") site:linkedin.com/in Brasil`,
       ];
 
@@ -220,6 +236,24 @@ export default async function handler(req, res) {
               .replace(/\bat\s+/gi, "na ")
               .replace(/\bLtda\.\b/gi, "Ltda.")
               .trim();
+
+            // ── DNA relevance filter: skip roles unrelated to the seller's ICP ──
+            if (dnaTitles.length && rolePt) {
+              const rolePtLow = rolePt.toLowerCase();
+              // Always allow top C-level/founders regardless of DNA — they're always relevant
+              const isTopLevel = /\b(ceo|founder|fundador|s[oó]cio|presidente|owner|dono)\b/i.test(rolePtLow);
+              if (!isTopLevel) {
+                const matchesDna = dnaTitles.some(t => {
+                  const tLow = t.toLowerCase();
+                  return rolePtLow.includes(tLow) || tLow.includes(rolePtLow.split(/[\s,]+/)[0] || "");
+                });
+                // Also check against common keyword overlap (e.g. "segurança" matches "CISO", "diretor de segurança")
+                const dnaKeywords = dnaTitles.join(" ").toLowerCase().split(/[\s,/]+/).filter(w => w.length > 4);
+                const keywordMatch = dnaKeywords.some(kw => rolePtLow.includes(kw));
+                if (!matchesDna && !keywordMatch) continue;
+              }
+            }
+
             add({
               nome:     name,
               cargo:    rolePt,
