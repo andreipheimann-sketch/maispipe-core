@@ -2917,7 +2917,7 @@ function HomeView(props) {
 
               <div style={{display:"flex",gap:10,marginTop:20}}>
                 <button onClick={function(){ var empty={segmento:"",porte:"",faturamento:"",regiao:"",cargos:"",observacoes:""}; saveIcp(empty); }} style={{flex:1,background:"#fff",border:"1.5px solid rgba(239,68,68,.3)",color:"#ef4444",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Resetar ICP"}</button>
-                <button onClick={function(){setIcpModal(false);}} style={{flex:2,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>{"Salvar e fechar"}</button>
+                <button onClick={function(){setIcpModal(false); if(props.showToast) props.showToast("ICP atualizado!", "#10b981");}} style={{flex:2,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>{"Salvar e fechar"}</button>
               </div>
             </div>
           </div>
@@ -2973,7 +2973,7 @@ function HomeView(props) {
                 <button onClick={saveProduto} disabled={!newProd.nome.trim()} style={{width:"100%",marginTop:8,background:!newProd.nome.trim()?"#e2e8f0":"linear-gradient(135deg,#059669,#10b981)",color:!newProd.nome.trim()?"#94a3b8":"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:700,cursor:!newProd.nome.trim()?"default":"pointer",fontFamily:"inherit"}}>{"+ Adicionar produto"}</button>
               </div>
 
-              <button onClick={function(){setProdModal(false);}} style={{width:"100%",marginTop:14,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>{"Concluído"}</button>
+              <button onClick={function(){setProdModal(false); if(props.showToast) props.showToast("Produtos atualizados!", "#10b981");}} style={{width:"100%",marginTop:14,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>{"Concluído"}</button>
             </div>
           </div>
         </div>
@@ -5056,7 +5056,7 @@ export default function App() {
             </div>
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
-              {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage} onChangePlan={changePlan}/>}
+              {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage} onChangePlan={changePlan} showToast={showToast}/>}
               {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
