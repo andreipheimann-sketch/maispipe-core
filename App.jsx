@@ -270,6 +270,28 @@ var ONE_TOUCH_VARIANTS = {
 };
 
 function safeArr(v) { return Array.isArray(v) ? v : []; }
+
+// -- ICON (Google Material Symbols) -------------------------------------------
+function Icon(props) {
+  var size = props.size || 18;
+  var fill = props.fill ? 1 : 0;
+  return (
+    <span
+      className="material-symbols-rounded"
+      style={Object.assign({
+        fontSize: size,
+        width: size,
+        height: size,
+        fontVariationSettings: "'FILL' "+fill+", 'wght' "+(props.weight||500)+", 'GRAD' 0, 'opsz' "+size,
+        color: props.color || "currentColor",
+        flexShrink: 0,
+        userSelect: "none",
+      }, props.style||{})}
+    >
+      {props.name}
+    </span>
+  );
+}
 function fmtDate(ts) {
   if (!ts) return "";
   var d = new Date(ts);
@@ -1157,7 +1179,7 @@ function StakeholdersFetchBtn(props) {
     fetch("/api/stakeholders", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({company:acc.nome, domain:domain}),
+      body:JSON.stringify({company:acc.nome, domain:domain, dna:getStoredDna()}),
     })
       .then(function(r){
         var status = r.status;
@@ -1255,6 +1277,21 @@ function AccountModal(props) {
       setEnrichedSources(acc.enriched.sources || []);
     }
   }, [acc.id]);
+
+  function toggleFavoriteContact(idx) {
+    var updated = enrichedContacts.map(function(c, i) {
+      return i === idx ? Object.assign({}, c, { favorite: !c.favorite }) : c;
+    });
+    setEnrichedContacts(updated);
+    storageGet(acc.id).then(function(stored) {
+      if (!stored) return;
+      var newStored = Object.assign({}, stored, {
+        enriched: Object.assign({}, (stored.enriched||{}), { contacts: updated, sources: enrichedSources }),
+      });
+      storageSet(acc.id, newStored);
+      if (props.onUpdateAccount) props.onUpdateAccount(newStored);
+    });
+  }
   function sd(path) {
     function dig(p) {
       try { var parts=p.split("."); var cur=d; for(var i=0;i<parts.length;i++){cur=cur[parts[i]];if(cur==null)return null;} return cur; } catch(e){return null;}
@@ -1309,7 +1346,7 @@ function AccountModal(props) {
     }
     return null;
   }
-  var tabs=[{id:"overview",label:"Visão Geral"},{id:"stakeholders",label:"Stakeholders"},{id:"spin",label:"SPIN & Objeções"},{id:"plan",label:"Plano de Ação"}].concat(acc.attachData?[{id:"attachment",label:"Conteúdo Anexado"}]:[]);
+  var tabs=[{id:"overview",label:"Visão Geral"},{id:"stakeholders",label:"Stakeholders"},{id:"favoritos",label:"Favoritos",icon:"star"},{id:"spin",label:"SPIN & Objeções"},{id:"plan",label:"Plano de Ação"}].concat(acc.attachData?[{id:"attachment",label:"Conteúdo Anexado"}]:[]);
   var empresa=sd("empresa")||{};
   var stakeholders=safeArr(sd("stakeholders"));
   var dores=safeArr(sd("dores.principais"));
@@ -1353,7 +1390,7 @@ function AccountModal(props) {
             </div>
           </div>
           <div className="modal-tabs" style={{display:"flex",gap:0,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-            {tabs.map(function(tab){var active=activeTab===tab.id;return <button key={tab.id} onClick={function(){setActiveTab(tab.id);}} style={{padding:"10px 14px",border:"none",borderBottom:"2.5px solid "+(active?"#6366f1":"transparent"),background:"transparent",color:active?"#4f46e5":"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:active?700:500,transition:"all .15s",whiteSpace:"nowrap",flexShrink:0}}>{tab.label}</button>;})}
+            {tabs.map(function(tab){var active=activeTab===tab.id;return <button key={tab.id} onClick={function(){setActiveTab(tab.id);}} style={{padding:"10px 14px",border:"none",borderBottom:"2.5px solid "+(active?"#6366f1":"transparent"),background:"transparent",color:active?"#4f46e5":"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:active?700:500,transition:"all .15s",whiteSpace:"nowrap",flexShrink:0,display:"flex",alignItems:"center",gap:5}}>{tab.icon&&<Icon name={tab.icon} size={14} fill={active}/>}{tab.label}</button>;})}
           </div>
         </div>
         <div style={{padding:"22px 28px",maxHeight:"60vh",overflowY:"auto"}}>
@@ -1400,8 +1437,11 @@ function AccountModal(props) {
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10,marginBottom:16}}>
                     {enrichedContacts.map(function(contact,i){
                       return (
-                        <div key={i} style={{background:"linear-gradient(145deg,#f0fdf4,#fff)",border:"1.5px solid rgba(99,102,241,.25)",borderRadius:14,padding:"14px 16px"}}>
-                          <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:1}}>{contact.nome||contact.name||""}</div>
+                        <div key={i} style={{background:"linear-gradient(145deg,#f0fdf4,#fff)",border:"1.5px solid "+(contact.favorite?"rgba(245,158,11,.5)":"rgba(99,102,241,.25)"),borderRadius:14,padding:"14px 16px",position:"relative"}}>
+                          <button onClick={function(){toggleFavoriteContact(i);}} title={contact.favorite?"Remover dos favoritos":"Adicionar aos favoritos"} style={{position:"absolute",top:10,right:10,background:contact.favorite?"rgba(245,158,11,.12)":"none",border:"1px solid "+(contact.favorite?"rgba(245,158,11,.4)":"#e2e8f0"),borderRadius:7,padding:5,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
+                            <Icon name="star" size={14} fill={contact.favorite} color={contact.favorite?"#f59e0b":"#94a3b8"}/>
+                          </button>
+                          <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:1,paddingRight:26}}>{contact.nome||contact.name||""}</div>
                           {(contact.cargo||contact.title)&&<div style={{fontSize:10,color:"#a5b4fc",marginBottom:6,fontWeight:600}}>{contact.cargo||contact.title}</div>}
                           <div style={{display:"flex",flexDirection:"column",gap:5}}>
                             {contact.email&&(
@@ -1455,6 +1495,53 @@ function AccountModal(props) {
                 })}
               </div>
               </Sec>
+            </div>
+          )}
+          {activeTab==="favoritos"&&(
+            <div>
+              {(function(){
+                var favs = enrichedContacts.map(function(c,i){return Object.assign({},c,{_idx:i});}).filter(function(c){return c.favorite;});
+                if (!favs.length) {
+                  return (
+                    <div style={{textAlign:"center",padding:"48px 20px"}}>
+                      <div style={{marginBottom:12,opacity:.35,display:"flex",justifyContent:"center"}}><Icon name="star" size={40} color="#94a3b8"/></div>
+                      <div style={{fontSize:14,fontWeight:700,color:"#475569",marginBottom:6}}>{"Nenhum contato favoritado ainda"}</div>
+                      <div style={{fontSize:12,color:"#94a3b8",maxWidth:340,margin:"0 auto",lineHeight:1.6}}>{"Vá até a aba Stakeholders e clique na estrela dos contatos que você quer priorizar nesta conta."}</div>
+                    </div>
+                  );
+                }
+                return (
+                  <Sec title={favs.length+" contato"+(favs.length>1?"s":"")+" favoritado"+(favs.length>1?"s":"")}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
+                      {favs.map(function(contact){
+                        return (
+                          <div key={contact._idx} style={{background:"linear-gradient(145deg,#fffbeb,#fff)",border:"1.5px solid rgba(245,158,11,.4)",borderRadius:14,padding:"14px 16px",position:"relative"}}>
+                            <button onClick={function(){toggleFavoriteContact(contact._idx);}} title="Remover dos favoritos" style={{position:"absolute",top:10,right:10,background:"rgba(245,158,11,.12)",border:"1px solid rgba(245,158,11,.4)",borderRadius:7,padding:5,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <Icon name="star" size={14} fill={true} color="#f59e0b"/>
+                            </button>
+                            <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:1,paddingRight:26}}>{contact.nome||contact.name||""}</div>
+                            {(contact.cargo||contact.title)&&<div style={{fontSize:10,color:"#b45309",marginBottom:6,fontWeight:600}}>{contact.cargo||contact.title}</div>}
+                            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                              {contact.email&&(
+                                <a href={"mailto:"+contact.email} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#0ea5e9",textDecoration:"none",background:"rgba(14,165,233,.06)",borderRadius:6,padding:"4px 8px"}}>
+                                  <span>{"@"}</span>
+                                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{contact.email}</span>
+                                </a>
+                              )}
+                              {contact.linkedin&&(
+                                <a href={contact.linkedin.startsWith("http")?contact.linkedin:"https://www.linkedin.com/in/"+contact.linkedin} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#0a66c2",textDecoration:"none",background:"rgba(10,102,194,.06)",borderRadius:6,padding:"4px 8px",fontWeight:600}}>
+                                  <span>in</span><span>Ver perfil LinkedIn</span>
+                                </a>
+                              )}
+                              {contact.phone&&<span style={{fontSize:10,color:"#52617a",padding:"2px 0"}}>{contact.phone}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Sec>
+                );
+              })()}
             </div>
           )}
           {activeTab==="spin"&&(
@@ -1832,6 +1919,14 @@ function ContactsView(props) {
     });
   }
 
+  function toggleFavorite(c) {
+    var updated = Object.assign({}, c, { favorite: !c.favorite });
+    storageSet(c.id, updated).then(function(){
+      setContacts(function(prev){ return prev.map(function(p){ return p.id===c.id ? updated : p; }); });
+      showToastC(updated.favorite ? "Adicionado aos favoritos." : "Removido dos favoritos.", updated.favorite ? "#f59e0b" : "#64748b");
+    });
+  }
+
   function deleteAllFromGroup(empresa, group) {
     if (!window.confirm("Excluir todos os " + group.length + " contatos de " + empresa + "?")) return;
     Promise.all(group.map(function(c){ return storageDel(c.id); })).then(function() {
@@ -2135,6 +2230,9 @@ function ContactsView(props) {
                           {c.linkedin && (
                             <a href={c.linkedin} target="_blank" rel="noreferrer" title="Abrir LinkedIn" style={{background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",color:"#0a66c2",borderRadius:8,padding:"6px 9px",fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",flexShrink:0}}>{"in"}</a>
                           )}
+                          <button onClick={function(){toggleFavorite(c);}} title={c.favorite?"Remover dos favoritos":"Adicionar aos favoritos"} style={{background:c.favorite?"rgba(245,158,11,.12)":"none",border:"1px solid "+(c.favorite?"rgba(245,158,11,.4)":"#e2e8f0"),color:c.favorite?"#f59e0b":"#94a3b8",borderRadius:8,padding:"6px 9px",cursor:"pointer",fontFamily:"inherit",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
+                            <Icon name="star" size={14} fill={c.favorite} color={c.favorite?"#f59e0b":"currentColor"}/>
+                          </button>
                           <button onClick={function(){deleteContact(c.id);}} title="Remover contato" style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"6px 9px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>{"x"}</button>
                         </div>
                       );
@@ -3266,7 +3364,7 @@ function SearchView(props) {
     });
 
     // ── Real contacts via stakeholders API ────────────────────────────────────
-    fetch("/api/stakeholders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,domain:domain})})
+    fetch("/api/stakeholders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,domain:domain,dna:getStoredDna()})})
       .then(function(r){return r.ok?r.json():null;})
       .then(function(stakhData){
         if(!stakhData||!stakhData.contacts||!stakhData.contacts.length) return;
@@ -4591,16 +4689,16 @@ function ProspectView(props) {
 
 // -- MOBILE NAV ---------------------------------------------------------------
 var ALL_NAV = [
-  {id:"home",       emoji:"🏠", label:"Home"},
-  {id:"prospect",   emoji:"🎯", label:"Busca"},
-  {id:"search",     emoji:"🔍", label:"Mapping"},
-  {id:"accounts",   emoji:"📁", label:"Contas"},
-  {id:"contacts",   emoji:"👥", label:"Contatos"},
-  {id:"sequences",  emoji:"📬", label:"Sequências"},
-  {id:"biblioteca", emoji:"📚", label:"Biblioteca"},
-  {id:"pipeline",   emoji:"📊", label:"Pipeline"},
-  {id:"relatorios", emoji:"📈", label:"Relatórios"},
-  {id:"integracoes",emoji:"🔌", label:"Integrações"},
+  {id:"home",       icon:"home",                label:"Home"},
+  {id:"prospect",   icon:"target",               label:"Busca"},
+  {id:"search",     icon:"travel_explore",        label:"Mapping"},
+  {id:"accounts",   icon:"folder_open",           label:"Contas"},
+  {id:"contacts",   icon:"contacts",              label:"Contatos"},
+  {id:"sequences",  icon:"forward_to_inbox",      label:"Sequências"},
+  {id:"biblioteca", icon:"local_library",         label:"Biblioteca"},
+  {id:"pipeline",   icon:"view_kanban",           label:"Pipeline"},
+  {id:"relatorios", icon:"monitoring",            label:"Relatórios"},
+  {id:"integracoes",icon:"hub",                   label:"Integrações"},
 ];
 var PRIMARY_NAV = ALL_NAV.slice(0, 5);
 var MORE_NAV    = ALL_NAV.slice(5);
@@ -4629,7 +4727,7 @@ function MobileNav(props) {
             var locked = !setupDone;
             return (
               <button key={item.id} onClick={function(){goTo(item.id);}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,background:active?"rgba(99,102,241,.15)":"none",border:active?"1px solid rgba(99,102,241,.3)":"1px solid transparent",cursor:locked?"default":"pointer",padding:"10px 4px",borderRadius:12,opacity:locked?.3:1}}>
-                <span style={{fontSize:22,lineHeight:1}}>{item.emoji}</span>
+                <Icon name={item.icon} size={22} color={active?"#818cf8":"#7c869b"}/>
                 <span style={{fontSize:9,fontWeight:active?700:400,color:active?"#818cf8":"#7c869b"}}>{item.label}</span>
               </button>
             );
@@ -4645,7 +4743,7 @@ function MobileNav(props) {
             var locked = !setupDone && item.id !== "home";
             return (
               <button key={item.id} onClick={function(){ if(!locked){ setOpen(false); goTo(item.id); } }} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:locked?"default":"pointer",padding:"4px 6px",borderRadius:10,opacity:locked?.28:1,minWidth:44,flexShrink:0}}>
-                <span style={{fontSize:20,lineHeight:1}}>{item.emoji}</span>
+                <Icon name={item.icon} size={20} color={active?"#818cf8":"#5a6478"}/>
                 <span style={{fontSize:9,fontWeight:active?700:400,color:active?"#818cf8":"#5a6478"}}>{item.label}</span>
                 {active && <div style={{width:14,height:2,background:"#6366f1",borderRadius:2}}/>}
               </button>
@@ -4963,16 +5061,16 @@ export default function App() {
     "}",
   ].join("");
   var NAV = [
-    {id:"home",         emoji:"🏠", label:"Home"},
-    {id:"prospect",     emoji:"🎯", label:"Busca Geral"},
-    {id:"search",       emoji:"🔍", label:"Account Mapping"},
-    {id:"accounts",     emoji:"📁", label:"Contas"},
-    {id:"contacts",     emoji:"👥", label:"Contatos"},
-    {id:"sequences",    emoji:"📬", label:"Sequências"},
-    {id:"biblioteca",   emoji:"📚", label:"Biblioteca"},
-    {id:"pipeline",     emoji:"📊", label:"Pipeline"},
-    {id:"relatorios",   emoji:"📈", label:"Relatórios"},
-    {id:"integracoes",  emoji:"🔌", label:"Integrações"},
+    {id:"home",         icon:"home",                   label:"Home"},
+    {id:"prospect",     icon:"target",                 label:"Busca Geral"},
+    {id:"search",       icon:"travel_explore",          label:"Account Mapping"},
+    {id:"accounts",     icon:"folder_open",             label:"Contas"},
+    {id:"contacts",     icon:"contacts",                label:"Contatos"},
+    {id:"sequences",    icon:"forward_to_inbox",        label:"Sequências"},
+    {id:"biblioteca",   icon:"local_library",           label:"Biblioteca"},
+    {id:"pipeline",     icon:"view_kanban",             label:"Pipeline"},
+    {id:"relatorios",   icon:"monitoring",              label:"Relatórios"},
+    {id:"integracoes",  icon:"hub",                     label:"Integrações"},
   ];
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#eef1f6",overflowX:"clip",maxWidth:"100vw"}}>
@@ -5012,8 +5110,8 @@ export default function App() {
             return (
               <button key={item.id} onClick={function(){ if (!locked) setNav(item.id); }} title={sidebarExpanded?"":item.label} className={locked?"nav-locked":unlocking?"nav-unlocking":""} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:sidebarExpanded?"10px 12px":"8px 0",justifyContent:sidebarExpanded?"flex-start":"center",borderRadius:11,border:"1px solid "+(active?"rgba(99,102,241,.3)":"transparent"),background:active?"linear-gradient(135deg,rgba(99,102,241,.22),rgba(139,92,246,.15))":"transparent",color:active?"#ffffff":"rgba(255,255,255,.92)",cursor:locked?"default":"pointer",fontFamily:"inherit",fontSize:13,fontWeight:active?700:600,marginBottom:3,transition:"all .25s cubic-bezier(.4,0,.2,1)",textAlign:"left",boxShadow:active?"0 4px 14px rgba(99,102,241,.25)":"none",position:"relative",willChange:"background,color"}} onMouseEnter={function(e){if(!active&&!locked){e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="rgba(255,255,255,.85)";}}} onMouseLeave={function(e){if(!active&&!locked){e.currentTarget.style.background="transparent";e.currentTarget.style.color="rgba(255,255,255,.92)";}}}> 
                 {active && <span style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:18,background:"linear-gradient(180deg,#6366f1,#8b5cf6)",borderRadius:"0 3px 3px 0"}}/>}
-                <span style={{fontSize:sidebarExpanded?16:20,flexShrink:0,transition:"font-size .2s ease",position:"relative"}}>
-                  {item.emoji}
+                <span style={{display:"flex",alignItems:"center",justifyContent:"center",width:sidebarExpanded?20:22,flexShrink:0,transition:"width .2s ease",position:"relative"}}>
+                  <Icon name={item.icon} size={sidebarExpanded?18:21} color={active?"#ffffff":"rgba(255,255,255,.78)"}/>
                   {item.id==="prospect" && prospectLoading && <span style={{position:"absolute",top:-3,right:-3,width:7,height:7,borderRadius:"50%",background:"#a5b4fc",animation:"pulse 1.2s ease-in-out infinite"}}/>}
                 </span>
                 <span className={"sidebar-label " + (sidebarExpanded?"visible":"hidden")} style={{flex:1,display:"flex",alignItems:"center",gap:6}}>
