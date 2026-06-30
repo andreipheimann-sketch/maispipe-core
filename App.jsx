@@ -2257,10 +2257,12 @@ function ContactsView(props) {
 // -- INTEGRATIONS VIEW ---------------------------------------------------------
 function IntegrationsView() {
   var INTEGRATIONS = [
-    {id:"salesforce", name:"Salesforce", logo:"☁️", desc:"Sincronize contas, contatos e oportunidades com o Salesforce CRM.", color:"#00A1E0", connected:false},
-    {id:"hubspot",    name:"HubSpot",    logo:"🟠", desc:"Exporte leads e sequencias diretamente para o HubSpot CRM.",      color:"#FF7A59", connected:false},
-    {id:"pipedrive",  name:"Pipedrive",  logo:"🎯", desc:"Crie deals automaticamente no Pipedrive ao salvar uma conta.",    color:"#272D35", connected:false},
-    {id:"pipefy",     name:"Pipefy",     logo:"🟦", desc:"Dispare cards e automatize pipes no Pipefy a cada conta mapeada.", color:"#3B5BFE", connected:false},
+    {id:"salesforce", name:"Salesforce", icon:"cloud",        desc:"Sincronize contas, contatos e oportunidades com o Salesforce CRM.", color:"#00A1E0", connected:false},
+    {id:"hubspot",    name:"HubSpot",    icon:"hub",          desc:"Exporte leads e sequencias diretamente para o HubSpot CRM.",      color:"#FF7A59", connected:false},
+    {id:"pipedrive",  name:"Pipedrive",  icon:"target",       desc:"Crie deals automaticamente no Pipedrive ao salvar uma conta.",    color:"#272D35", connected:false},
+    {id:"pipefy",     name:"Pipefy",     icon:"view_kanban",  desc:"Dispare cards e automatize pipes no Pipefy a cada conta mapeada.", color:"#3B5BFE", connected:false},
+    {id:"zapier",     name:"Zapier",     icon:"bolt",         desc:"Conecte o +Pipe a milhares de apps via automações Zapier.",        color:"#FF4A00", connected:false},
+    {id:"make",       name:"Make",       icon:"account_tree", desc:"Crie cenários de automação visual com o Make (ex-Integromat).",     color:"#6D00CC", connected:false},
   ];
   var _st_states = useState(function(){
     var saved = {};
@@ -2324,7 +2326,7 @@ function IntegrationsView() {
           return (
             <div key={int.id} style={{background:"#ffffff",border:"1.5px solid "+(isConn?"#bbf7d0":"#e8edf4"),borderRadius:20,padding:"24px",boxShadow:"0 2px 12px rgba(15,23,42,.06)",transition:"all .25s"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 32px rgba(15,23,42,.07)";}} onMouseLeave={function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 2px 12px rgba(15,23,42,.06)";}}>
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-                <div style={{width:44,height:44,borderRadius:12,background:int.color+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{int.logo}</div>
+                <div style={{width:44,height:44,borderRadius:12,background:int.color+"18",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name={int.icon} size={22} color={int.color}/></div>
                 <div>
                   <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{int.name}</div>
                   {isConn && <div style={{fontSize:9,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:6,padding:"1px 7px",display:"inline-block",marginTop:2}}>{"CONECTADO"}</div>}
@@ -2346,7 +2348,7 @@ function IntegrationsView() {
           return (
             <div key={c.id} style={{background:"#ffffff",border:"1.5px solid rgba(52,211,153,.3)",borderRadius:20,padding:"24px",boxShadow:"0 2px 12px rgba(15,23,42,.06)"}}>
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-                <div style={{width:44,height:44,borderRadius:12,background:"#fbfbfd",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{"🔌"}</div>
+                <div style={{width:44,height:44,borderRadius:12,background:"#fbfbfd",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="cable" size={22} color="#6366f1"/></div>
                 <div>
                   <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{c.name}</div>
                   <div style={{fontSize:9,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:6,padding:"1px 7px",display:"inline-block",marginTop:2}}>{"CUSTOMIZADO"}</div>
@@ -2358,7 +2360,7 @@ function IntegrationsView() {
           );
         })}
         <button onClick={function(){setCustomModal(true);}} style={{background:"#fbfbfd",border:"2px dashed #e6e9ef",borderRadius:20,padding:"24px",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10,transition:"all .2s",minHeight:180}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.background="rgba(99,102,241,.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.background="#f1f3f6";}}>
-          <span style={{fontSize:32}}>{"+"}</span>
+          <Icon name="add" size={32} color="#94a3b8"/>
           <span style={{fontSize:13,fontWeight:600,color:"#52617a"}}>{"Adicionar integração"}</span>
           <span style={{fontSize:11,color:"#94a3b8"}}>{"Via webhook ou API key"}</span>
         </button>
@@ -2366,7 +2368,7 @@ function IntegrationsView() {
       {modalInt && (
         <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.32)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
           <div style={{background:"#ffffff",backdropFilter:"blur(32px)",WebkitBackdropFilter:"blur(32px)",border:"1px solid #dde1e8",borderRadius:24,width:"100%",maxWidth:460,padding:"28px",boxShadow:"0 32px 100px rgba(15,23,42,.28)"}}>
-            <div style={{fontSize:18,fontWeight:800,color:"#0f172a",marginBottom:4}}>{modalInt.logo + " Conectar " + modalInt.name}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><Icon name={modalInt.icon} size={20} color={modalInt.color}/><span style={{fontSize:18,fontWeight:800,color:"#0f172a"}}>{"Conectar " + modalInt.name}</span></div>
             <div style={{fontSize:12,color:"#64748b",marginBottom:20}}>{"Insira sua API Key do " + modalInt.name + " para ativar a integracao."}</div>
             <input value={apiKey} onChange={function(e){setApiKey(e.target.value);}} placeholder={"API Key do " + modalInt.name} style={{width:"100%",boxSizing:"border-box",background:"#fbfbfd",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none",marginBottom:16}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
             <div style={{display:"flex",gap:8}}>
@@ -2704,6 +2706,18 @@ function HomeView(props) {
     try { localStorage.setItem("pipe_produtos",JSON.stringify(updated)); } catch(e){}
   }
 
+  // ── Re-sync ICP/Produtos from localStorage the instant setup finishes ─────
+  // OnboardingFlow writes directly to localStorage (separate component, separate
+  // state) so HomeView's lazily-initialized state never picks it up without this.
+  var _prevSetupDone = useRef(setupDone);
+  useEffect(function(){
+    if (!_prevSetupDone.current && setupDone) {
+      try { var s=localStorage.getItem("pipe_icp"); if(s) setIcp(JSON.parse(s)); } catch(e){}
+      try { var s2=localStorage.getItem("pipe_produtos"); if(s2) setProdutos(JSON.parse(s2)); } catch(e){}
+    }
+    _prevSetupDone.current = setupDone;
+  }, [setupDone]);
+
   function toggleCard(id) {
     setHidden(function(h){ var n=Object.assign({},h); n[id]=!n[id]; return n; });
   }
@@ -2715,25 +2729,25 @@ function HomeView(props) {
   var taxa      = total>0?Math.round(converted/total*100):0;
 
   var CARDS = [
-    {id:"prospect",label:"Busca Geral",       emoji:"🎯", nav:"prospect",
+    {id:"prospect",label:"Busca Geral",       icon:"target", nav:"prospect",
      desc:"Gere uma lista de 30 empresas reais com base no seu ICP. Explore, filtre e enriqueça com um clique.",
      stat:"Grátis — sem consumir créditos", statColor:"#059669"},
-    {id:"busca",  label:"Account Mapping",    emoji:"🔍", nav:"search",
+    {id:"busca",  label:"Account Mapping",    icon:"travel_explore", nav:"search",
      desc:"Pesquise qualquer empresa e gere inteligência de conta completa: fit score, stakeholders, dores, mensagens e plano de ação.",
      stat:total+" conta"+(total!==1?"s":"")+" mapeada"+(total!==1?"s":""), statColor:"#6366f1"},
-    {id:"contas", label:"Contas",              emoji:"📁", nav:"accounts",
+    {id:"contas", label:"Contas",              icon:"folder_open", nav:"accounts",
      desc:"Todas as empresas mapeadas organizadas por fit, tier e estágio.",
      stat:total+" no total", statColor:"#0369a1"},
-    {id:"seqs",   label:"Sequências",          emoji:"📬", nav:"sequences",
+    {id:"seqs",   label:"Sequências",          icon:"forward_to_inbox", nav:"sequences",
      desc:"Gere cadências de 6 toques personalizadas por stakeholder com e-mail, InMail, WhatsApp e cold call.",
      stat:"6 toques por perfil", statColor:"#7c3aed"},
-    {id:"biblio", label:"Biblioteca",          emoji:"📚", nav:"biblioteca",
+    {id:"biblio", label:"Biblioteca",          icon:"local_library", nav:"biblioteca",
      desc:"Todas as sequências salvas organizadas. Exporte qualquer cadência em PDF com um clique.",
      stat:"Sequências salvas", statColor:"#059669"},
-    {id:"pipe",   label:"Pipeline Kanban",     emoji:"📊", nav:"pipeline",
+    {id:"pipe",   label:"Pipeline Kanban",     icon:"view_kanban", nav:"pipeline",
      desc:"Visualize todas as contas por estágio. Arraste os cards entre colunas para atualizar o status.",
      stat:converted+" convertida"+(converted!==1?"s":""), statColor:"#065f46"},
-    {id:"relat",  label:"Relatórios",          emoji:"📈", nav:"relatorios",
+    {id:"relat",  label:"Relatórios",          icon:"monitoring", nav:"relatorios",
      desc:"Dashboard com funil de conversão, distribuição por fit e tier, gráficos e export em PDF.",
      stat:taxa+"% taxa de conversão", statColor:"#92400e"},
   ];
@@ -2821,7 +2835,7 @@ function HomeView(props) {
         <div onClick={function(){onNav("prospect");}} style={{background:"linear-gradient(135deg,#0a0a14,#171430)",border:"1px solid rgba(99,102,241,.3)",borderRadius:18,padding:"24px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:20,transition:"all .25s cubic-bezier(.22,1,.36,1)",position:"relative",overflow:"hidden"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.6)";e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 12px 36px rgba(99,102,241,.2)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.3)";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
           <div style={{position:"absolute",top:-40,right:-20,width:160,height:160,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.25),transparent 70%)",filter:"blur(12px)"}}/>
           <div style={{width:52,height:52,borderRadius:15,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 6px 18px rgba(99,102,241,.45)"}}>
-            <span style={{fontSize:24}}>{"🎯"}</span>
+            <Icon name="target" size={24} color="#ffffff"/>
           </div>
           <div style={{flex:1,position:"relative",zIndex:1}}>
             <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:4,letterSpacing:"-.3px"}}>{"Busca Geral — mapeamento inicial"}</div>
@@ -2922,8 +2936,8 @@ function HomeView(props) {
           {CARDS.map(function(c2){
             var isHidden = hidden[c2.id];
             return (
-              <button key={c2.id} onClick={function(){toggleCard(c2.id);}} style={{background:isHidden?"rgba(255,255,255,.04)":"rgba(99,102,241,.15)",border:"1px solid "+(isHidden?"rgba(255,255,255,.08)":"rgba(99,102,241,.3)"),color:isHidden?"rgba(255,255,255,.4)":"#a5b4fc",borderRadius:8,padding:"4px 10px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all .2s",opacity:isHidden?.6:1}}>
-                {c2.emoji+" "+c2.label}
+              <button key={c2.id} onClick={function(){toggleCard(c2.id);}} style={{display:"flex",alignItems:"center",gap:5,background:isHidden?"rgba(255,255,255,.04)":"rgba(99,102,241,.15)",border:"1px solid "+(isHidden?"rgba(255,255,255,.08)":"rgba(99,102,241,.3)"),color:isHidden?"rgba(255,255,255,.4)":"#a5b4fc",borderRadius:8,padding:"4px 10px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all .2s",opacity:isHidden?.6:1}}>
+                <Icon name={c2.icon} size={12}/>{c2.label}
               </button>
             );
           })}
@@ -2937,7 +2951,7 @@ function HomeView(props) {
               onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.background="#fff";e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16}}>
                 <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 16px rgba(99,102,241,.4)",flexShrink:0}}>
-                  <span style={{fontSize:22}}>{card.emoji}</span>
+                  <Icon name={card.icon} size={22} color="#ffffff"/>
                 </div>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
               </div>
@@ -2954,7 +2968,7 @@ function HomeView(props) {
 
       {total === 0 && (
         <div style={{marginTop:28,background:"linear-gradient(135deg,rgba(99,102,241,.12),rgba(255,255,255,.02))",border:"1px solid rgba(99,102,241,.25)",borderRadius:18,padding:"32px",textAlign:"center"}}>
-          <div style={{fontSize:40,marginBottom:12}}>{"🚀"}</div>
+          <div style={{marginBottom:12,display:"flex",justifyContent:"center"}}><Icon name="rocket_launch" size={40} color="#6366f1"/></div>
           <div style={{fontSize:18,fontWeight:700,color:"#0f172a",marginBottom:8}}>{"Bem-vindo ao +pipe"}</div>
           <div style={{fontSize:13,color:"#64748b",marginBottom:20,lineHeight:1.7,maxWidth:400,margin:"0 auto 20px"}}>{"Comece mapeando sua primeira conta. Digite o nome de uma empresa ou cole o site dela na Busca."}</div>
           <button onClick={function(){onNav("search");}} style={{background:"linear-gradient(135deg,#6366f1,#7c3aed)",color:"#fff",border:"none",borderRadius:12,padding:"12px 28px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.45)"}}>
@@ -4539,7 +4553,7 @@ function ProspectView(props) {
 
       {lista.length === 0 && !loadingP && (
         <div style={{textAlign:"center",padding:"60px 20px",background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:20,marginBottom:24}}>
-          <div style={{fontSize:48,marginBottom:16}}>{"🎯"}</div>
+          <div style={{marginBottom:16,display:"flex",justifyContent:"center"}}><Icon name="target" size={48} color="#6366f1"/></div>
           <div style={{fontSize:20,fontWeight:800,color:"#0f172a",marginBottom:8}}>{"Gerar lista de prospecção"}</div>
           <div style={{fontSize:13,color:"#64748b",maxWidth:440,margin:"0 auto 16px",lineHeight:1.7}}>
             {icpPreenchido
@@ -4644,14 +4658,14 @@ function ProspectView(props) {
                       {jaEnriq && !jaMapeada && <span style={{fontSize:8,fontWeight:700,background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.25)",color:"#4f46e5",borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>{"✓ enriquecida"}</span>}
                     </div>
                   </div>
-                  {emp.porte_estimado && <div style={{fontSize:10,color:"#94a3b8",marginBottom:8}}>{"👥 "+emp.porte_estimado}</div>}
+                  {emp.porte_estimado && <div style={{fontSize:10,color:"#94a3b8",marginBottom:8,display:"flex",alignItems:"center",gap:4}}><Icon name="groups" size={12} color="#94a3b8"/>{emp.porte_estimado}</div>}
                   <div style={{fontSize:12,color:"#475569",lineHeight:1.6,marginBottom:8}}>{emp.resumo}</div>
                   {emp.motivo_fit && (
                     <div style={{background:"rgba(99,102,241,.05)",border:"1px solid rgba(99,102,241,.12)",borderRadius:8,padding:"7px 10px",fontSize:11,color:"#4338ca",lineHeight:1.5,marginBottom:12}}>
                       <span style={{fontWeight:700}}>{"Fit: "}</span>{emp.motivo_fit}
                     </div>
                   )}
-                  {emp.site && <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}><a href={"https://"+emp.site.replace(/^https?:\/\//,"")} target="_blank" rel="noopener noreferrer" style={{color:"#6366f1",textDecoration:"none"}} onClick={function(e){e.stopPropagation();}}>{"🔗 "+emp.site}</a></div>}
+                  {emp.site && <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}><a href={"https://"+emp.site.replace(/^https?:\/\//,"")} target="_blank" rel="noopener noreferrer" style={{color:"#6366f1",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}} onClick={function(e){e.stopPropagation();}}><Icon name="link" size={11} color="#6366f1"/>{emp.site}</a></div>}
                   <div style={{display:"flex",gap:8}} onClick={function(e){e.stopPropagation();}}>
                     {jaMapeada ? (
                       <button onClick={function(){
@@ -4673,7 +4687,7 @@ function ProspectView(props) {
                       </button>
                     )}
                     {emp.site && !jaMapeada && !jaEnriq && !isEnriching && (
-                      <button onClick={function(){if(props.onNav)props.onNav("search");}} title="Buscar manualmente" style={{background:"#f8fafc",border:"1px solid #e2e8f0",color:"#64748b",borderRadius:9,padding:"8px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>{"🔍"}</button>
+                      <button onClick={function(){if(props.onNav)props.onNav("search");}} title="Buscar manualmente" style={{background:"#f8fafc",border:"1px solid #e2e8f0",color:"#64748b",borderRadius:9,padding:"8px 10px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center"}}><Icon name="search" size={14}/></button>
                     )}
                   </div>
                 </div>
