@@ -158,7 +158,8 @@ export default async function handler(req, res) {
 
       const out = await callGroq(apiKey, system, user, 1024, false);
       if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
-      return res.status(200).json({ resumo: out.text || null });
+      const resumoClean = (out.text || "").replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
+      return res.status(200).json({ resumo: resumoClean || null });
     }
 
     // ── MODO MAPEAMENTO ───────────────────────────────────────────────────────
@@ -200,18 +201,18 @@ export default async function handler(req, res) {
         `  ],`,
         `  "estrategia": {`,
         `    "emails": [`,
-        `      {"assunto":"assunto específico que menciona algo da empresa ou setor","corpo":"email de 80-100 palavras personalizado para ${empresa}, com referência ao contexto da empresa, dor específica e CTA leve"},`,
-        `      {"assunto":"ângulo diferente do 1o email","corpo":"follow-up com outro ângulo — prova social, dado de mercado ou pergunta de discovery"},`,
-        `      {"assunto":"último email — direto e com classe","corpo":"breakup com gancho de urgência e porta aberta"}`,
+        `      {"assunto":"assunto específico que menciona algo da empresa ou setor","corpo":"email de 150-200 palavras personalizado para ${empresa}, com 2-3 parágrafos curtos, referência ao contexto da empresa, dado ou insight do setor, dor específica e CTA leve. Sem travessão, use vírgula."},`,
+        `      {"assunto":"ângulo diferente do 1o email","corpo":"follow-up de 150-200 palavras com outro ângulo, prova social, dado de mercado ou pergunta de discovery. Sem travessão."},`,
+        `      {"assunto":"último email, direto e com classe","corpo":"breakup de 100-150 palavras com gancho de urgência e porta aberta. Sem travessão."}`,
         `    ],`,
         `    "inmails": [`,
-        `      {"assunto":"InMail direto para o cargo decisor de ${empresa}","corpo":"40-60 palavras max. Gancho específico, pergunta de problema, CTA para resposta"},`,
-        `      {"assunto":"ângulo alternativo","corpo":"abordagem diferente — dados, tendência do setor ou referência a concorrente"}`,
+        `      {"assunto":"InMail direto para o cargo decisor de ${empresa}","corpo":"100-140 palavras. Gancho específico, 2 ideias desenvolvidas, pergunta de problema, CTA para resposta. Sem travessão."},`,
+        `      {"assunto":"ângulo alternativo","corpo":"100-140 palavras. Abordagem diferente, dados, tendência do setor ou referência a concorrente. Sem travessão."}`,
         `    ],`,
-        `    "whatsapps": ["mensagem curtíssima e informal — máx 2 frases, com nome da empresa e pergunta direta","segunda opção com ângulo diferente"],`,
+        `    "whatsapps": ["mensagem informal de 3-5 frases curtas, com nome da empresa e pergunta direta, sem travessão","segunda opção com ângulo diferente, mesma extensão"],`,
         `    "cold_calls": [`,
-        `      "script completo de cold call para ${empresa}: abertura de 10 segundos, pergunta de qualificação, ponte para a solução, CTA para reunião. Use o nome da empresa e cargo do decisor.",`,
-        `      "script alternativo — com referência a um trigger de compra ou dado do setor"`,
+        `      "script completo de cold call para ${empresa}: abertura de 10-15 segundos, pausa, pergunta de qualificação, resposta a objeção comum, ponte para a solução, CTA para reunião de 20 min. Mínimo 120 palavras. Use o nome da empresa e cargo do decisor. Sem travessão.",`,
+        `      "script alternativo de mínimo 120 palavras, com referência a um trigger de compra ou dado do setor. Sem travessão."`,
         `    ],`,
         `    "perguntas_spin": [`,
         `      "SITUAÇÃO: pergunta concreta sobre como ${empresa} opera hoje em relação à dor principal",`,
@@ -237,7 +238,7 @@ export default async function handler(req, res) {
         `}`,
       ].join("\n");
 
-      const out = await callGroq(apiKey, system, user, 4096, true);
+      const out = await callGroq(apiKey, system, user, 7000, true);
       if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
 
       let parsed;
@@ -252,6 +253,20 @@ export default async function handler(req, res) {
           return res.status(200).json({ error: "Falha ao interpretar resposta.", raw: out.text.slice(0, 200) });
         }
       }
+
+      // Safety net: strip em-dash/en-dash recursively from all string fields
+      function stripDashesDeep(obj) {
+        if (typeof obj === "string") return obj.replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
+        if (Array.isArray(obj)) return obj.map(stripDashesDeep);
+        if (obj && typeof obj === "object") {
+          const out = {};
+          for (const k in obj) out[k] = stripDashesDeep(obj[k]);
+          return out;
+        }
+        return obj;
+      }
+      parsed = stripDashesDeep(parsed);
+
       return res.status(200).json(parsed);
     }
 
@@ -285,13 +300,14 @@ export default async function handler(req, res) {
       `REGRAS ABSOLUTAS:`,
       `- Português do Brasil. Nunca inglês.`,
       `- ZERO placeholders. Nem [Nome], nem [Empresa], nem [Cargo]. Use os dados reais.`,
-      nomeUsar ? `- O nome do contato é ${nomeUsar}. Use nas mensagens quando natural.` : `- Nome desconhecido. Comece sem nome — com gancho direto ou "Oi," casual.`,
+      `- NUNCA use travessão (— ou –) em nenhuma mensagem. Use vírgula, ponto ou ponto e vírgula no lugar.`,
+      nomeUsar ? `- O nome do contato é ${nomeUsar}. Use nas mensagens quando natural.` : `- Nome desconhecido. Comece sem nome, com gancho direto ou "Oi," casual.`,
       `- 6 touches = 6 abordagens COMPLETAMENTE diferentes. Mesma pessoa, 6 ângulos distintos.`,
-      `- Email: 80-120 palavras. Rico, específico, com história ou dado. CTA que não parece CTA.`,
-      `- LinkedIn: 50-70 palavras. Mais íntimo, menos formal. Pode ser mais direto e até ousado.`,
-      `- WhatsApp: 1-3 frases curtas. Casual. Como mandaria pra um amigo do setor.`,
-      `- Cold call: script real, como se fosse falado. Abertura de 8 segundos. Pausa. Pergunta cirúrgica. Sem "tudo bem?".`,
-      `- Breakup: a mensagem mais criativa de todas. Pode ter ironia, leveza, ou um insight final que faz pensar. Porta aberta com classe.`,
+      `- Email: 150-220 palavras. Desenvolva o raciocínio em 2-3 parágrafos curtos antes do CTA. Conte uma mini-história, cite um dado de mercado específico ou faça uma observação aguçada sobre o setor. CTA que não parece CTA.`,
+      `- LinkedIn: 100-140 palavras. Mais íntimo que o email, mas com substância real, não apenas uma linha solta. Desenvolva 2 ideias conectadas antes do fechamento.`,
+      `- WhatsApp: 3-5 frases curtas. Casual mas com contexto real demonstrando que você pesquisou sobre a empresa, não um "oi tudo bem".`,
+      `- Cold call: script completo e real, como se fosse falado ao telefone. Abertura de 10-15 segundos. Pausa estratégica. Pergunta cirúrgica de qualificação. Resposta pronta para uma objeção comum. CTA para reunião de 20 min. Mínimo 120 palavras de script completo.`,
+      `- Breakup: a mensagem mais criativa e elaborada de todas, 100-150 palavras. Ironia leve, leveza ou um insight final que faz o leitor pensar duas vezes antes de ignorar. Porta aberta com classe.`,
       `- RESPONDA APENAS COM O JSON. ZERO texto antes ou depois.`,
     ].join("\n");
 
@@ -319,7 +335,7 @@ export default async function handler(req, res) {
       `{"touches":[{"day":1,"type":"linkedin","subject":"assunto impactante","body":"mensagem completa e disruptiva aqui"},...]}`,
     ].join("\n");
 
-    const out = await callGroq(apiKey, system, user, 8192, true);
+    const out = await callGroq(apiKey, system, user, 12000, true);
     if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
 
     let parsed;
@@ -333,7 +349,22 @@ export default async function handler(req, res) {
         return res.status(200).json({ touches: null, message: "Falha ao interpretar: " + e.message, raw: out.text.slice(0, 200) });
       }
     }
-    return res.status(200).json({ touches: (parsed && parsed.touches) || null });
+
+    // Safety net: strip any em-dash/en-dash the model might still produce, replace with comma
+    function stripDashes(s) {
+      if (typeof s !== "string") return s;
+      return s.replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
+    }
+    var touchesOut = (parsed && parsed.touches) || null;
+    if (Array.isArray(touchesOut)) {
+      touchesOut = touchesOut.map(function(t) {
+        return Object.assign({}, t, {
+          subject: stripDashes(t.subject),
+          body:    stripDashes(t.body),
+        });
+      });
+    }
+    return res.status(200).json({ touches: touchesOut });
 
   } catch (e) {
     return res.status(200).json({ error: "Erro interno: " + e.message });
