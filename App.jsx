@@ -1857,6 +1857,7 @@ function ContactsView(props) {
   var _st_selAccId = useState(""); var selAccId = _st_selAccId[0]; var setSelAccId = _st_selAccId[1];
   var _st_newAccNome = useState(""); var newAccNome = _st_newAccNome[0]; var setNewAccNome = _st_newAccNome[1];
   var _st_accSearch = useState(""); var accSearch = _st_accSearch[0]; var setAccSearch = _st_accSearch[1];
+  var _st_tab = useState("all"); var activeTab = _st_tab[0]; var setActiveTab = _st_tab[1];
 
   var accounts = props.accounts || [];
 
@@ -2046,26 +2047,78 @@ function ContactsView(props) {
     });
   }
 
+  var favContacts = contacts.filter(function(c){ return c.favorite; });
   var filtered = contacts.filter(function(c) {
     if (!search) return true;
     var q = search.toLowerCase();
-    return (c.nome||"").toLowerCase().includes(q) || (c.empresa||"").toLowerCase().includes(q) || (c.cargo||"").toLowerCase().includes(q);
+    return (c.nome||"").toLowerCase().includes(q) || (c.empresa||"").toLowerCase().includes(q) || (c.cargo||"").toLowerCase().includes(q) || (c.email||"").toLowerCase().includes(q);
+  });
+  var filteredFavs = favContacts.filter(function(c) {
+    if (!search) return true;
+    var q = search.toLowerCase();
+    return (c.nome||"").toLowerCase().includes(q) || (c.empresa||"").toLowerCase().includes(q) || (c.cargo||"").toLowerCase().includes(q) || (c.email||"").toLowerCase().includes(q);
   });
 
   return (
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:12}}>
-        <div>
-          <div style={{fontSize:22,fontWeight:800,color:"#0f172a",marginBottom:3,letterSpacing:"-0.4px"}}>{"Contatos"}</div>
-          <div style={{fontSize:12.5,color:"#52617a"}}>{contacts.length===0 ? "Os contatos aparecem aqui ao mapear contas com IA." : contacts.length + " contato" + (contacts.length!==1?"s":"") + " · busque o e-mail e gere uma sequência em 1 clique"}</div>
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div style={{marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12,marginBottom:16}}>
+          <div>
+            <div style={{fontSize:22,fontWeight:800,color:"#0f172a",letterSpacing:"-0.4px"}}>{"Contatos"}</div>
+            <div style={{fontSize:12,color:"#52617a",marginTop:2}}>
+              {contacts.length === 0
+                ? "Os contatos aparecem aqui ao mapear contas com IA."
+                : <><strong style={{color:"#0f172a"}}>{(activeTab==="all" ? filtered : filteredFavs).length}</strong>{" de "}<strong style={{color:"#0f172a"}}>{(activeTab==="all" ? contacts.length : favContacts.length)}</strong>{" contato"+(contacts.length!==1?"s":" ")}{activeTab==="favs"?" favorito"+(favContacts.length!==1?"s":""): ""}</>
+              }
+            </div>
+          </div>
+          <button onClick={function(){setAddModal(true);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",boxShadow:"0 4px 12px rgba(99,102,241,.25)",display:"flex",alignItems:"center",gap:6}}>
+            <Icon name="person_add" size={14}/>{"Novo contato"}
+          </button>
         </div>
+
+        {/* ── Tabs ─────────────────────────────────────────────────────────── */}
+        <div style={{display:"flex",gap:0,borderBottom:"1px solid #e6e9ef",marginBottom:16}}>
+          {[
+            {id:"all",  label:"Todos",      icon:"contacts",  count:contacts.length},
+            {id:"favs", label:"Favoritos",  icon:"star",      count:favContacts.length},
+          ].map(function(t){
+            var active = activeTab === t.id;
+            return (
+              <button key={t.id} onClick={function(){setActiveTab(t.id);}} style={{display:"flex",alignItems:"center",gap:6,padding:"9px 18px",border:"none",borderBottom:"2.5px solid "+(active?"#6366f1":"transparent"),background:"transparent",color:active?"#4f46e5":"#64748b",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:active?700:500,transition:"all .15s",whiteSpace:"nowrap"}}>
+                <Icon name={t.icon} size={14} fill={active} color={active?"#4f46e5":"#94a3b8"}/>
+                {t.label}
+                <span style={{background:active?"rgba(99,102,241,.15)":"#f1f5f9",color:active?"#4f46e5":"#64748b",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:700,minWidth:18,textAlign:"center"}}>{t.count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Search + Sort ─────────────────────────────────────────────────── */}
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder={"Buscar..."} style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 14px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none",minWidth:160,flex:1}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+          <div style={{position:"relative",flex:1,minWidth:200}}>
+            <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center"}}>
+              <Icon name="search" size={16} color="#94a3b8"/>
+            </span>
+            <input
+              value={search}
+              onChange={function(e){setSearch(e.target.value);}}
+              placeholder={"Buscar por nome, empresa, cargo ou e-mail..."}
+              style={{width:"100%",boxSizing:"border-box",background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 14px 9px 34px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none",transition:"border-color .2s"}}
+              onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}}
+              onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}
+            />
+            {search && (
+              <button onClick={function(){setSearch("");}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:2,display:"flex",alignItems:"center",color:"#94a3b8"}}>
+                <Icon name="close" size={14}/>
+              </button>
+            )}
+          </div>
           <select value={csort} onChange={function(e){setCsort(e.target.value);}} style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 12px",fontSize:12,color:"#475569",fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
             <option value="az">A - Z</option>
             <option value="za">Z - A</option>
           </select>
-          <button onClick={function(){setAddModal(true);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",boxShadow:"0 4px 12px rgba(99,102,241,.25)"}}>{"+ Novo"}</button>
         </div>
       </div>
       {addModal && (
@@ -2144,9 +2197,55 @@ function ContactsView(props) {
           <div style={{width:8,height:8,borderRadius:"50%",background:"#6366f1"}}/>
           <span style={{color:"#64748b",fontSize:13}}>{"Carregando..."}</span>
         </div>
+      ) : activeTab === "favs" ? (
+        /* ── FAVORITES GRID ─────────────────────────────────────────────── */
+        filteredFavs.length === 0 ? (
+          <div style={{textAlign:"center",padding:"64px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef"}}>
+            <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Icon name="star" size={40} color="#d1d5db"/></div>
+            <div style={{fontSize:15,fontWeight:700,color:"#334155",marginBottom:6}}>{search ? "Nenhum favorito encontrado" : "Nenhum contato favorito ainda"}</div>
+            <div style={{fontSize:12,color:"#64748b",lineHeight:1.6,maxWidth:360,margin:"0 auto"}}>{search ? "Tente outro termo." : "Clique na estrela de qualquer contato para adicioná-lo aos favoritos."}</div>
+          </div>
+        ) : (
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:"0 6px",fontSize:13}}>
+              <thead>
+                <tr>
+                  {["Empresa","Contato","Cargo","E-mail",""].map(function(col,i){
+                    return <th key={i} style={{textAlign:"left",padding:"8px 14px",fontSize:10,fontWeight:700,color:"#52617a",textTransform:"uppercase",letterSpacing:.6,background:"#f8fafc",borderTop:"1px solid #e6e9ef",borderBottom:"1px solid #e6e9ef",...(i===0?{borderLeft:"1px solid #e6e9ef",borderRadius:"8px 0 0 8px"}:{}), ...(i===4?{borderRight:"1px solid #e6e9ef",borderRadius:"0 8px 8px 0",width:44}:{})}}>{col}</th>;
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredFavs.slice().sort(function(a,b){
+                  var an=(a.empresa||a.nome||"").toLowerCase(), bn=(b.empresa||b.nome||"").toLowerCase();
+                  return csort==="za" ? bn.localeCompare(an,"pt") : an.localeCompare(bn,"pt");
+                }).map(function(c){
+                  return (
+                    <tr key={c.id} style={{background:"#fff"}}>
+                      <td style={{padding:"10px 14px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",borderLeft:"1px solid #f1f5f9",borderRadius:"10px 0 0 10px",fontWeight:600,color:"#0f172a",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.empresa||"—"}</td>
+                      <td style={{padding:"10px 14px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",fontWeight:600,color:"#0f172a",whiteSpace:"nowrap"}}>{c.nome||"—"}</td>
+                      <td style={{padding:"10px 14px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",color:"#64748b",fontSize:12,whiteSpace:"nowrap"}}>{c.cargo||"—"}</td>
+                      <td style={{padding:"10px 14px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9"}}>
+                        {c.email
+                          ? <a href={"mailto:"+c.email} style={{color:"#0ea5e9",textDecoration:"none",fontSize:12,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}><Icon name="mail" size={12} color="#0ea5e9"/>{c.email}</a>
+                          : <span style={{color:"#d1d5db",fontSize:11}}>{"—"}</span>
+                        }
+                      </td>
+                      <td style={{padding:"10px 10px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",borderRight:"1px solid #f1f5f9",borderRadius:"0 10px 10px 0",textAlign:"center"}}>
+                        <button onClick={function(){toggleFavorite(c);}} title="Remover dos favoritos" style={{background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",borderRadius:7,padding:"4px 7px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <Icon name="star" size={13} fill={true} color="#f59e0b"/>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : filtered.length === 0 ? (
         <div style={{textAlign:"center",padding:"64px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef"}}>
-          <div style={{fontSize:36,marginBottom:12}}>{"👥"}</div>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Icon name="contacts" size={40} color="#d1d5db"/></div>
           <div style={{fontSize:15,fontWeight:700,color:"#334155",marginBottom:6}}>{search ? "Nenhum contato encontrado" : "Nenhum contato ainda"}</div>
           <div style={{fontSize:12,color:"#64748b",lineHeight:1.6}}>{search ? "Tente outro termo de busca." : "Os contatos sao criados automaticamente ao fazer uma pesquisa com IA que retorne stakeholders."}</div>
         </div>
@@ -2164,7 +2263,7 @@ function ContactsView(props) {
               return (
                 <div key={empresa}>
                   <div onClick={function(){toggleGroup(empresa);}} style={{display:"flex",alignItems:"center",gap:8,marginBottom:expandedGroups[empresa]?10:0,padding:"10px 14px",background:"linear-gradient(135deg,rgba(99,102,241,.07),rgba(14,165,233,.04))",border:"1px solid rgba(99,102,241,.14)",borderRadius:expandedGroups[empresa]?"12px 12px 0 0":12,cursor:"pointer",userSelect:"none",transition:"all .2s"}} onMouseEnter={function(e){e.currentTarget.style.background="linear-gradient(135deg,rgba(99,102,241,.12),rgba(14,165,233,.07))";}} onMouseLeave={function(e){e.currentTarget.style.background="linear-gradient(135deg,rgba(99,102,241,.07),rgba(14,165,233,.04))";}}>
-                    <span style={{fontSize:14}}>{"🏢"}</span>
+                    <Icon name="business" size={15} color="#6366f1"/>
                     <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{empresa}</span>
                     <span style={{fontSize:10,color:"#64748b",marginLeft:"auto",marginRight:6}}>{group.length + " contato" + (group.length!==1?"s":"")}</span>
                     <button onClick={function(e){e.stopPropagation();deleteAllFromGroup(empresa,group);}} title={"Excluir todos de "+empresa} style={{background:"none",border:"1px solid rgba(248,113,113,.3)",color:"#ef4444",borderRadius:6,padding:"2px 8px",fontSize:9,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0,marginRight:6}}>{"Excluir todos"}</button>
