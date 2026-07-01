@@ -1837,6 +1837,128 @@ function LoadingStatus() {
 
 
 // -- CONTACTS VIEW -------------------------------------------------------------
+// -- CONTACTS TABLE (shared by Todos + Favoritos tabs) ------------------------
+function ContactsTable(props) {
+  var contacts = props.contacts || [];
+  var csort = props.csort || "az";
+  var enriching = props.enriching || {};
+  var enrichProgress = props.enrichProgress || {};
+
+  var sorted = contacts.slice().sort(function(a, b) {
+    var an = ((a.empresa||a.nome)||"").toLowerCase();
+    var bn = ((b.empresa||b.nome)||"").toLowerCase();
+    return csort === "za" ? bn.localeCompare(an, "pt") : an.localeCompare(bn, "pt");
+  });
+
+  var thStyle = {textAlign:"left",padding:"9px 12px",fontSize:10,fontWeight:700,color:"#52617a",textTransform:"uppercase",letterSpacing:.6,background:"#f8fafc",borderBottom:"2px solid #e6e9ef",whiteSpace:"nowrap"};
+
+  return (
+    <div style={{overflowX:"auto",borderRadius:14,border:"1px solid #e6e9ef"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:700}}>
+        <thead>
+          <tr>
+            <th style={Object.assign({},thStyle,{borderRadius:"14px 0 0 0",minWidth:140})}>{"Empresa"}</th>
+            <th style={Object.assign({},thStyle,{minWidth:130})}>{"Contato"}</th>
+            <th style={Object.assign({},thStyle,{minWidth:120})}>{"Cargo"}</th>
+            <th style={Object.assign({},thStyle,{minWidth:200})}>{"E-mail"}</th>
+            <th style={Object.assign({},thStyle,{borderRadius:"0 14px 0 0",minWidth:220,textAlign:"right"})}>{"Ações"}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(function(c, i) {
+            var canSeq = !!(c.cargo || c.nome);
+            var isLast = i === sorted.length - 1;
+            var rowBg = i % 2 === 0 ? "#ffffff" : "#fafbff";
+            return (
+              <tr key={c.id} style={{background:rowBg,borderBottom:isLast?"none":"1px solid #f1f5f9",transition:"background .15s"}}
+                onMouseEnter={function(e){e.currentTarget.style.background="rgba(99,102,241,.04)";}}
+                onMouseLeave={function(e){e.currentTarget.style.background=rowBg;}}>
+
+                {/* Empresa */}
+                <td style={{padding:"10px 12px",verticalAlign:"middle"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    <div style={{width:26,height:26,borderRadius:7,background:"linear-gradient(135deg,#6366f1,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <span style={{fontSize:10,color:"#fff",fontWeight:700}}>{((c.empresa||c.nome)||"?")[0].toUpperCase()}</span>
+                    </div>
+                    <span style={{fontWeight:600,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}}>{c.empresa||"—"}</span>
+                  </div>
+                </td>
+
+                {/* Contato */}
+                <td style={{padding:"10px 12px",verticalAlign:"middle",fontWeight:600,color:"#0f172a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{c.nome||"—"}</td>
+
+                {/* Cargo */}
+                <td style={{padding:"10px 12px",verticalAlign:"middle",color:"#64748b",fontSize:12,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:150}}>{c.cargo||"—"}</td>
+
+                {/* E-mail */}
+                <td style={{padding:"10px 12px",verticalAlign:"middle"}}>
+                  {c.email ? (
+                    <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+                      <a href={"mailto:"+c.email} style={{color:"#0ea5e9",textDecoration:"none",fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{c.email}</a>
+                      {c.emailConfirmed >= 2
+                        ? <span style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 5px",flexShrink:0}}>{c.emailConfirmed+"/3 ✓"}</span>
+                        : c.emailConfirmed === 1
+                          ? <span style={{fontSize:8,fontWeight:700,color:"#92400e",background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",borderRadius:5,padding:"1px 5px",flexShrink:0}}>{"1/3"}</span>
+                          : c.emailConfidence
+                            ? <span style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 4px",flexShrink:0}}>{c.emailConfidence+"%"}</span>
+                            : null
+                      }
+                      <CopyBtn text={c.email}/>
+                    </div>
+                  ) : enriching[c.id] ? (
+                    <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:150}}>
+                      <div style={{fontSize:9,fontWeight:700,color:"#4f46e5"}}>{"Buscando..."}</div>
+                      {["hunter","apollo","snov"].map(function(key){
+                        var labels = {hunter:"Hunter.io",apollo:"Apollo.io",snov:"Snov.io"};
+                        var st = (enrichProgress[c.id]||{})[key] || "pending";
+                        var col = st==="found"?"#10b981":st==="miss"?"#94a3b8":st==="err"?"#ef4444":"#a5b4fc";
+                        return (
+                          <div key={key} style={{display:"flex",alignItems:"center",gap:4,fontSize:9,color:"#64748b"}}>
+                            <span style={{color:col,fontWeight:700,width:8}}>{st==="found"?"✓":st==="miss"?"–":st==="err"?"✕":"⋯"}</span>
+                            {labels[key]}
+                            <span style={{color:col,marginLeft:"auto",fontSize:8}}>{st==="pending"?"aguardando":st==="found"?"encontrado":st==="miss"?"não encontrado":"erro"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <button onClick={function(){props.enrichEmail(c);}} style={{background:"#eff6ff",color:"#4f46e5",border:"1px solid #c7d0fa",borderRadius:7,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                      {"Buscar e-mail"}
+                    </button>
+                  )}
+                </td>
+
+                {/* Ações */}
+                <td style={{padding:"10px 12px",verticalAlign:"middle"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end",flexWrap:"nowrap"}}>
+                    {/* Gerar sequência */}
+                    <button onClick={function(){if(canSeq && props.onGenerateSequence) props.onGenerateSequence(c);}} disabled={!canSeq} title="Gerar sequência" style={{display:"flex",alignItems:"center",gap:4,background:"linear-gradient(135deg,#7c3aed,#6366f1)",color:"#fff",border:"none",borderRadius:7,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:canSeq?"pointer":"not-allowed",opacity:canSeq?1:.45,fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                      {"Sequência"}
+                    </button>
+                    {/* LinkedIn */}
+                    {c.linkedin && (
+                      <a href={c.linkedin} target="_blank" rel="noreferrer" title="LinkedIn" style={{background:"rgba(10,102,194,.1)",border:"1px solid rgba(10,102,194,.25)",color:"#0a66c2",borderRadius:7,padding:"5px 9px",fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",flexShrink:0}}>{"in"}</a>
+                    )}
+                    {/* Favorito */}
+                    <button onClick={function(){props.toggleFavorite(c);}} title={c.favorite?"Remover dos favoritos":"Favoritar"} style={{background:c.favorite?"rgba(245,158,11,.12)":"none",border:"1px solid "+(c.favorite?"rgba(245,158,11,.4)":"#e2e8f0"),borderRadius:7,padding:"5px 7px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
+                      <Icon name="star" size={13} fill={c.favorite} color={c.favorite?"#f59e0b":"#94a3b8"}/>
+                    </button>
+                    {/* Excluir */}
+                    <button onClick={function(){props.deleteContact(c.id);}} title="Remover" style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:7,padding:"5px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0,display:"flex",alignItems:"center"}}>
+                      <Icon name="delete" size={13}/>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ContactsView(props) {
   var _st_contacts = useState([]); var contacts = _st_contacts[0]; var setContacts = _st_contacts[1];
   var _st_loading = useState(true); var loadingC = _st_loading[0]; var setLoadingC = _st_loading[1];
@@ -2197,151 +2319,39 @@ function ContactsView(props) {
           <div style={{width:8,height:8,borderRadius:"50%",background:"#6366f1"}}/>
           <span style={{color:"#64748b",fontSize:13}}>{"Carregando..."}</span>
         </div>
-      ) : activeTab === "favs" ? (
-        /* ── FAVORITES GRID ─────────────────────────────────────────────── */
-        filteredFavs.length === 0 ? (
-          <div style={{textAlign:"center",padding:"64px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef"}}>
-            <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Icon name="star" size={40} color="#d1d5db"/></div>
-            <div style={{fontSize:15,fontWeight:700,color:"#334155",marginBottom:6}}>{search ? "Nenhum favorito encontrado" : "Nenhum contato favorito ainda"}</div>
-            <div style={{fontSize:12,color:"#64748b",lineHeight:1.6,maxWidth:360,margin:"0 auto"}}>{search ? "Tente outro termo." : "Clique na estrela de qualquer contato para adicioná-lo aos favoritos."}</div>
-          </div>
-        ) : (
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:"0 6px",fontSize:13}}>
-              <thead>
-                <tr>
-                  {["Empresa","Contato","Cargo","E-mail",""].map(function(col,i){
-                    return <th key={i} style={{textAlign:"left",padding:"8px 14px",fontSize:10,fontWeight:700,color:"#52617a",textTransform:"uppercase",letterSpacing:.6,background:"#f8fafc",borderTop:"1px solid #e6e9ef",borderBottom:"1px solid #e6e9ef",...(i===0?{borderLeft:"1px solid #e6e9ef",borderRadius:"8px 0 0 8px"}:{}), ...(i===4?{borderRight:"1px solid #e6e9ef",borderRadius:"0 8px 8px 0",width:44}:{})}}>{col}</th>;
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFavs.slice().sort(function(a,b){
-                  var an=(a.empresa||a.nome||"").toLowerCase(), bn=(b.empresa||b.nome||"").toLowerCase();
-                  return csort==="za" ? bn.localeCompare(an,"pt") : an.localeCompare(bn,"pt");
-                }).map(function(c){
-                  return (
-                    <tr key={c.id} style={{background:"#fff"}}>
-                      <td style={{padding:"10px 14px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",borderLeft:"1px solid #f1f5f9",borderRadius:"10px 0 0 10px",fontWeight:600,color:"#0f172a",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.empresa||"—"}</td>
-                      <td style={{padding:"10px 14px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",fontWeight:600,color:"#0f172a",whiteSpace:"nowrap"}}>{c.nome||"—"}</td>
-                      <td style={{padding:"10px 14px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",color:"#64748b",fontSize:12,whiteSpace:"nowrap"}}>{c.cargo||"—"}</td>
-                      <td style={{padding:"10px 14px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9"}}>
-                        {c.email
-                          ? <a href={"mailto:"+c.email} style={{color:"#0ea5e9",textDecoration:"none",fontSize:12,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}><Icon name="mail" size={12} color="#0ea5e9"/>{c.email}</a>
-                          : <span style={{color:"#d1d5db",fontSize:11}}>{"—"}</span>
-                        }
-                      </td>
-                      <td style={{padding:"10px 10px",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",borderRight:"1px solid #f1f5f9",borderRadius:"0 10px 10px 0",textAlign:"center"}}>
-                        <button onClick={function(){toggleFavorite(c);}} title="Remover dos favoritos" style={{background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",borderRadius:7,padding:"4px 7px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <Icon name="star" size={13} fill={true} color="#f59e0b"/>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )
-      ) : filtered.length === 0 ? (
+      ) : (activeTab==="favs" ? filteredFavs : filtered).length === 0 ? (
         <div style={{textAlign:"center",padding:"64px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef"}}>
-          <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Icon name="contacts" size={40} color="#d1d5db"/></div>
-          <div style={{fontSize:15,fontWeight:700,color:"#334155",marginBottom:6}}>{search ? "Nenhum contato encontrado" : "Nenhum contato ainda"}</div>
-          <div style={{fontSize:12,color:"#64748b",lineHeight:1.6}}>{search ? "Tente outro termo de busca." : "Os contatos sao criados automaticamente ao fazer uma pesquisa com IA que retorne stakeholders."}</div>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
+            <Icon name={activeTab==="favs"?"star":"contacts"} size={40} color="#d1d5db"/>
+          </div>
+          <div style={{fontSize:15,fontWeight:700,color:"#334155",marginBottom:6}}>
+            {search
+              ? "Nenhum contato encontrado"
+              : activeTab==="favs"
+                ? "Nenhum contato favorito ainda"
+                : "Nenhum contato ainda"
+            }
+          </div>
+          <div style={{fontSize:12,color:"#64748b",lineHeight:1.6,maxWidth:360,margin:"0 auto"}}>
+            {search
+              ? "Tente outro termo de busca."
+              : activeTab==="favs"
+                ? "Clique na estrela de qualquer contato para adicioná-lo aos favoritos."
+                : "Os contatos são criados automaticamente ao mapear contas com IA."
+            }
+          </div>
         </div>
       ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:20}}>
-          {(function(){
-            var grouped = {};
-            filtered.forEach(function(c){
-              var key = c.empresa || "Sem empresa";
-              if (!grouped[key]) grouped[key] = [];
-              grouped[key].push(c);
-            });
-            return Object.keys(grouped).sort(function(a,b){ return csort==="za" ? b.localeCompare(a) : a.localeCompare(b); }).map(function(empresa) {
-              var group = grouped[empresa].slice().sort(function(a,b){ var an=(a.nome||"").toLowerCase(), bn=(b.nome||"").toLowerCase(); return csort==="za" ? bn.localeCompare(an) : an.localeCompare(bn); });
-              return (
-                <div key={empresa}>
-                  <div onClick={function(){toggleGroup(empresa);}} style={{display:"flex",alignItems:"center",gap:8,marginBottom:expandedGroups[empresa]?10:0,padding:"10px 14px",background:"linear-gradient(135deg,rgba(99,102,241,.07),rgba(14,165,233,.04))",border:"1px solid rgba(99,102,241,.14)",borderRadius:expandedGroups[empresa]?"12px 12px 0 0":12,cursor:"pointer",userSelect:"none",transition:"all .2s"}} onMouseEnter={function(e){e.currentTarget.style.background="linear-gradient(135deg,rgba(99,102,241,.12),rgba(14,165,233,.07))";}} onMouseLeave={function(e){e.currentTarget.style.background="linear-gradient(135deg,rgba(99,102,241,.07),rgba(14,165,233,.04))";}}>
-                    <Icon name="business" size={15} color="#6366f1"/>
-                    <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{empresa}</span>
-                    <span style={{fontSize:10,color:"#64748b",marginLeft:"auto",marginRight:6}}>{group.length + " contato" + (group.length!==1?"s":"")}</span>
-                    <button onClick={function(e){e.stopPropagation();deleteAllFromGroup(empresa,group);}} title={"Excluir todos de "+empresa} style={{background:"none",border:"1px solid rgba(248,113,113,.3)",color:"#ef4444",borderRadius:6,padding:"2px 8px",fontSize:9,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0,marginRight:6}}>{"Excluir todos"}</button>
-                    <span style={{fontSize:10,color:"#a5b4fc",fontWeight:700,transition:"transform .2s",display:"inline-block",transform:expandedGroups[empresa]?"rotate(0deg)":"rotate(-90deg)"}}>{"▼"}</span>
-                  </div>
-                  {expandedGroups[empresa] && <div style={{display:"flex",flexDirection:"column",gap:8,paddingLeft:8,paddingBottom:4,border:"1px solid rgba(99,102,241,.14)",borderTop:"none",borderRadius:"0 0 12px 12px",background:"#fafbff",padding:"10px 8px 10px 12px"}}>
-                    {group.map(function(c) {
-                      var canSeq = !!(c.cargo || c.nome);
-                      return (
-                        <div key={c.id} style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:12,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",transition:"all .2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.boxShadow="0 2px 12px rgba(99,102,241,.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.boxShadow="";}}>
-                          <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#6366f1,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                            <span style={{fontSize:12,color:"#fff",fontWeight:700}}>{(c.nome||c.cargo||"?")[0].toUpperCase()}</span>
-                          </div>
-                          <div style={{flex:1,minWidth:120}}>
-                            <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.nome||c.cargo}</div>
-                            {c.nome && c.cargo && c.nome!==c.cargo && <div style={{fontSize:11,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.cargo}</div>}
-                          </div>
-                          {c.email ? (
-                            <div style={{display:"flex",alignItems:"center",gap:6,background:"#fbfbfd",border:"1px solid #eef0f4",borderRadius:8,padding:"5px 8px",maxWidth:280,minWidth:0}}>
-                              <span style={{fontSize:11,color:c.emailValidated?"#0f766e":"#64748b",fontWeight:c.emailValidated?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{c.email}</span>
-                              {c.emailConfirmed >= 2
-                                ? <span title={"Confirmado em "+c.emailConfirmed+"/3 fontes · "+(c.emailSources||"")} style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 6px",flexShrink:0,whiteSpace:"nowrap"}}>{c.emailConfirmed+"/3 ✓"}</span>
-                                : c.emailConfirmed === 1
-                                  ? <span title={"1/3 fontes · "+(c.emailSources||"")} style={{fontSize:8,fontWeight:700,color:"#92400e",background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",borderRadius:5,padding:"1px 6px",flexShrink:0,whiteSpace:"nowrap"}}>{"1/3"}</span>
-                                  : c.emailConfidence
-                                    ? <span style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 5px",flexShrink:0}}>{c.emailConfidence+"%"}</span>
-                                    : null
-                              }
-                              <CopyBtn text={c.email}/>
-                            </div>
-                          ) : (
-                            enriching[c.id] ? (
-                              <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:190}}>
-                                <div style={{fontSize:10,fontWeight:700,color:"#4f46e5",marginBottom:1}}>{"Buscando em 3 fontes..."}</div>
-                                {[
-                                  {key:"hunter", label:"Hunter.io"},
-                                  {key:"apollo",  label:"Apollo.io"},
-                                  {key:"snov",    label:"Snov.io"},
-                                ].map(function(src){
-                                  var st = (enrichProgress[c.id]||{})[src.key] || "pending";
-                                  var color = st==="found"?"#10b981":st==="miss"?"#94a3b8":st==="err"?"#ef4444":"#a5b4fc";
-                                  var icon  = st==="found"?"✓":st==="miss"?"–":st==="err"?"✕":"·";
-                                  var bg    = st==="found"?"rgba(52,211,153,.1)":st==="miss"?"#f8fafc":st==="err"?"rgba(239,68,68,.08)":"rgba(99,102,241,.06)";
-                                  return (
-                                    <div key={src.key} style={{display:"flex",alignItems:"center",gap:6,background:bg,borderRadius:6,padding:"3px 8px",transition:"all .3s"}}>
-                                      <span style={{fontSize:10,fontWeight:700,color:color,width:10,textAlign:"center"}}>{st==="pending"?"⋯":icon}</span>
-                                      <span style={{fontSize:10,color:"#334155",flex:1}}>{src.label}</span>
-                                      <span style={{fontSize:9,color:color,fontWeight:600}}>{st==="pending"?"aguardando":st==="found"?"encontrado":st==="miss"?"não encontrado":"erro"}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <button onClick={function(){enrichEmail(c);}} style={{background:"#eff6ff",color:"#4f46e5",border:"1px solid #c7d0fa",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
-                                {"Buscar e-mail"}
-                              </button>
-                            )
-                          )}
-                          <button onClick={function(){ if(canSeq && props.onGenerateSequence) props.onGenerateSequence(c); }} disabled={!canSeq} title={canSeq?"Gerar cadência de 6 toques para este contato":"Informe nome ou cargo para gerar"} style={{display:"flex",alignItems:"center",gap:5,background:"linear-gradient(135deg,#7c3aed,#6366f1)",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:canSeq?"pointer":"not-allowed",opacity:canSeq?1:.5,fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0,boxShadow:"0 2px 8px rgba(124,58,167,.25)"}}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                            Gerar sequência
-                          </button>
-                          {c.linkedin && (
-                            <a href={c.linkedin} target="_blank" rel="noreferrer" title="Abrir LinkedIn" style={{background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",color:"#0a66c2",borderRadius:8,padding:"6px 9px",fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",flexShrink:0}}>{"in"}</a>
-                          )}
-                          <button onClick={function(){toggleFavorite(c);}} title={c.favorite?"Remover dos favoritos":"Adicionar aos favoritos"} style={{background:c.favorite?"rgba(245,158,11,.12)":"none",border:"1px solid "+(c.favorite?"rgba(245,158,11,.4)":"#e2e8f0"),color:c.favorite?"#f59e0b":"#94a3b8",borderRadius:8,padding:"6px 9px",cursor:"pointer",fontFamily:"inherit",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
-                            <Icon name="star" size={14} fill={c.favorite} color={c.favorite?"#f59e0b":"currentColor"}/>
-                          </button>
-                          <button onClick={function(){deleteContact(c.id);}} title="Remover contato" style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"6px 9px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>{"x"}</button>
-                        </div>
-                      );
-                    })}
-                  </div>}
-                </div>
-              );
-            });
-          })()}
-        </div>
+        <ContactsTable
+          contacts={activeTab==="favs" ? filteredFavs : filtered}
+          csort={csort}
+          enriching={enriching}
+          enrichProgress={enrichProgress}
+          enrichEmail={enrichEmail}
+          toggleFavorite={toggleFavorite}
+          deleteContact={deleteContact}
+          onGenerateSequence={props.onGenerateSequence}
+        />
       )}
       {toastC && (
         <div style={{position:"fixed",bottom:28,right:28,background:toastC.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10)",zIndex:400,maxWidth:340}}>
