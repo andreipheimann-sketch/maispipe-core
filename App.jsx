@@ -1677,8 +1677,10 @@ function downloadSeqPDF(seq) {
 function BibliotecaView(props) {
   var _st_seqs = useState([]); var seqs = _st_seqs[0]; var setSeqs = _st_seqs[1];
   var _st_loading = useState(true); var loading = _st_loading[0]; var setLoading = _st_loading[1];
-  var _st_viewMode = useState("list"); var viewMode = _st_viewMode[0]; var setViewMode = _st_viewMode[1];
-  var _st_sortOrder = useState("date"); var sortOrder = _st_sortOrder[0]; var setSortOrder = _st_sortOrder[1];
+  var _st_search = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
+  var _st_sortOrder = useState("az"); var sortOrder = _st_sortOrder[0]; var setSortOrder = _st_sortOrder[1];
+  var _st_collapsed = useState({}); var collapsed = _st_collapsed[0]; var setCollapsed = _st_collapsed[1];
+
   useEffect(function() {
     storageList("seq:").then(function(keys) {
       if (!keys.length) { setLoading(false); props.onCountChange(0); return; }
@@ -1688,102 +1690,157 @@ function BibliotecaView(props) {
       });
     }).catch(function(){setLoading(false);});
   }, []);
+
   function deleteSeq(id) {
-    if (!window.confirm("Remover esta sequencia?")) return;
+    if (!window.confirm("Remover esta sequência?")) return;
     storageDel(id).then(function() {
       setSeqs(function(prev){var n=prev.filter(function(s){return s.id!==id;});props.onCountChange(n.length);return n;});
-      props.showToast("Sequencia removida.","#ef4444");
+      props.showToast("Sequência removida.","#ef4444");
     });
   }
-  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"64px 0",gap:10}}><div style={{width:8,height:8,borderRadius:"50%",background:"#6366f1"}}/><span style={{color:"#64748b",fontSize:13}}>Carregando...</span></div>;
+
+  function toggleGroup(empresa) {
+    setCollapsed(function(c){ return Object.assign({},c,{[empresa]:!c[empresa]}); });
+  }
+
+  var filtered = seqs.filter(function(s){
+    if (!search) return true;
+    var q = search.toLowerCase();
+    var nome = ((s.account&&s.account.nome)||"").toLowerCase();
+    var perfil = ((s.profile&&s.profile.label)||"").toLowerCase();
+    var contato = (s.contactName||"").toLowerCase();
+    return nome.includes(q) || perfil.includes(q) || contato.includes(q);
+  });
+
+  // Group by empresa
+  var groups = {};
+  filtered.forEach(function(s){
+    var key = (s.account&&s.account.nome) || "Sem empresa";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(s);
+  });
+  var sortedKeys = Object.keys(groups).sort(function(a,b){
+    return sortOrder==="za" ? b.localeCompare(a,"pt") : a.localeCompare(b,"pt");
+  });
+
+  var TOUCH_TYPES_LOCAL = {
+    email:{label:"E-mail",color:"#0ea5e9",bg:"rgba(14,165,233,.08)"},
+    linkedin:{label:"InMail",color:"#0a66c2",bg:"rgba(10,102,194,.08)"},
+    whatsapp:{label:"WhatsApp",color:"#16a34a",bg:"rgba(22,163,74,.08)"},
+    call:{label:"Cold Call",color:"#92400e",bg:"#fef3c7"},
+    follow:{label:"Follow-up",color:"#7c3aed",bg:"#f5f3ff"},
+    breakup:{label:"Breakup",color:"#52617a",bg:"#f8fafc"},
+  };
+
+  if (loading) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"64px 0",gap:10}}>
+      <div style={{width:8,height:8,borderRadius:"50%",background:"#6366f1"}}/>
+      <span style={{color:"#64748b",fontSize:13}}>{"Carregando..."}</span>
+    </div>
+  );
+
   return (
     <div>
+      {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:12}}>
         <div>
-          <div style={{fontSize:28,fontWeight:800,color:"#0f172a",marginBottom:4,letterSpacing:"-0.6px"}}>Biblioteca</div>
-          <div style={{fontSize:13,color:"#52617a"}}>{seqs.length+" sequência"+(seqs.length!==1?"s":"")+" salva"+(seqs.length!==1?"s":"")}</div>
-        </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <select value={sortOrder} onChange={function(e){setSortOrder(e.target.value);}} style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"8px 12px",fontSize:12,color:"#475569",fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
-            <option value="date">Mais recente</option>
-            <option value="az">A -> Z</option>
-            <option value="za">Z -> A</option>
-          </select>
-          <div style={{display:"flex",background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,overflow:"hidden"}}>
-            <button onClick={function(){setViewMode("cards");}} title="Cards" style={{padding:"8px 12px",border:"none",background:viewMode==="cards"?"linear-gradient(135deg,#6366f1,#4f46e5)":"transparent",color:viewMode==="cards"?"#fff":"#94a3b8",cursor:"pointer",lineHeight:1}}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-            </button>
-            <button onClick={function(){setViewMode("list");}} title="Lista" style={{padding:"8px 12px",border:"none",background:viewMode==="list"?"linear-gradient(135deg,#6366f1,#4f46e5)":"transparent",color:viewMode==="list"?"#fff":"#94a3b8",cursor:"pointer",lineHeight:1}}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            </button>
+          <div style={{fontSize:28,fontWeight:800,color:"#0f172a",marginBottom:4,letterSpacing:"-0.6px"}}>{"Biblioteca"}</div>
+          <div style={{fontSize:13,color:"#52617a"}}>
+            <strong style={{color:"#0f172a"}}>{filtered.length}</strong>
+            {" de "}
+            <strong style={{color:"#0f172a"}}>{seqs.length}</strong>
+            {" sequência"+(seqs.length!==1?"s":"")+" · "+sortedKeys.length+" empresa"+(sortedKeys.length!==1?"s":"")}
           </div>
         </div>
+        <select value={sortOrder} onChange={function(e){setSortOrder(e.target.value);}} style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"8px 12px",fontSize:12,color:"#475569",fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
+          <option value="az">{"A → Z"}</option>
+          <option value="za">{"Z → A"}</option>
+        </select>
       </div>
-      {seqs.length===0 ? (
+
+      {/* Search bar */}
+      <div style={{position:"relative",marginBottom:18}}>
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex"}}>
+          <Icon name="search" size={15} color="#94a3b8"/>
+        </span>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}}
+          placeholder={"Buscar por empresa, cargo, nome do contato..."}
+          style={{width:"100%",boxSizing:"border-box",background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 36px 9px 34px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none",transition:"border-color .2s"}}
+          onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}}
+          onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}
+        />
+        {search && (
+          <button onClick={function(){setSearch("");}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:2,display:"flex",alignItems:"center",color:"#94a3b8"}}>
+            <Icon name="close" size={14}/>
+          </button>
+        )}
+      </div>
+
+      {seqs.length === 0 ? (
         <div style={{textAlign:"center",padding:"64px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef"}}>
-          <div style={{fontSize:36,marginBottom:12}}>{"📚"}</div>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Icon name="local_library" size={40} color="#d1d5db"/></div>
           <div style={{fontSize:15,fontWeight:700,color:"#334155",marginBottom:6}}>{"Nenhuma sequência salva ainda"}</div>
           <div style={{fontSize:12,color:"#64748b",lineHeight:1.6}}>{"Vá para Sequências e gere uma cadência — ela é salva aqui automaticamente."}</div>
         </div>
+      ) : filtered.length === 0 ? (
+        <div style={{textAlign:"center",padding:"48px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#334155",marginBottom:4}}>{"Nenhum resultado encontrado"}</div>
+          <div style={{fontSize:12,color:"#94a3b8"}}>{"Tente outro termo de busca."}</div>
+        </div>
       ) : (
-        viewMode==="cards" ? (
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
-          {seqs.slice().sort(function(a,b){
-            if(sortOrder==="az") return ((a.account&&a.account.nome)||"").localeCompare((b.account&&b.account.nome)||"","pt");
-            if(sortOrder==="za") return ((b.account&&b.account.nome)||"").localeCompare((a.account&&a.account.nome)||"","pt");
-            return (b.createdAt||0)-(a.createdAt||0);
-          }).map(function(seq){
-            var fc = FIT_CONFIG[(seq.account&&seq.account.fit)||"ALTO"]||FIT_CONFIG.ALTO;
-            var TOUCH_TYPES_LOCAL = {email:{label:"E-mail",color:"#0ea5e9",bg:"rgba(14,165,233,.08)"},linkedin:{label:"InMail",color:"#0a66c2",bg:"rgba(10,102,194,.08)"},whatsapp:{label:"WhatsApp",color:"#16a34a",bg:"rgba(22,163,74,.08)"},call:{label:"Cold Call",color:"#92400e",bg:"#fef3c7"},follow:{label:"Follow-up",color:"#7c3aed",bg:"#f5f3ff"},breakup:{label:"Breakup",color:"#52617a",bg:"#f8fafc"}};
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {sortedKeys.map(function(empresa){
+            var group = groups[empresa].slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+            var isOpen = !collapsed[empresa];
+            var fc = FIT_CONFIG[(group[0].account&&group[0].account.fit)||"ALTO"]||FIT_CONFIG.ALTO;
             return (
-              <div key={seq.id} style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:20,padding:"20px 22px",boxShadow:"0 2px 12px rgba(15,23,42,.06)",transition:"all .25s"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 12px 40px rgba(15,23,42,.08)";e.currentTarget.style.borderColor="rgba(99,102,241,.3)";}} onMouseLeave={function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 2px 12px rgba(15,23,42,.06)";e.currentTarget.style.borderColor="#e6e9ef";}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{seq.account&&seq.account.nome}</div>
-                    <div style={{fontSize:11,color:"#64748b",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{seq.profile&&seq.profile.label}</div>
-                    <div style={{fontSize:10,color:"#94a3b8"}}>{fmtDate(seq.createdAt)}</div>
+              <div key={empresa} style={{border:"1px solid #e6e9ef",borderRadius:14,overflow:"hidden"}}>
+                {/* Group header */}
+                <div onClick={function(){toggleGroup(empresa);}} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",background:"linear-gradient(135deg,rgba(99,102,241,.05),rgba(14,165,233,.03))",cursor:"pointer",userSelect:"none"}} onMouseEnter={function(e){e.currentTarget.style.background="linear-gradient(135deg,rgba(99,102,241,.1),rgba(14,165,233,.06))";}} onMouseLeave={function(e){e.currentTarget.style.background="linear-gradient(135deg,rgba(99,102,241,.05),rgba(14,165,233,.03))";}}>
+                  <Icon name="business" size={15} color="#6366f1"/>
+                  <span style={{fontSize:13,fontWeight:700,color:"#0f172a",flex:1}}>{empresa}</span>
+                  <span style={{fontSize:10,color:"#64748b",background:"#f1f5f9",borderRadius:20,padding:"2px 8px",fontWeight:600}}>
+                    {group.length+" sequência"+(group.length!==1?"s":"")}
+                  </span>
+                  <Icon name={isOpen?"expand_less":"expand_more"} size={18} color="#94a3b8"/>
+                </div>
+                {/* Sequences list */}
+                {isOpen && (
+                  <div style={{borderTop:"1px solid #f1f5f9"}}>
+                    {group.map(function(seq, si){
+                      var isLast = si === group.length - 1;
+                      return (
+                        <div key={seq.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:"#ffffff",borderBottom:isLast?"none":"1px solid #f8fafc",transition:"background .15s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(99,102,241,.02)";}} onMouseLeave={function(e){e.currentTarget.style.background="#ffffff";}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
+                              <span style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>{seq.profile&&seq.profile.label}</span>
+                              {seq.contactName && <span style={{fontSize:10,color:"#64748b"}}>{"· "+seq.contactName}</span>}
+                              <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:6,padding:"1px 7px",fontSize:8,fontWeight:700}}>{"FIT "+(seq.account&&seq.account.fit)}</span>
+                            </div>
+                            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:3}}>
+                              {safeArr(seq.touches).map(function(t,ti){
+                                var tc=TOUCH_TYPES_LOCAL[t.type]||TOUCH_TYPES_LOCAL.email;
+                                return <span key={ti} style={{background:tc.bg,color:tc.color,borderRadius:5,padding:"1px 6px",fontSize:8,fontWeight:700}}>{"D"+t.day+" "+tc.label}</span>;
+                              })}
+                            </div>
+                            <div style={{fontSize:10,color:"#94a3b8"}}>{fmtDate(seq.createdAt)}</div>
+                          </div>
+                          <button onClick={function(){props.onOpenSeq(seq);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>{"Abrir"}</button>
+                          <button onClick={function(){downloadSeqPDF(seq);}} title="PDF" style={{background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",color:"#0369a1",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontFamily:"inherit",flexShrink:0,display:"flex",alignItems:"center"}}>
+                            <Icon name="download" size={13}/>
+                          </button>
+                          <button onClick={function(){deleteSeq(seq.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"6px 8px",cursor:"pointer",fontFamily:"inherit",flexShrink:0,display:"flex",alignItems:"center"}}>
+                            <Icon name="delete" size={13}/>
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:8,padding:"3px 10px",fontSize:9,fontWeight:700,flexShrink:0,marginLeft:8}}>{"FIT "+(seq.account&&seq.account.fit)}</span>
-                </div>
-                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
-                  {safeArr(seq.touches).map(function(t,i){
-                    var tc=TOUCH_TYPES_LOCAL[t.type]||TOUCH_TYPES_LOCAL.email;
-                    return <span key={i} style={{background:tc.bg,color:tc.color,borderRadius:6,padding:"2px 8px",fontSize:9,fontWeight:700}}>{"D"+t.day+" "+tc.label}</span>;
-                  })}
-                </div>
-                <div style={{display:"flex",gap:6}}>
-                  <button onClick={function(){props.onOpenSeq(seq);}} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 0",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Abrir</button>
-                  <button onClick={function(){downloadSeqPDF(seq);}} title="Baixar PDF" style={{background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",color:"#0369a1",borderRadius:10,padding:"8px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>PDF</button>
-                  <button onClick={function(){deleteSeq(seq.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:10,padding:"8px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>x</button>
-                </div>
+                )}
               </div>
             );
           })}
         </div>
-        ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {seqs.slice().sort(function(a,b){
-            if(sortOrder==="az") return ((a.account&&a.account.nome)||"").localeCompare((b.account&&b.account.nome)||"","pt");
-            if(sortOrder==="za") return ((b.account&&b.account.nome)||"").localeCompare((a.account&&a.account.nome)||"","pt");
-            return (b.createdAt||0)-(a.createdAt||0);
-          }).map(function(seq){
-            var fc=FIT_CONFIG[(seq.account&&seq.account.fit)||"ALTO"]||FIT_CONFIG.ALTO;
-            return (
-              <div key={seq.id} style={{background:"#ffffff",border:"1px solid #e6e9ef",borderRadius:14,padding:"12px 18px",display:"flex",alignItems:"center",gap:14,transition:"all .2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.boxShadow="0 2px 12px rgba(99,102,241,.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.boxShadow="";}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13.5,fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{seq.account&&seq.account.nome}</div>
-                  <div style={{fontSize:11,color:"#64748b",marginTop:1}}>{seq.profile&&seq.profile.label}</div>
-                </div>
-                <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:7,padding:"2px 8px",fontSize:9,fontWeight:700,flexShrink:0}}>{"FIT "+(seq.account&&seq.account.fit)}</span>
-                <span style={{fontSize:10,color:"#64748b",flexShrink:0}}>{fmtDate(seq.createdAt)}</span>
-                <button onClick={function(){props.onOpenSeq(seq);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"5px 12px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>Abrir</button>
-                <button onClick={function(){downloadSeqPDF(seq);}} style={{background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",color:"#0369a1",borderRadius:8,padding:"5px 10px",fontSize:10,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>PDF</button>
-                <button onClick={function(){deleteSeq(seq.id);}} style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:8,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>x</button>
-              </div>
-            );
-          })}
-        </div>
-        )
       )}
     </div>
   );
@@ -1841,28 +1898,63 @@ function LoadingStatus() {
 // -- CONTACTS TABLE (shared by Todos + Favoritos tabs) ------------------------
 function ContactsTable(props) {
   var contacts = props.contacts || [];
-  var csort = props.csort || "az";
   var enriching = props.enriching || {};
   var enrichProgress = props.enrichProgress || {};
 
+  // Column sort: { col: "nome"|"empresa"|null, dir: "az"|"za" }
+  var _st_sort = useState({col:"nome", dir:"az"}); var sort = _st_sort[0]; var setSort = _st_sort[1];
+
+  function toggleSort(col) {
+    setSort(function(prev) {
+      if (prev.col === col) return {col:col, dir: prev.dir==="az"?"za":"az"};
+      return {col:col, dir:"az"};
+    });
+  }
+
+  function SortIcon(p) {
+    var active = sort.col === p.col;
+    return (
+      <span style={{display:"inline-flex",flexDirection:"column",marginLeft:4,opacity:active?1:.35,verticalAlign:"middle"}}>
+        <svg width="7" height="5" viewBox="0 0 7 5" fill={active&&sort.dir==="az"?"#4f46e5":"#94a3b8"}><path d="M3.5 0L7 5H0z"/></svg>
+        <svg width="7" height="5" viewBox="0 0 7 5" fill={active&&sort.dir==="za"?"#4f46e5":"#94a3b8"} style={{marginTop:1}}><path d="M3.5 5L0 0h7z"/></svg>
+      </span>
+    );
+  }
+
   var sorted = contacts.slice().sort(function(a, b) {
-    var an = ((a.empresa||a.nome)||"").toLowerCase();
-    var bn = ((b.empresa||b.nome)||"").toLowerCase();
-    return csort === "za" ? bn.localeCompare(an, "pt") : an.localeCompare(bn, "pt");
+    var dir = sort.dir === "za" ? -1 : 1;
+    if (sort.col === "empresa") {
+      var an = (a.empresa||a.nome||"").toLowerCase();
+      var bn = (b.empresa||b.nome||"").toLowerCase();
+      return dir * an.localeCompare(bn, "pt");
+    }
+    // default: nome
+    var an2 = (a.nome||"").toLowerCase();
+    var bn2 = (b.nome||"").toLowerCase();
+    return dir * an2.localeCompare(bn2, "pt");
   });
 
-  var thStyle = {textAlign:"left",padding:"9px 12px",fontSize:10,fontWeight:700,color:"#52617a",textTransform:"uppercase",letterSpacing:.6,background:"#f8fafc",borderBottom:"2px solid #e6e9ef",whiteSpace:"nowrap"};
+  var thBase = {
+    padding:"9px 12px",fontSize:10,fontWeight:700,color:"#52617a",
+    textTransform:"uppercase",letterSpacing:.6,background:"#f8fafc",
+    borderBottom:"2px solid #e6e9ef",whiteSpace:"nowrap",
+    cursor:"pointer",userSelect:"none",textAlign:"left",
+  };
 
   return (
     <div style={{overflowX:"auto",borderRadius:14,border:"1px solid #e6e9ef"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:700}}>
         <thead>
           <tr>
-            <th style={Object.assign({},thStyle,{borderRadius:"14px 0 0 0",minWidth:140})}>{"Empresa"}</th>
-            <th style={Object.assign({},thStyle,{minWidth:130})}>{"Contato"}</th>
-            <th style={Object.assign({},thStyle,{minWidth:120})}>{"Cargo"}</th>
-            <th style={Object.assign({},thStyle,{minWidth:200})}>{"E-mail"}</th>
-            <th style={Object.assign({},thStyle,{borderRadius:"0 14px 0 0",minWidth:220,textAlign:"right"})}>{"Ações"}</th>
+            <th onClick={function(){toggleSort("nome");}} style={Object.assign({},thBase,{borderRadius:"14px 0 0 0",minWidth:130})}>
+              {"Contato"}<SortIcon col="nome"/>
+            </th>
+            <th style={Object.assign({},thBase,{minWidth:120,cursor:"default"})}>{"Cargo"}</th>
+            <th style={Object.assign({},thBase,{minWidth:200,cursor:"default"})}>{"E-mail"}</th>
+            <th onClick={function(){toggleSort("empresa");}} style={Object.assign({},thBase,{minWidth:140})}>
+              {"Empresa"}<SortIcon col="empresa"/>
+            </th>
+            <th style={Object.assign({},thBase,{borderRadius:"0 14px 0 0",minWidth:220,textAlign:"right",cursor:"default"})}>{"Ações"}</th>
           </tr>
         </thead>
         <tbody>
@@ -1875,18 +1967,15 @@ function ContactsTable(props) {
                 onMouseEnter={function(e){e.currentTarget.style.background="rgba(99,102,241,.04)";}}
                 onMouseLeave={function(e){e.currentTarget.style.background=rowBg;}}>
 
-                {/* Empresa */}
+                {/* Contato */}
                 <td style={{padding:"10px 12px",verticalAlign:"middle"}}>
                   <div style={{display:"flex",alignItems:"center",gap:7}}>
                     <div style={{width:26,height:26,borderRadius:7,background:"linear-gradient(135deg,#6366f1,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <span style={{fontSize:10,color:"#fff",fontWeight:700}}>{((c.empresa||c.nome)||"?")[0].toUpperCase()}</span>
+                      <span style={{fontSize:10,color:"#fff",fontWeight:700}}>{(c.nome||c.empresa||"?")[0].toUpperCase()}</span>
                     </div>
-                    <span style={{fontWeight:600,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}}>{c.empresa||"—"}</span>
+                    <span style={{fontWeight:600,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{c.nome||"—"}</span>
                   </div>
                 </td>
-
-                {/* Contato */}
-                <td style={{padding:"10px 12px",verticalAlign:"middle",fontWeight:600,color:"#0f172a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{c.nome||"—"}</td>
 
                 {/* Cargo */}
                 <td style={{padding:"10px 12px",verticalAlign:"middle",color:"#64748b",fontSize:12,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:150}}>{c.cargo||"—"}</td>
@@ -2074,10 +2163,21 @@ function ContactsView(props) {
 
   function enrichEmail(contact) {
     var cid   = contact.id;
-    var first = (contact.nome||"").split(" ")[0];
-    var last  = (contact.nome||"").split(" ").slice(1).join(" ");
+    var parts = (contact.nome||"").trim().split(/\s+/);
+    var first = parts[0] || "";
+    var last  = parts.slice(1).join(" ") || "";
     var org   = contact.empresa || "";
-    var dom   = contact.domain  || "";
+    // Use domain from contact if set, otherwise derive from account site
+    var dom   = contact.domain || "";
+    if (!dom && contact.empresa) {
+      // Try to find matching account to get its site/domain
+      var accs = props.accounts || [];
+      var matchAcc = accs.find(function(a){ return a.nome && a.nome.toLowerCase()===contact.empresa.toLowerCase(); });
+      if (matchAcc) {
+        var site = matchAcc.site || (matchAcc.data && matchAcc.data.empresa && matchAcc.data.empresa.site) || "";
+        if (site) dom = site.replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0];
+      }
+    }
 
     // Mark overall loading + all sources pending
     setEnriching(function(e){ var n=Object.assign({},e); n[cid]=true; return n; });
@@ -4787,7 +4887,19 @@ function ProspectView(props) {
                     ) : jaEnriq ? (
                       <button onClick={function(){
                         if(props.onNav) props.onNav("accounts");
-                        if(props.onOpenAccount) props.onOpenAccount(enriched[emp.nome]);
+                        // Fetch latest version from storage — avoids stale pre-mapping snapshot
+                        storageList("acc:").then(function(keys){
+                          var found = null;
+                          var pending = keys.length;
+                          if (!pending) { if(props.onOpenAccount) props.onOpenAccount(enriched[emp.nome]); return; }
+                          keys.forEach(function(k){
+                            storageGet(k).then(function(stored){
+                              if (stored && stored.nome && stored.nome.toLowerCase()===emp.nome.toLowerCase()) found=stored;
+                              pending--;
+                              if (pending===0 && props.onOpenAccount) props.onOpenAccount(found || enriched[emp.nome]);
+                            });
+                          });
+                        });
                       }} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>{"Ver conta mapeada →"}</button>
                     ) : (
                       <button onClick={function(){enriquecerEmpresa(emp);}} disabled={isEnriching} style={{flex:1,background:isEnriching?"#f1f5f9":"linear-gradient(135deg,#6366f1,#4f46e5)",color:isEnriching?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:isEnriching?"default":"pointer",fontFamily:"inherit",boxShadow:isEnriching?"none":"0 4px 12px rgba(99,102,241,.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .2s"}}>
