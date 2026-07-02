@@ -1,39 +1,50 @@
 // api/gemini.js — Vercel serverless
-// Powered by Groq (Llama 3.3 70B) — resumo, mapeamento e sequencias.
-// Variavel de ambiente necessaria: GROQ_API_KEY
+// Powered by Google Gemini 2.0 Flash — resumo, mapeamento e sequencias.
+// Variavel de ambiente necessaria: GEMINI_API_KEY
 
-async function callGroq(apiKey, systemText, userText, maxTokens, forceJson) {
+// ── Transport layer ────────────────────────────────────────────────────────────
+async function callGemini(apiKey, systemText, userText, maxTokens, forceJson) {
+  const model = "gemini-2.0-flash";
+  const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
   const body = {
-    model: "llama-3.3-70b-versatile",
-    max_tokens: maxTokens || 4096,
-    temperature: 0.7,
-    messages: [
-      { role: "system", content: systemText },
-      { role: "user",   content: userText   },
-    ],
-  };
-  if (forceJson) body.response_format = { type: "json_object" };
-
-  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type":  "application/json",
-      "Authorization": "Bearer " + apiKey,
+    system_instruction: { parts: [{ text: systemText }] },
+    contents:           [{ role: "user", parts: [{ text: userText }] }],
+    generationConfig: {
+      maxOutputTokens: maxTokens || 4096,
+      temperature:     0.7,
+      ...(forceJson ? { responseMimeType: "application/json" } : {}),
     },
-    body: JSON.stringify(body),
+  };
+
+  const r = await fetch(url, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(body),
   });
 
   const data = await r.json();
+
   if (!r.ok) {
-    const msg = (data && data.error && data.error.message) || ("HTTP " + r.status);
+    const msg = data?.error?.message || ("HTTP " + r.status);
     return { ok: false, status: r.status, error: msg };
   }
 
-  const text = ((data.choices || [])[0]?.message?.content || "").trim();
-  if (!text) return { ok: false, status: 200, error: "Resposta vazia da IA." };
+  // Extract text from Gemini response structure
+  const text = (
+    data?.candidates?.[0]?.content?.parts?.[0]?.text || ""
+  ).trim();
+
+  if (!text) {
+    // Check for blocked/safety finish reason
+    const reason = data?.candidates?.[0]?.finishReason;
+    return { ok: false, status: 200, error: "Resposta vazia da IA" + (reason ? ` (${reason})` : "") + "." };
+  }
+
   return { ok: true, text };
 }
 
+// ── JSON helpers ───────────────────────────────────────────────────────────────
 function parseJSON(raw) {
   const clean = (raw || "")
     .replace(/^```json\s*/i, "")
@@ -43,6 +54,18 @@ function parseJSON(raw) {
   return JSON.parse(clean);
 }
 
+function stripDashesDeep(obj) {
+  if (typeof obj === "string") return obj.replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
+  if (Array.isArray(obj))      return obj.map(stripDashesDeep);
+  if (obj && typeof obj === "object") {
+    const out = {};
+    for (const k in obj) out[k] = stripDashesDeep(obj[k]);
+    return out;
+  }
+  return obj;
+}
+
+// ── Handler ────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin",  "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -50,8 +73,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")   return res.status(405).json({ error: "Metodo nao permitido." });
 
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "GROQ_API_KEY nao configurada." });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY nao configurada." });
 
   try {
     const {
@@ -60,7 +83,7 @@ export default async function handler(req, res) {
     } = req.body || {};
 
     // ── Seller context — DNA takes priority ───────────────────────────────────
-    const vendedorEmpresa    = (dna?.empresa?.nome) || companySite || "minha empresa";
+    const vendedorEmpresa    = dna?.empresa?.nome || companySite || "minha empresa";
     const vendedorAssinatura = assinatura || "Consultor";
 
     const dnaContext = dna ? [
@@ -137,7 +160,6 @@ export default async function handler(req, res) {
         `REGRAS: Sem markdown. Sem bullets. Prosa corrida. NÃO mencione o vendedor ou seus produtos — isso é um briefing da empresa-alvo, não um pitch.`,
       ].join("\n");
 
-      // Clean English noise and CSV junk from context
       const cleanCtx = (rawContext || "")
         .split("\n")
         .filter(l => l.trim().length > 30 && !(/;.*;/.test(l)) && !(/trk=|utm_|cnpj|\d{5}-\d{3}/i.test(l)))
@@ -156,8 +178,8 @@ export default async function handler(req, res) {
         `Escreva agora o briefing em Português do Brasil. 2 parágrafos. Sem markdown. Sem mencionar o vendedor.`,
       ].join("\n");
 
-      const out = await callGroq(apiKey, system, user, 1024, false);
-      if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
+      const out = await callGemini(apiKey, system, user, 1024, false);
+      if (!out.ok) return res.status(502).json({ error: "Gemini erro: " + out.error });
       const resumoClean = (out.text || "").replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
       return res.status(200).json({ resumo: resumoClean || null });
     }
@@ -173,7 +195,7 @@ export default async function handler(req, res) {
       ].join("\n");
 
       const user = [
-        `INSTRUÇÃO: Responda SOMENTE com o JSON abaixo. Nenhum texto antes ou depois. Tudo em Português do Brasil.`,
+        `INSTRUÇÃO: Responda SOMENTE com o JSON abaixo. Nenhum texto antes ou depois. Tudo em Português do Brasil. Sem travessão (—), use vírgula.`,
         ``,
         `EMPRESA-ALVO: ${empresa || "a empresa"}`,
         `SETOR: ${setor || "tecnologia"}`,
@@ -182,69 +204,67 @@ export default async function handler(req, res) {
         (rawContext || "Sem dados.").slice(0, 3500),
         ``,
         `INSTRUÇÕES DE QUALIDADE:`,
-        `- "dores": seja específico ao setor e porte desta empresa. Não use dores genéricas como "falta de tempo" ou "custos altos". Explore dores operacionais, tecnológicas, de pessoas, regulatórias e competitivas reais do setor.`,
-        `- "triggers": eventos concretos que sinalizam janela de compra — ex: rodada de investimento, nova regulação, expansão geográfica, troca de liderança, IPO, fusão, abertura de vagas técnicas.`,
-        `- "perguntas_spin": use SPIN real — Situação para mapear o contexto atual, Problema para revelar a dor latente, Implicação para expandir a consequência da dor no negócio/pessoas/resultado, Necessidade para fazer o prospect articular o valor. Cada pergunta deve ser específica para esta empresa e setor.`,
-        `- "proximos_passos": ações concretas e sequenciadas — com o que pesquisar, quem abordar primeiro e como.`,
-        `- "emails" e "cold_calls": personalizados para esta empresa específica. Mencione o setor, porte ou contexto dela. Nunca use [placeholder] — use o nome da empresa diretamente.`,
+        `- "dores": específicas ao setor e porte. Explore dores operacionais, tecnológicas, de pessoas, regulatórias e competitivas.`,
+        `- "triggers": eventos concretos — rodada de investimento, regulação, expansão, troca de liderança, IPO, fusão, vagas técnicas.`,
+        `- "perguntas_spin": SPIN real — Situação, Problema, Implicação, Necessidade. Específicas para esta empresa e setor.`,
+        `- "proximos_passos": ações concretas e sequenciadas.`,
+        `- Emails e cold_calls: personalizados para esta empresa. Mencione setor, porte ou contexto. Sem travessão.`,
         ``,
-        `JSON de resposta:`,
         `{`,
-        `  "resumo": "2 parágrafos sobre o que a empresa faz e seu momento de mercado — NÃO mencione o vendedor",`,
-        `  "fit": { "score": "ALTO|MÉDIO|BAIXO", "justificativa": "3 frases específicas explicando o fit com os produtos do vendedor" },`,
-        `  "dores": { "principais": ["dor operacional específica 1","dor tecnológica específica 2","dor de pessoas/org 3","dor regulatória ou competitiva 4","dor estratégica 5"] },`,
-        `  "triggers": ["evento concreto que abre janela de compra 1","trigger 2","trigger 3","trigger 4 — ex: nova regulação, expansão, M&A, IPO, vagas abertas"],`,
+        `  "resumo": "2 parágrafos sobre o que a empresa faz e seu momento de mercado, NÃO mencione o vendedor",`,
+        `  "fit": { "score": "ALTO|MÉDIO|BAIXO", "justificativa": "3 frases específicas de fit com os produtos do vendedor" },`,
+        `  "dores": { "principais": ["dor operacional específica 1","dor tecnológica 2","dor de pessoas/org 3","dor regulatória ou competitiva 4","dor estratégica 5"] },`,
+        `  "triggers": ["evento concreto que abre janela de compra 1","trigger 2","trigger 3","trigger 4"],`,
         `  "stakeholders": [`,
-        `    {"cargo":"cargo decisor primário para este setor","angulo":"ângulo de abordagem específico para este cargo e empresa","prioridade":"PRIMARIO","urgencia":"Alta","email":"","linkedin":"","phone":""},`,
-        `    {"cargo":"cargo secundário","angulo":"ângulo diferente do primário","prioridade":"SECUNDARIO","urgencia":"Média","email":"","linkedin":"","phone":""},`,
-        `    {"cargo":"influenciador técnico ou operacional","angulo":"ângulo técnico/operacional","prioridade":"TERCIARIO","urgencia":"Baixa","email":"","linkedin":"","phone":""}`,
+        `    {"cargo":"cargo decisor primário","angulo":"ângulo específico","prioridade":"PRIMARIO","urgencia":"Alta","email":"","linkedin":"","phone":""},`,
+        `    {"cargo":"cargo secundário","angulo":"ângulo diferente","prioridade":"SECUNDARIO","urgencia":"Média","email":"","linkedin":"","phone":""},`,
+        `    {"cargo":"influenciador técnico","angulo":"ângulo técnico","prioridade":"TERCIARIO","urgencia":"Baixa","email":"","linkedin":"","phone":""}`,
         `  ],`,
         `  "estrategia": {`,
         `    "emails": [`,
-        `      {"assunto":"assunto específico que menciona algo da empresa ou setor","corpo":"email de 150-200 palavras personalizado para ${empresa}, com 2-3 parágrafos curtos, referência ao contexto da empresa, dado ou insight do setor, dor específica e CTA leve. Sem travessão, use vírgula."},`,
-        `      {"assunto":"ângulo diferente do 1o email","corpo":"follow-up de 150-200 palavras com outro ângulo, prova social, dado de mercado ou pergunta de discovery. Sem travessão."},`,
-        `      {"assunto":"último email, direto e com classe","corpo":"breakup de 100-150 palavras com gancho de urgência e porta aberta. Sem travessão."}`,
+        `      {"assunto":"assunto específico com contexto da empresa","corpo":"email de 150-200 palavras personalizado, 2-3 parágrafos, dor específica, CTA leve. Sem travessão."},`,
+        `      {"assunto":"ângulo diferente do 1o","corpo":"follow-up 150-200 palavras com prova social, dado de mercado ou discovery. Sem travessão."},`,
+        `      {"assunto":"breakup direto e com classe","corpo":"breakup 100-150 palavras com urgência e porta aberta. Sem travessão."}`,
         `    ],`,
         `    "inmails": [`,
-        `      {"assunto":"InMail direto para o cargo decisor de ${empresa}","corpo":"100-140 palavras. Gancho específico, 2 ideias desenvolvidas, pergunta de problema, CTA para resposta. Sem travessão."},`,
-        `      {"assunto":"ângulo alternativo","corpo":"100-140 palavras. Abordagem diferente, dados, tendência do setor ou referência a concorrente. Sem travessão."}`,
+        `      {"assunto":"InMail direto para o cargo decisor","corpo":"100-140 palavras, gancho específico, 2 ideias conectadas, CTA. Sem travessão."},`,
+        `      {"assunto":"ângulo alternativo","corpo":"100-140 palavras com dado de setor ou referência a concorrente. Sem travessão."}`,
         `    ],`,
-        `    "whatsapps": ["mensagem informal de 3-5 frases curtas, com nome da empresa e pergunta direta, sem travessão","segunda opção com ângulo diferente, mesma extensão"],`,
+        `    "whatsapps": ["3-5 frases informais, contexto da empresa, pergunta direta. Sem travessão.","segunda opção com ângulo diferente. Sem travessão."],`,
         `    "cold_calls": [`,
-        `      "script completo de cold call para ${empresa}: abertura de 10-15 segundos, pausa, pergunta de qualificação, resposta a objeção comum, ponte para a solução, CTA para reunião de 20 min. Mínimo 120 palavras. Use o nome da empresa e cargo do decisor. Sem travessão.",`,
-        `      "script alternativo de mínimo 120 palavras, com referência a um trigger de compra ou dado do setor. Sem travessão."`,
+        `      "script completo para ${empresa}: abertura 10-15s, pausa, pergunta de qualificação, resposta a objeção, ponte para solução, CTA para 20 min. Mín. 120 palavras. Sem travessão.",`,
+        `      "script alternativo mín. 120 palavras com trigger de compra ou dado do setor. Sem travessão."`,
         `    ],`,
         `    "perguntas_spin": [`,
-        `      "SITUAÇÃO: pergunta concreta sobre como ${empresa} opera hoje em relação à dor principal",`,
-        `      "SITUAÇÃO: pergunta sobre estrutura, processo ou tecnologia atual da ${empresa}",`,
+        `      "SITUAÇÃO: como ${empresa} opera hoje em relação à dor principal?",`,
+        `      "SITUAÇÃO: qual a estrutura, processo ou tecnologia atual da ${empresa}?",`,
         `      "PROBLEMA: pergunta que revela a dor principal de forma não óbvia",`,
         `      "PROBLEMA: pergunta que expõe limitação ou risco específico do setor",`,
         `      "IMPLICAÇÃO: qual o impacto desta dor no resultado financeiro ou operacional da ${empresa}?",`,
-        `      "IMPLICAÇÃO: como esta limitação afeta a equipe, os clientes ou a posição competitiva?",`,
+        `      "IMPLICAÇÃO: como esta limitação afeta a equipe, clientes ou posição competitiva?",`,
         `      "NECESSIDADE: se isso fosse resolvido, qual seria o impacto nos resultados da ${empresa}?",`,
         `      "NECESSIDADE: o que mudaria na operação se vocês tivessem [benefício do produto]?"`,
         `    ],`,
         `    "objecoes": [`,
-        `      {"objecao":"objeção mais comum neste setor — específica, não genérica","resposta":"resposta que usa diferencial do produto e dado concreto"},`,
-        `      {"objecao":"segunda objeção provável para este perfil de empresa","resposta":"resposta com case ou lógica de ROI"},`,
+        `      {"objecao":"objeção comum neste setor, específica","resposta":"resposta com diferencial do produto e dado concreto"},`,
+        `      {"objecao":"segunda objeção provável","resposta":"resposta com case ou ROI"},`,
         `      {"objecao":"objeção de timing ou prioridade","resposta":"resposta que cria urgência sem pressionar"}`,
         `    ]`,
         `  },`,
         `  "proximos_passos": {`,
-        `    "ae": ["pesquisar no LinkedIn os decisores de ${empresa} pelos cargos mapeados","verificar vagas abertas em ${empresa} — sinal de momento e prioridade","buscar notícias recentes de ${empresa} — M&A, expansão, novos produtos","preparar diagnóstico personalizado com dados do setor"],`,
-        `    "bdr": ["cold call para o decisor primário com script de abertura de 10s","InMail no LinkedIn com ângulo de dor específica","sequência de 3 emails em 10 dias com ângulos diferentes","monitorar ${empresa} no Google Alerts e LinkedIn"],`,
-        `    "prazo": "Prioridade ${setor === "Financeiro / Fintech" ? "ALTA" : "MÉDIA"} — abordar em até 48h se houver trigger recente, senão em 7 dias."`,
+        `    "ae": ["pesquisar no LinkedIn os decisores de ${empresa}","verificar vagas abertas em ${empresa}","buscar notícias recentes — M&A, expansão, novos produtos","preparar diagnóstico com dados do setor"],`,
+        `    "bdr": ["cold call para o decisor primário com script de 10s","InMail no LinkedIn com ângulo de dor","sequência de 3 emails em 10 dias","monitorar ${empresa} no Google Alerts"],`,
+        `    "prazo": "Prioridade MÉDIA — abordar em até 48h se houver trigger recente, senão em 7 dias."`,
         `  }`,
         `}`,
       ].join("\n");
 
-      const out = await callGroq(apiKey, system, user, 7000, true);
-      if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
+      const out = await callGemini(apiKey, system, user, 8192, true);
+      if (!out.ok) return res.status(502).json({ error: "Gemini erro: " + out.error });
 
       let parsed;
       try { parsed = parseJSON(out.text); }
       catch (e) {
-        // Try extracting JSON object if wrapped in text
         try {
           const m = out.text.match(/\{[\s\S]+\}/);
           if (m) parsed = JSON.parse(m[0]);
@@ -254,20 +274,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // Safety net: strip em-dash/en-dash recursively from all string fields
-      function stripDashesDeep(obj) {
-        if (typeof obj === "string") return obj.replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
-        if (Array.isArray(obj)) return obj.map(stripDashesDeep);
-        if (obj && typeof obj === "object") {
-          const out = {};
-          for (const k in obj) out[k] = stripDashesDeep(obj[k]);
-          return out;
-        }
-        return obj;
-      }
-      parsed = stripDashesDeep(parsed);
-
-      return res.status(200).json(parsed);
+      return res.status(200).json(stripDashesDeep(parsed));
     }
 
     // ── MODO SEQUÊNCIA ────────────────────────────────────────────────────────
@@ -278,65 +285,63 @@ export default async function handler(req, res) {
     ];
 
     const contactFirstName = contato ? contato.split(" ")[0] : null;
-    const nomeUsar = contactFirstName || null;
+    const nomeUsar         = contactFirstName || null;
 
-    const system = [
+    const seqSystem = [
       `Você é o melhor copywriter de outbound B2B do Brasil. Não o mais educado — o mais eficaz.`,
       ``,
-      `Você escreve mensagens que as pessoas PARAM para ler no meio do scroll do celular. Mensagens que fazem o decisor pensar "caramba, como esse cara sabe isso?" ou dar uma risada antes de responder.`,
+      `Você escreve mensagens que as pessoas PARAM para ler no meio do scroll do celular.`,
       ``,
       `Você representa: ${vendedorEmpresa}`,
       ``,
       sellerCtx,
       ``,
       `SEU ESTILO:`,
-      `- Cada touch começa de forma INESPERADA. Não com "Olá, meu nome é..." nem com "Espero que esteja bem".`,
-      `- Use dados reais do setor, provocações inteligentes, perguntas que incomodam (de forma positiva), ou humor contextual sobre o cargo ou empresa.`,
+      `- Cada touch começa de forma INESPERADA. Nunca com "Olá, meu nome é..." nem "Espero que esteja bem".`,
+      `- Use dados reais do setor, provocações inteligentes, humor contextual sobre o cargo ou empresa.`,
       `- Tom: colega de setor, não vendedor. Alguém que entende o jogo deles por dentro.`,
-      `- Referências diretas ao cargo, empresa ou setor da pessoa — mostre que você fez a lição de casa.`,
-      `- Humor quando cabível: ironia leve, autoironia, exagero calculado. Nunca piada forçada.`,
-      `- Cada touch é uma peça de conteúdo, não um template preenchido.`,
+      `- Referências diretas ao cargo, empresa ou setor — mostre que você fez a lição de casa.`,
       ``,
       `REGRAS ABSOLUTAS:`,
       `- Português do Brasil. Nunca inglês.`,
       `- ZERO placeholders. Nem [Nome], nem [Empresa], nem [Cargo]. Use os dados reais.`,
-      `- NUNCA use travessão (— ou –) em nenhuma mensagem. Use vírgula, ponto ou ponto e vírgula no lugar.`,
-      nomeUsar ? `- O nome do contato é ${nomeUsar}. Use nas mensagens quando natural.` : `- Nome desconhecido. Comece sem nome, com gancho direto ou "Oi," casual.`,
+      `- NUNCA use travessão (— ou –). Use vírgula, ponto ou ponto e vírgula.`,
+      nomeUsar ? `- Nome do contato: ${nomeUsar}. Use quando natural.` : `- Nome desconhecido. Comece sem nome, com gancho direto.`,
       `- 6 touches = 6 abordagens COMPLETAMENTE diferentes. Mesma pessoa, 6 ângulos distintos.`,
-      `- Email: 150-220 palavras. Desenvolva o raciocínio em 2-3 parágrafos curtos antes do CTA. Conte uma mini-história, cite um dado de mercado específico ou faça uma observação aguçada sobre o setor. CTA que não parece CTA.`,
-      `- LinkedIn: 100-140 palavras. Mais íntimo que o email, mas com substância real, não apenas uma linha solta. Desenvolva 2 ideias conectadas antes do fechamento.`,
-      `- WhatsApp: 3-5 frases curtas. Casual mas com contexto real demonstrando que você pesquisou sobre a empresa, não um "oi tudo bem".`,
-      `- Cold call: script completo e real, como se fosse falado ao telefone. Abertura de 10-15 segundos. Pausa estratégica. Pergunta cirúrgica de qualificação. Resposta pronta para uma objeção comum. CTA para reunião de 20 min. Mínimo 120 palavras de script completo.`,
-      `- Breakup: a mensagem mais criativa e elaborada de todas, 100-150 palavras. Ironia leve, leveza ou um insight final que faz o leitor pensar duas vezes antes de ignorar. Porta aberta com classe.`,
+      `- Email: 150-220 palavras, 2-3 parágrafos curtos, mini-história ou dado de mercado, CTA que não parece CTA.`,
+      `- LinkedIn: 100-140 palavras, íntimo mas com substância, 2 ideias conectadas antes do fechamento.`,
+      `- WhatsApp: 3-5 frases curtas, casual, contexto real que mostra pesquisa.`,
+      `- Cold call: script falado completo, abertura 10-15s, pausa estratégica, pergunta cirúrgica, resposta a objeção, CTA para 20 min. Mín. 120 palavras.`,
+      `- Breakup: mais criativo e elaborado, 100-150 palavras, ironia leve ou insight final, porta aberta com classe.`,
       `- RESPONDA APENAS COM O JSON. ZERO texto antes ou depois.`,
     ].join("\n");
 
-    const user = [
-      `JSON APENAS. Nenhum texto fora do JSON. Nenhum placeholder.`,
+    const seqUser = [
+      `JSON APENAS. Nenhum texto fora do JSON. Nenhum placeholder. Sem travessão.`,
       ``,
-      `CONTEXTO DA SEQUÊNCIA:`,
+      `SEQUÊNCIA PARA:`,
       `- Empresa-alvo: ${empresa || "a empresa"}`,
       `- Setor: ${setor || "tecnologia"}`,
       `- Cargo do decisor: ${cargo || "Decisor"}`,
-      nomeUsar ? `- Nome do contato: ${contato}` : `- Nome: não informado`,
-      `- Ângulo de abordagem: ${angulo || "impacto no negócio"}`,
+      nomeUsar ? `- Nome: ${contato}` : `- Nome: desconhecido`,
+      `- Ângulo: ${angulo || "impacto no negócio"}`,
       `- Dor principal: ${pain || "a descobrir — explore pelo setor e cargo"}`,
       ``,
-      `EXEMPLOS DE ABERTURAS DISRUPTIVAS (use como inspiração, não como template):`,
-      `• Email: "Existe uma crença no setor de [setor] que [insight contraintuitivo]. Ela está errada — e você provavelmente já sabe disso."`,
+      `ABERTURAS DE EXEMPLO (inspire-se, não copie):`,
+      `• Email: "Existe uma crença no setor de ${setor || "tecnologia"} que [insight contraintuitivo]. Ela está errada."`,
       `• LinkedIn: "Vi que a ${empresa} [algo específico]. Fiquei curioso: isso é intenção ou consequência?"`,
-      `• WhatsApp: "Oi ${nomeUsar||""}! Vi uma coisa sobre a ${empresa} que me fez pensar em você. Posso te mandar 2 linhas?"`,
-      `• Cold call: "[Pausa proposital] Desculpa a ligação sem aviso — mas ligo porque achei que seria mais honesto do que mais um e-mail. Tenho 30 segundos?"`,
-      `• Breakup: "Ok, vou parar de insistir. Mas antes — uma última pergunta que pode valer seu tempo: [pergunta genuinamente interessante sobre o negócio]"`,
+      nomeUsar ? `• WhatsApp: "Oi ${nomeUsar}! Vi algo sobre a ${empresa} que me fez pensar. Posso te mandar 2 linhas?"` : `• WhatsApp: "Vi algo sobre a ${empresa} que me fez pensar. Posso compartilhar em 2 linhas?"`,
+      `• Cold call: "Desculpa a ligação sem aviso, ligo porque é mais honesto do que mais um e-mail. Tenho 30 segundos?"`,
+      `• Breakup: "Ok, vou parar de insistir. Mas antes: uma pergunta que pode valer seu tempo..."`,
       ``,
-      `Cadência (${cadencia.length} touches — cada um COMPLETAMENTE diferente em tom, formato e ângulo):`,
+      `Cadência (${cadencia.length} touches, cada um COMPLETAMENTE diferente):`,
       cadencia.map((t, i) => `${i + 1}) Dia ${t.day} — canal: ${t.type}`).join("\n"),
       ``,
-      `{"touches":[{"day":1,"type":"linkedin","subject":"assunto impactante","body":"mensagem completa e disruptiva aqui"},...]}`,
+      `{"touches":[{"day":1,"type":"linkedin","subject":"assunto impactante","body":"mensagem completa e disruptiva"},...]}`,
     ].join("\n");
 
-    const out = await callGroq(apiKey, system, user, 12000, true);
-    if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
+    const out = await callGemini(apiKey, seqSystem, seqUser, 12000, true);
+    if (!out.ok) return res.status(502).json({ error: "Gemini erro: " + out.error });
 
     let parsed;
     try { parsed = parseJSON(out.text); }
@@ -350,20 +355,15 @@ export default async function handler(req, res) {
       }
     }
 
-    // Safety net: strip any em-dash/en-dash the model might still produce, replace with comma
-    function stripDashes(s) {
-      if (typeof s !== "string") return s;
-      return s.replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
-    }
-    var touchesOut = (parsed && parsed.touches) || null;
-    if (Array.isArray(touchesOut)) {
-      touchesOut = touchesOut.map(function(t) {
-        return Object.assign({}, t, {
-          subject: stripDashes(t.subject),
-          body:    stripDashes(t.body),
-        });
-      });
-    }
+    // Strip dashes from all touch fields
+    const touchesOut = Array.isArray(parsed?.touches)
+      ? parsed.touches.map(t => ({
+          ...t,
+          subject: (t.subject || "").replace(/\s*[—–]\s*/g, ", "),
+          body:    (t.body    || "").replace(/\s*[—–]\s*/g, ", "),
+        }))
+      : null;
+
     return res.status(200).json({ touches: touchesOut });
 
   } catch (e) {
