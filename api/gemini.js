@@ -3,6 +3,11 @@
 // Variavel de ambiente necessaria: GEMINI_API_KEY
 
 // ── Transport layer ────────────────────────────────────────────────────────────
+// Model name reference (v1beta endpoint):
+//   gemini-2.0-flash          → stable alias, 15 RPM free
+//   gemini-1.5-flash-latest   → fallback when 2.0 quota exceeded
+//   gemini-1.5-pro-latest     → highest quality, lower RPM
+
 async function callGemini(apiKey, systemText, userText, maxTokens, forceJson, modelOverride) {
   const model = modelOverride || "gemini-2.0-flash";
   const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -26,32 +31,30 @@ async function callGemini(apiKey, systemText, userText, maxTokens, forceJson, mo
   const data = await r.json();
 
   if (!r.ok) {
-    const msg = data?.error?.message || ("HTTP " + r.status);
+    const msg    = data?.error?.message || ("HTTP " + r.status);
     const status = r.status;
+    const isQuota = status === 429
+      || (data?.error?.status === "RESOURCE_EXHAUSTED")
+      || msg.toLowerCase().includes("quota")
+      || msg.toLowerCase().includes("resource_exhausted");
 
-    // Quota exceeded (429) or resource exhausted — retry with fallback model
-    if ((status === 429 || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("resource_exhausted")) && !modelOverride) {
-      console.log("Gemini 2.0 Flash quota exceeded, falling back to gemini-1.5-flash");
-      return callGemini(apiKey, systemText, userText, maxTokens, forceJson, "gemini-1.5-flash");
+    // Quota exceeded on primary model → retry with 1.5-flash-latest (different quota pool)
+    if (isQuota && !modelOverride) {
+      return callGemini(apiKey, systemText, userText, maxTokens, forceJson, "gemini-1.5-flash-latest");
+    }
+    // Quota exceeded on fallback too → last resort: 1.5-flash-8b (highest free RPM)
+    if (isQuota && modelOverride === "gemini-1.5-flash-latest") {
+      return callGemini(apiKey, systemText, userText, maxTokens, forceJson, "gemini-1.5-flash-8b-latest");
     }
 
     return { ok: false, status, error: msg };
   }
 
-  // Extract text from Gemini response structure
-  const text = (
-    data?.candidates?.[0]?.content?.parts?.[0]?.text || ""
-  ).trim();
-
+  const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
   if (!text) {
     const reason = data?.candidates?.[0]?.finishReason;
-    // If quota on JSON mode, retry without JSON mode
-    if (reason === "MAX_TOKENS") {
-      return { ok: false, status: 200, error: "Resposta muito longa — reduza o contexto." };
-    }
-    return { ok: false, status: 200, error: "Resposta vazia da IA" + (reason ? ` (${reason})` : "") + "." };
+    return { ok: false, status: 200, error: "Resposta vazia" + (reason ? ` (${reason})` : "") + "." };
   }
-
   return { ok: true, text };
 }
 
