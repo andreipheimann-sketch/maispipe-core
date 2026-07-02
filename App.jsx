@@ -1290,6 +1290,7 @@ function AccountModal(props) {
       });
       storageSet(acc.id, newStored);
       if (props.onUpdateAccount) props.onUpdateAccount(newStored);
+      if (props.onContactsRefresh) props.onContactsRefresh();
     });
   }
   function sd(path) {
@@ -2047,6 +2048,7 @@ function ContactsView(props) {
     storageSet(c.id, updated).then(function(){
       setContacts(function(prev){ return prev.map(function(p){ return p.id===c.id ? updated : p; }); });
       showToastC(updated.favorite ? "Adicionado aos favoritos." : "Removido dos favoritos.", updated.favorite ? "#f59e0b" : "#64748b");
+      if (props.onFavoriteChange) props.onFavoriteChange();
     });
   }
 
@@ -5284,7 +5286,7 @@ export default function App() {
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts}/>}
               {nav==="biblioteca" && <BibliotecaView showToast={showToast} onCountChange={setSeqCount} onOpenSeq={setOpenSeq}/>}
-              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} defaultSearch={pendingContactSearch} onMounted={function(){ setPendingContactSearch(""); }} onCreateAccount={function(nome){
+              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} defaultSearch={pendingContactSearch} onMounted={function(){ setPendingContactSearch(""); }} onFavoriteChange={triggerContactsRefresh} onCreateAccount={function(nome){
                 var id="acc:"+Date.now()+"-"+Math.random().toString(36).slice(2,7);
                 var acc={id:id,nome:nome,setor:"Criada manualmente",fit:"-",tier:"-",status:"prospecting",mapped:false,manualOnly:true,savedAt:Date.now(),data:null};
                 storageSet(id,acc).then(function(){setAccounts(function(prev){return [acc].concat(prev);});});
