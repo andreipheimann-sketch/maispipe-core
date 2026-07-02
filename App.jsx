@@ -1407,20 +1407,54 @@ function AccountModal(props) {
           {activeTab==="overview"&&(
             <div>
               {empresa.resumo&&<Sec title={empresa.resumoAI?"Resumo da Empresa · IA":"Resumo da Empresa"}><p style={{fontSize:13,lineHeight:1.8,color:"#334155",margin:"0 0 14px"}}>{empresa.resumo}</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8}}>{[["Setor",empresa.setor],["Porte",empresa.tamanho],["Faturamento",empresa.faturamento],["Clientes",empresa.clientes],["Estágio",empresa.estagio],["Bolsa",empresa.bolsa]].filter(function(x){return x[1];}).map(function(item){return <div key={item[0]} style={{background:"rgba(99,102,241,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:10,padding:"10px 12px"}}><div style={{fontSize:8,color:"#818cf8",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:3}}>{item[0]}</div><div style={{fontSize:12,color:"#0f172a",fontWeight:600}}>{item[1]}</div></div>;})}</div></Sec>}
-              {fitJust&&<Sec title={"Fit "+getCompanySite()||"Mais Pipe"}><p style={{fontSize:13,lineHeight:1.7,color:"#334155",marginBottom:10}}>{fitJust}</p>{solucoes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6}}>{solucoes.map(function(s,i){return <span key={i} style={{background:"rgba(99,102,241,.08)",border:"1px solid rgba(99,102,241,.25)",color:"#4f46e5",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{s}</span>;})}</div>}</Sec>}
+              {fitJust&&<Sec title={"Fit — "+getCompanySite()}><p style={{fontSize:13,lineHeight:1.7,color:"#334155",marginBottom:10}}>{fitJust}</p>{solucoes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6}}>{solucoes.map(function(s,i){return <span key={i} style={{background:"rgba(99,102,241,.08)",border:"1px solid rgba(99,102,241,.25)",color:"#4f46e5",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{s}</span>;})}</div>}</Sec>}
               {useCases.length>0&&<Sec title="Use Cases Prioritários">{useCases.map(function(u,i){return <R key={i} icon=">" color="#6366f1">{u}</R>;})}</Sec>}
-              {dores.length>0&&<Sec title="Possiveis dores para mapear">{dores.map(function(d2,i){return <R key={i} icon="!" color="#ef4444">{d2}</R>;})} {exposicao.length>0&&<div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:6}}>{exposicao.map(function(r,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{r}</span>;})}</div>}</Sec>}
-              {triggers.length>0&&<Sec title="Gatilhos Comerciais">{triggers.map(function(t,i){return <R key={i} icon="T" color="#7c3aed">{t}</R>;})}</Sec>}
+
+              {/* ── Dores ── */}
+              {dores.length>0 ? (
+                <Sec title="Possíveis Dores para Mapear">
+                  {dores.map(function(d2,i){return <R key={i} icon="!" color="#ef4444">{d2}</R>;})}
+                  {exposicao.length>0&&<div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:6}}>{exposicao.map(function(r,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{r}</span>;})}</div>}
+                </Sec>
+              ) : !_mappingInProgress.has((acc.nome||"").toLowerCase()) && (
+                <div style={{background:"#fafbff",border:"1.5px dashed #e0e4ef",borderRadius:14,padding:"20px",marginBottom:16,textAlign:"center"}}>
+                  <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>{"Nenhuma dor mapeada. Clique em \"Enriquecer com IA\" para gerar inteligência de conta."}</div>
+                  {props.onReEnrich && <button onClick={function(){props.onClose();props.onReEnrich(acc);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
+                    <Icon name="auto_awesome" size={14}/>{"Enriquecer com IA"}
+                  </button>}
+                </div>
+              )}
+
+              {/* ── Gatilhos ── */}
+              {triggers.length>0 ? (
+                <Sec title="Gatilhos Comerciais">
+                  {triggers.map(function(t,i){return <R key={i} icon="T" color="#7c3aed">{t}</R>;})}
+                </Sec>
+              ) : dores.length===0 ? null : (
+                <Sec title="Gatilhos Comerciais"><p style={{fontSize:12,color:"#94a3b8"}}>{"Nenhum gatilho identificado — reenriqueça para gerar."}</p></Sec>
+              )}
+
               {sinais.length>0&&<Sec title="Sinais de Intenção"><div style={{background:"#0c2340",borderRadius:12,padding:"12px 16px"}}>{sinais.map(function(s,i){return <div key={i} style={{fontSize:11.5,color:"#7dd3fc",lineHeight:1.6,display:"flex",gap:8,marginBottom:5}}><span style={{color:"#38bdf8",flexShrink:0}}>o</span>{s}</div>;})}</div></Sec>}
               {concorrentes.length>0&&<Sec title="Concorrentes Prováveis"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{concorrentes.map(function(cc,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{cc}</span>;})}</div></Sec>}
               {noticias.length>0&&<Sec title="Notícias e Contexto">{noticias.map(function(n,i){return <div key={i} style={{background:"#fbfbfd",border:"1px solid #e6e9ef",borderRadius:12,padding:"12px 14px",marginBottom:8}}>{n.url?<a href={n.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,fontWeight:700,color:"#0ea5e9",textDecoration:"none",display:"block",marginBottom:3}}>{n.titulo}</a>:<div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:3}}>{n.titulo}</div>}<div style={{fontSize:11.5,color:"#52617a",lineHeight:1.6,marginBottom:3}}>{n.resumo}</div><div style={{fontSize:10,color:"#a5b4fc",fontWeight:600}}>{"-> "+n.relevancia}</div></div>;})}</Sec>}
-              {(dores.length===0 || triggers.length===0) && !acc.aiMapped && _mappingInProgress.has((acc.nome||"").toLowerCase()) && (
+
+              {/* ── Mapping in progress banner ── */}
+              {_mappingInProgress.has((acc.nome||"").toLowerCase()) && (
                 <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
                   <div>
                     <div style={{fontSize:12,fontWeight:700,color:"#4f46e5",marginBottom:2}}>{"IA mapeando a conta..."}</div>
-                    <div style={{fontSize:11,color:"#64748b"}}>{"Feche e reabra este card em alguns segundos para ver os resultados."}</div>
+                    <div style={{fontSize:11,color:"#64748b"}}>{"Aguarde. As informações aparecerão quando o mapeamento terminar."}</div>
                   </div>
+                </div>
+              )}
+
+              {/* ── Re-enrich button (when mapping exists but user wants to refresh) ── */}
+              {dores.length>0 && !_mappingInProgress.has((acc.nome||"").toLowerCase()) && props.onReEnrich && (
+                <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+                  <button onClick={function(){props.onClose();props.onReEnrich(acc);}} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 12px",fontSize:11,color:"#64748b",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5}}>
+                    <Icon name="refresh" size={13}/>{"Re-enriquecer com IA"}
+                  </button>
                 </div>
               )}
             </div>
@@ -3575,6 +3609,14 @@ function SearchView(props) {
   var _st_csvInfo = useState(false); var csvInfo = _st_csvInfo[0]; var setCsvInfo = _st_csvInfo[1];
   var csvRef = useRef(null);
   var usage = props.usage;
+
+  // Handle re-enrich triggered from AccountModal
+  useEffect(function(){
+    if (props.pendingEnrich) {
+      doEnrich(props.pendingEnrich, "");
+      if (props.onPendingEnrichDone) props.onPendingEnrichDone();
+    }
+  }, [props.pendingEnrich]);
   function onCsvPick(e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -3639,10 +3681,11 @@ function SearchView(props) {
         storageGet(k).then(function(stored){
           if (!stored || stored.nome.toLowerCase() !== nome.toLowerCase()) return;
           var nomeKey = stored.nome.toLowerCase();
-          // Guard: skip if in-progress. Only skip aiMapped if data actually exists.
           if (_mappingInProgress.has(nomeKey)) return;
-          var hasData = stored.aiMapped && stored.data && stored.data.dores && (stored.data.dores.principais||[]).length > 0;
-          if (hasData) return;
+          // Only block retry if BOTH dores AND spin are present
+          var hasDores = stored.aiMapped && stored.data && stored.data.dores && (stored.data.dores.principais||[]).length > 0;
+          var hasSpin  = stored.data && stored.data.estrategia && (stored.data.estrategia.perguntas_spin||[]).length > 0;
+          if (hasDores && hasSpin) return;
           _mappingInProgress.add(nomeKey);
 
           var emp = (stored.data && stored.data.empresa) || {};
@@ -3666,8 +3709,23 @@ function SearchView(props) {
           .then(function(r){ return r.ok ? r.json() : null; })
           .then(function(mapped){
             _mappingInProgress.delete(nomeKey);
-            if (!mapped || mapped.error) return;
+            if (!mapped || mapped.error) {
+              console.warn("Mapping failed:", mapped && mapped.error);
+              return;
+            }
             var est = mapped.estrategia || mapped["estratégia"] || {};
+            // Support both flat perguntas_spin array and structured {situacao,problema,...}
+            var spinFlat = est.perguntas_spin || [];
+            if (!spinFlat.length && mapped.perguntas_spin) {
+              var ps = mapped.perguntas_spin;
+              spinFlat = [
+                ...(ps.situacao   ||[]).map(function(q){return "SITUAÇÃO: "+q;}),
+                ...(ps.problema   ||[]).map(function(q){return "PROBLEMA: "+q;}),
+                ...(ps.implicacao ||[]).map(function(q){return "IMPLICAÇÃO: "+q;}),
+                ...(ps.necessidade||[]).map(function(q){return "NECESSIDADE: "+q;}),
+              ];
+            }
+            var objecoesFlat = est.objecoes || est["objeções"] || mapped.objecoes || [];
             storageGet(k).then(function(cur){
               if (!cur) return;
               var updated = Object.assign({}, cur, {
@@ -3685,9 +3743,9 @@ function SearchView(props) {
                     inmails:        est.inmails        || [],
                     whatsapps:      est.whatsapps      || [],
                     cold_calls:     est.cold_calls     || [],
-                    perguntas_spin: est.perguntas_spin || [],
-                    "objeções":     est["objeções"]    || est.objecoes || [],
-                    objecoes:       est["objeções"]    || est.objecoes || [],
+                    perguntas_spin: spinFlat,
+                    "objeções":     objecoesFlat,
+                    objecoes:       objecoesFlat,
                     tier: (cur.data.estrategia && cur.data.estrategia.tier) || "Tier 2",
                   }),
                   proximos_passos: mapped.proximos_passos || cur.data.proximos_passos,
@@ -4778,8 +4836,9 @@ function ProspectView(props) {
             setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
             var nomeKeyP = emp.nome.toLowerCase();
             if (_mappingInProgress.has(nomeKeyP)) return;
-            var hasDataP = acc && acc.aiMapped && acc.data && acc.data.dores && (acc.data.dores.principais||[]).length > 0;
-            if (hasDataP) return;
+            var hasDoresP = acc && acc.aiMapped && acc.data && acc.data.dores && (acc.data.dores.principais||[]).length > 0;
+            var hasSpinP  = acc && acc.data && acc.data.estrategia && (acc.data.estrategia.perguntas_spin||[]).length > 0;
+            if (hasDoresP && hasSpinP) return;
             _mappingInProgress.add(nomeKeyP);
             // Trigger full AI mapping after account saved
             var icpLocal = getStoredIcp();
@@ -4795,6 +4854,17 @@ function ProspectView(props) {
               _mappingInProgress.delete(nomeKeyP);
               if (!mapped||mapped.error) return;
               var est = mapped.estrategia || mapped["estratégia"] || {};
+              var spinFlatP = est.perguntas_spin || [];
+              if (!spinFlatP.length && mapped.perguntas_spin) {
+                var ps2 = mapped.perguntas_spin;
+                spinFlatP = [
+                  ...(ps2.situacao   ||[]).map(function(q){return "SITUAÇÃO: "+q;}),
+                  ...(ps2.problema   ||[]).map(function(q){return "PROBLEMA: "+q;}),
+                  ...(ps2.implicacao ||[]).map(function(q){return "IMPLICAÇÃO: "+q;}),
+                  ...(ps2.necessidade||[]).map(function(q){return "NECESSIDADE: "+q;}),
+                ];
+              }
+              var objecoesFlatP = est.objecoes || est["objeções"] || mapped.objecoes || [];
               storageList("acc:").then(function(ks){
                 ks.forEach(function(k){
                   storageGet(k).then(function(stored){
@@ -4811,8 +4881,8 @@ function ProspectView(props) {
                         estrategia:Object.assign({},(stored.data.estrategia||{}),{
                           emails:est.emails||[], inmails:est.inmails||[],
                           whatsapps:est.whatsapps||[], cold_calls:est.cold_calls||[],
-                          perguntas_spin:est.perguntas_spin||[], "objeções":est["objeções"]||est.objecoes||[],
-                          objecoes:est["objeções"]||est.objecoes||[],
+                          perguntas_spin:spinFlatP.length?spinFlatP:(est.perguntas_spin||[]),
+                          "objeções":objecoesFlatP, objecoes:objecoesFlatP,
                           tier:(stored.data.estrategia&&stored.data.estrategia.tier)||"Tier 2",
                         }),
                         proximos_passos:mapped.proximos_passos||stored.data.proximos_passos,
@@ -5122,6 +5192,7 @@ export default function App() {
   }); var setupDone = _st_setupDone[0]; var setSetupDone = _st_setupDone[1];
   var _st_setupUnlocking = useState(false); var setupUnlocking = _st_setupUnlocking[0]; var setSetupUnlocking = _st_setupUnlocking[1];
   var _st_pendingContactSearch = useState(""); var pendingContactSearch = _st_pendingContactSearch[0]; var setPendingContactSearch = _st_pendingContactSearch[1];
+  var _st_pendingEnrich = useState(null); var pendingEnrich = _st_pendingEnrich[0]; var setPendingEnrich = _st_pendingEnrich[1];
   var _st_openAcc = useState(null); var openAcc = _st_openAcc[0]; var setOpenAcc = _st_openAcc[1];
   var _st_toast = useState(null); var toast = _st_toast[0]; var setToast = _st_toast[1];
   var _st_sidebarOpen = useState(false); var sidebarOpen = _st_sidebarOpen[0]; var setSidebarOpen = _st_sidebarOpen[1];
@@ -5155,6 +5226,28 @@ export default function App() {
     setNav("sequences");
   }
   function refreshUsage() { getUsage().then(setUsage); }
+
+  // Re-enrich any account by name — clears the in-progress guard so it can run fresh
+  function doEnrichAccount(nome) {
+    var nomeKey = (nome||"").toLowerCase();
+    _mappingInProgress.delete(nomeKey); // allow re-run
+    storageList("acc:").then(function(keys){
+      keys.forEach(function(k){
+        storageGet(k).then(function(stored){
+          if (!stored || stored.nome.toLowerCase() !== nomeKey) return;
+          // Reset aiMapped so doEnrich in SearchView can pick it up
+          storageSet(k, Object.assign({},stored,{aiMapped:false}));
+        });
+      });
+    });
+    // Navigate to search and trigger via SearchView's doEnrich
+    setNav("search");
+    setTimeout(function(){
+      // Push the name into a pending enrich queue that SearchView will pick up
+      setPendingEnrich(nome);
+    }, 300);
+  }
+
   // ── Finish onboarding ──────────────────────────────────────────────────────
   function finishSetup() {
     try { localStorage.setItem("pipe_setup_done","1"); } catch(e){}
@@ -5506,7 +5599,7 @@ export default function App() {
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage} onChangePlan={changePlan} showToast={showToast}/>}
-              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch}/>}
+              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch} pendingEnrich={pendingEnrich} onPendingEnrichDone={function(){setPendingEnrich(null);}}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
@@ -5530,7 +5623,7 @@ export default function App() {
           )}
         </div>
       </div>
-      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch}/>}
+      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onReEnrich={function(acc){doEnrichAccount(acc.nome);}}/>}
       {openSeq && <SequenceModal seq={openSeq} onClose={function(){setOpenSeq(null);}}/>}
       {toast && (
         <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:340,display:"flex",alignItems:"center",gap:10}}>
