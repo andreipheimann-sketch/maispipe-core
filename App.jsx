@@ -4061,11 +4061,12 @@ function AccountsView(props) {
     if (search && !a.nome.toLowerCase().includes(search.toLowerCase()) && !a.setor.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).slice().sort(function(a,b) {
-    var an = (a.nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    var bn = (b.nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    if (sortOrder === "az") return an.localeCompare(bn, "pt", {sensitivity:"base"});
-    if (sortOrder === "za") return bn.localeCompare(an, "pt", {sensitivity:"base"});
-    return (b.savedAt||0) - (a.savedAt||0);
+    if (sortOrder === "date") return (b.savedAt||0) - (a.savedAt||0);
+    var an = (a.nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+    var bn = (b.nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+    if (an < bn) return sortOrder === "za" ? 1 : -1;
+    if (an > bn) return sortOrder === "za" ? -1 : 1;
+    return 0;
   });
   var statCounts = {};
   STATUS_ORDER.forEach(function(s) { statCounts[s] = accounts.filter(function(a){return a.status===s;}).length; });
