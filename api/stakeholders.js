@@ -155,17 +155,27 @@ export default async function handler(req, res) {
       function extractRole(title, snippet, name, companyName) {
         const parts = (title || "").split(/\s*[-–|]\s*/).map(s => s.trim()).filter(Boolean);
         const roleRe = /(ceo|cfo|coo|cto|cio|ciso|cmo|vp|vice|diretor|director|head|gerente|manager|chief|lider|líder|founder|sócio|presidente|superintendente)/i;
+
+        function cleanRole(raw) {
+          // Remove "at/na/no/da/de/@ + rest" — everything after the role context clue
+          return raw
+            .replace(/\s+(at|na|no|da|de|do|em|pela|pelo|para|@)\s+.*/gi, "")
+            .replace(/\s+(brasil|brazil|latam|america latina|latin america)\s*$/gi, "")
+            .trim();
+        }
+
         for (const part of parts) {
           const lp = part.toLowerCase();
           if (lp === (name || "").toLowerCase()) continue;
           if (lp.includes("linkedin")) continue;
           if (lp === (companyName || "").toLowerCase()) continue;
           if (roleRe.test(part)) {
-            return part.replace(new RegExp(`\\s+(na|no|at|@)\\s+${(companyName || "").replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}.*`,"i"),"").trim();
+            return cleanRole(part);
           }
         }
-        const m = (snippet || "").match(new RegExp(`((?:${roleRe.source})[A-Za-zÀ-ÿ]*(?:\\s+[A-Za-zÀ-ÿ]+){0,4})`,"i"));
-        if (m && m[1] && m[1].length >= 3 && m[1].length <= 50) return m[1].trim();
+        // Fallback to snippet extraction — take only the role keyword + up to 2 words after
+        const m = (snippet || "").match(new RegExp(`((?:${roleRe.source})(?:\\s+[A-Za-zÀ-ÿ]+){0,2})`,"i"));
+        if (m && m[1] && m[1].length >= 3 && m[1].length <= 40) return cleanRole(m[1].trim());
         return parts.find(p => p.toLowerCase() !== (companyName || "").toLowerCase()) || "";
       }
 
