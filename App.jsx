@@ -474,7 +474,12 @@ function SequenceView(props) {
           props.showToast("Sequência gerada com IA e salva na biblioteca.", "#10b981");
         } else {
           var reason = (data && (data.error || data.message)) || ("HTTP " + res.status);
-          props.showToast("IA indisponível (" + reason.slice(0,60) + "), usando templates.", "#f59e0b");
+          var isQuota = reason.toLowerCase().includes("quota") || reason.toLowerCase().includes("resource_exhausted") || String(res.status) === "429";
+          if (isQuota) {
+            props.showToast("Limite de quota do Gemini atingido. Aguarde alguns minutos e tente novamente.", "#ef4444");
+          } else {
+            props.showToast("IA indisponível (" + reason.slice(0,60) + "), usando templates.", "#f59e0b");
+          }
           localFallback();
         }
       })
@@ -1680,7 +1685,8 @@ function BibliotecaView(props) {
   var _st_loading = useState(true); var loading = _st_loading[0]; var setLoading = _st_loading[1];
   var _st_search = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
   var _st_sortOrder = useState("az"); var sortOrder = _st_sortOrder[0]; var setSortOrder = _st_sortOrder[1];
-  var _st_collapsed = useState({}); var collapsed = _st_collapsed[0]; var setCollapsed = _st_collapsed[1];
+  // Default: all collapsed. opened[key]=true means explicitly opened.
+  var _st_opened = useState({}); var opened = _st_opened[0]; var setOpened = _st_opened[1];
 
   useEffect(function() {
     storageList("seq:").then(function(keys) {
@@ -1701,7 +1707,7 @@ function BibliotecaView(props) {
   }
 
   function toggleGroup(empresa) {
-    setCollapsed(function(c){ return Object.assign({},c,{[empresa]:!c[empresa]}); });
+    setOpened(function(c){ return Object.assign({},c,{[empresa]:!c[empresa]}); });
   }
 
   var filtered = seqs.filter(function(s){
@@ -1792,7 +1798,7 @@ function BibliotecaView(props) {
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {sortedKeys.map(function(empresa){
             var group = groups[empresa].slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
-            var isOpen = !collapsed[empresa];
+            var isOpen = !!opened[empresa];
             var fc = FIT_CONFIG[(group[0].account&&group[0].account.fit)||"ALTO"]||FIT_CONFIG.ALTO;
             return (
               <div key={empresa} style={{border:"1px solid #e6e9ef",borderRadius:14,overflow:"hidden"}}>
@@ -2055,10 +2061,11 @@ function GroupedContactsView(props) {
   var contacts = props.contacts || [];
   var enriching = props.enriching || {};
   var enrichProgress = props.enrichProgress || {};
-  var _st_collapsed = useState({}); var collapsed = _st_collapsed[0]; var setCollapsed = _st_collapsed[1];
+  // Default: all collapsed. opened[key]=true means explicitly opened.
+  var _st_opened = useState({}); var opened = _st_opened[0]; var setOpened = _st_opened[1];
 
   function toggleGroup(empresa) {
-    setCollapsed(function(c){ return Object.assign({},c,{[empresa]:!c[empresa]}); });
+    setOpened(function(c){ return Object.assign({},c,{[empresa]:!c[empresa]}); });
   }
 
   // Group by empresa
@@ -2078,7 +2085,7 @@ function GroupedContactsView(props) {
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       {sortedKeys.map(function(empresa){
         var group = groups[empresa];
-        var isOpen = !collapsed[empresa];
+        var isOpen = !!opened[empresa];
         return (
           <div key={empresa} style={{border:"1px solid #e6e9ef",borderRadius:14,overflow:"hidden"}}>
             {/* Group header */}
@@ -3045,27 +3052,33 @@ function HomeView(props) {
   var taxa      = total>0?Math.round(converted/total*100):0;
 
   var CARDS = [
-    {id:"prospect",label:"Busca Geral",       icon:"target", nav:"prospect",
+    {id:"prospect", label:"Busca Geral",      icon:"target",           nav:"prospect",
      desc:"Gere uma lista de 30 empresas reais com base no seu ICP. Explore, filtre e enriqueça com um clique.",
      stat:"Grátis — sem consumir créditos", statColor:"#059669"},
-    {id:"busca",  label:"Account Mapping",    icon:"travel_explore", nav:"search",
+    {id:"busca",    label:"Account Mapping",  icon:"travel_explore",   nav:"search",
      desc:"Pesquise qualquer empresa e gere inteligência de conta completa: fit score, stakeholders, dores, mensagens e plano de ação.",
      stat:total+" conta"+(total!==1?"s":"")+" mapeada"+(total!==1?"s":""), statColor:"#6366f1"},
-    {id:"contas", label:"Contas",              icon:"folder_open", nav:"accounts",
+    {id:"contas",   label:"Contas",           icon:"folder_open",      nav:"accounts",
      desc:"Todas as empresas mapeadas organizadas por fit, tier e estágio.",
      stat:total+" no total", statColor:"#0369a1"},
-    {id:"seqs",   label:"Sequências",          icon:"forward_to_inbox", nav:"sequences",
+    {id:"contatos", label:"Contatos",         icon:"contacts",         nav:"contacts",
+     desc:"Todos os contatos mapeados com e-mail, LinkedIn e geração de sequência em 1 clique.",
+     stat:"Favoritos e por conta", statColor:"#0891b2"},
+    {id:"seqs",     label:"Sequências",       icon:"forward_to_inbox", nav:"sequences",
      desc:"Gere cadências de 6 toques personalizadas por stakeholder com e-mail, InMail, WhatsApp e cold call.",
      stat:"6 toques por perfil", statColor:"#7c3aed"},
-    {id:"biblio", label:"Biblioteca",          icon:"local_library", nav:"biblioteca",
+    {id:"biblio",   label:"Biblioteca",       icon:"local_library",    nav:"biblioteca",
      desc:"Todas as sequências salvas organizadas. Exporte qualquer cadência em PDF com um clique.",
      stat:"Sequências salvas", statColor:"#059669"},
-    {id:"pipe",   label:"Pipeline Kanban",     icon:"view_kanban", nav:"pipeline",
+    {id:"pipe",     label:"Pipeline Kanban",  icon:"view_kanban",      nav:"pipeline",
      desc:"Visualize todas as contas por estágio. Arraste os cards entre colunas para atualizar o status.",
      stat:converted+" convertida"+(converted!==1?"s":""), statColor:"#065f46"},
-    {id:"relat",  label:"Relatórios",          icon:"monitoring", nav:"relatorios",
+    {id:"relat",    label:"Relatórios",       icon:"monitoring",       nav:"relatorios",
      desc:"Dashboard com funil de conversão, distribuição por fit e tier, gráficos e export em PDF.",
      stat:taxa+"% taxa de conversão", statColor:"#92400e"},
+    {id:"integ",    label:"Integrações",      icon:"hub",              nav:"integracoes",
+     desc:"Conecte HubSpot, Salesforce, Pipedrive, Zapier, Make e muito mais ao +Pipe.",
+     stat:"HubSpot · Salesforce · Zapier", statColor:"#4f46e5"},
   ];
 
   var visible = CARDS.filter(function(c2){ return !hidden[c2.id]; });
@@ -4070,9 +4083,9 @@ function AccountsView(props) {
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           <select value={sortOrder} onChange={function(e){setSortOrder(e.target.value);}} style={{background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"8px 12px",fontSize:12,color:"#475569",fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
-            <option value="date">Mais recente</option>
             <option value="az">A - Z</option>
             <option value="za">Z - A</option>
+            <option value="date">Mais recente</option>
           </select>
           <div style={{display:"flex",background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:10,overflow:"hidden"}}>
             <button onClick={function(){setViewMode("cards");}} title="Cards" style={{padding:"8px 12px",border:"none",background:viewMode==="cards"?"linear-gradient(135deg,#6366f1,#4f46e5)":"transparent",color:viewMode==="cards"?"#fff":"#94a3b8",cursor:"pointer",lineHeight:1,fontFamily:"inherit"}}>
