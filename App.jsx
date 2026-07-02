@@ -270,6 +270,10 @@ var ONE_TOUCH_VARIANTS = {
 };
 
 function safeArr(v) { return Array.isArray(v) ? v : []; }
+// Canonical sort key: strips accents, punctuation, case — pure ASCII comparison
+function sortKey(s) { return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,""); }
+function sortAZ(a, b) { var ak=sortKey(a), bk=sortKey(b); return ak<bk?-1:ak>bk?1:0; }
+function sortZA(a, b) { return sortAZ(b, a); }
 
 // -- ICON (Google Material Symbols) -------------------------------------------
 function Icon(props) {
@@ -607,7 +611,7 @@ function SequenceView(props) {
             </div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:7,maxHeight:300,overflowY:"auto"}}>
-              {accounts.slice().sort(function(a,b){ var r=(a.nome||"").localeCompare(b.nome||"","pt",{sensitivity:"base"}); return accSort==="za"?-r:r; }).map(function(acc) {
+              {accounts.slice().sort(function(a,b){ return accSort==="za" ? sortZA(a.nome,b.nome) : sortAZ(a.nome,b.nome); }).map(function(acc) {
                 var fc = FIT_CONFIG[acc.fit]||FIT_CONFIG.ALTO;
                 var active = selAcc && selAcc.id===acc.id;
                 return (
@@ -933,8 +937,7 @@ function PipelineView(props) {
           {STATUS_ORDER.map(function(col) {
             var sc = STATUS_CONFIG[col];
             var cards = props.accounts.filter(function(a){return a.status===col;}).slice().sort(function(a,b){
-              var na=(a.nome||"").toLowerCase(), nb=(b.nome||"").toLowerCase();
-              return pipeSort==="az" ? na.localeCompare(nb,"pt-BR") : nb.localeCompare(na,"pt-BR");
+              return pipeSort==="az" ? sortAZ(a.nome,b.nome) : sortZA(a.nome,b.nome);
             });
             var isOver = overCol===col && dragFrom.current!==null && dragFrom.current!==col;
             return (
@@ -1727,7 +1730,7 @@ function BibliotecaView(props) {
     groups[key].push(s);
   });
   var sortedKeys = Object.keys(groups).sort(function(a,b){
-    return sortOrder==="za" ? b.localeCompare(a,"pt") : a.localeCompare(b,"pt");
+    return sortOrder==="za" ? sortZA(a,b) : sortAZ(a,b);
   });
 
   var TOUCH_TYPES_LOCAL = {
@@ -1929,16 +1932,12 @@ function ContactsTable(props) {
   }
 
   var sorted = contacts.slice().sort(function(a, b) {
-    var dir = sort.dir === "za" ? -1 : 1;
     if (sort.col === "empresa") {
-      var an = (a.empresa||a.nome||"").toLowerCase();
-      var bn = (b.empresa||b.nome||"").toLowerCase();
-      return dir * an.localeCompare(bn, "pt");
+      var base = sortAZ(a.empresa||a.nome, b.empresa||b.nome);
+      return sort.dir === "za" ? -base : base;
     }
-    // default: nome
-    var an2 = (a.nome||"").toLowerCase();
-    var bn2 = (b.nome||"").toLowerCase();
-    return dir * an2.localeCompare(bn2, "pt");
+    var base2 = sortAZ(a.nome, b.nome);
+    return sort.dir === "za" ? -base2 : base2;
   });
 
   var thBase = {
@@ -2076,9 +2075,7 @@ function GroupedContactsView(props) {
     groups[key].push(c);
   });
   var sortedKeys = Object.keys(groups).sort(function(a,b){
-    var an=a.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    var bn=b.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    return an.localeCompare(bn,"pt",{sensitivity:"base"});
+    return sortAZ(a, b);
   });
 
   return (
@@ -4062,11 +4059,7 @@ function AccountsView(props) {
     return true;
   }).slice().sort(function(a,b) {
     if (sortOrder === "date") return (b.savedAt||0) - (a.savedAt||0);
-    var an = (a.nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
-    var bn = (b.nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
-    if (an < bn) return sortOrder === "za" ? 1 : -1;
-    if (an > bn) return sortOrder === "za" ? -1 : 1;
-    return 0;
+    return sortOrder === "za" ? sortZA(a.nome, b.nome) : sortAZ(a.nome, b.nome);
   });
   var statCounts = {};
   STATUS_ORDER.forEach(function(s) { statCounts[s] = accounts.filter(function(a){return a.status===s;}).length; });
