@@ -1,60 +1,35 @@
 // api/gemini.js — Vercel serverless
-// Powered by Google Gemini 2.0 Flash — resumo, mapeamento e sequencias.
-// Variavel de ambiente necessaria: GEMINI_API_KEY
+// Powered by Groq (Llama 3.3 70B) — resumo, mapeamento e sequencias.
+// Variavel de ambiente necessaria: GROQ_API_KEY
 
 // ── Transport layer ────────────────────────────────────────────────────────────
-// Model name reference (v1beta endpoint):
-//   gemini-2.0-flash          → stable alias, 15 RPM free
-//   gemini-1.5-flash-latest   → fallback when 2.0 quota exceeded
-//   gemini-1.5-pro-latest     → highest quality, lower RPM
-
-async function callGemini(apiKey, systemText, userText, maxTokens, forceJson, modelOverride) {
-  const model = modelOverride || "gemini-2.0-flash";
-  const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const body = {
-    system_instruction: { parts: [{ text: systemText }] },
-    contents:           [{ role: "user", parts: [{ text: userText }] }],
-    generationConfig: {
-      maxOutputTokens: maxTokens || 4096,
-      temperature:     0.7,
-      ...(forceJson ? { responseMimeType: "application/json" } : {}),
-    },
-  };
-
-  const r = await fetch(url, {
+async function callClaude(apiKey, systemText, userText, maxTokens) {
+  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify(body),
+    headers: {
+      "Content-Type":  "application/json",
+      "Authorization": "Bearer " + apiKey,
+    },
+    body: JSON.stringify({
+      model:       "llama-3.3-70b-versatile",
+      max_tokens:  maxTokens || 4096,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: systemText },
+        { role: "user",   content: userText   },
+      ],
+    }),
   });
 
   const data = await r.json();
 
   if (!r.ok) {
-    const msg    = data?.error?.message || ("HTTP " + r.status);
-    const status = r.status;
-    const isQuota = status === 429
-      || (data?.error?.status === "RESOURCE_EXHAUSTED")
-      || msg.toLowerCase().includes("quota")
-      || msg.toLowerCase().includes("resource_exhausted");
-
-    // Quota exceeded on primary model → retry with 1.5-flash-latest (different quota pool)
-    if (isQuota && !modelOverride) {
-      return callGemini(apiKey, systemText, userText, maxTokens, forceJson, "gemini-1.5-flash-latest");
-    }
-    // Quota exceeded on fallback too → last resort: 1.5-flash-8b (highest free RPM)
-    if (isQuota && modelOverride === "gemini-1.5-flash-latest") {
-      return callGemini(apiKey, systemText, userText, maxTokens, forceJson, "gemini-1.5-flash-8b-latest");
-    }
-
-    return { ok: false, status, error: msg };
+    const msg = data?.error?.message || ("HTTP " + r.status);
+    return { ok: false, status: r.status, error: msg };
   }
 
-  const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-  if (!text) {
-    const reason = data?.candidates?.[0]?.finishReason;
-    return { ok: false, status: 200, error: "Resposta vazia" + (reason ? ` (${reason})` : "") + "." };
-  }
+  const text = ((data.choices || [])[0]?.message?.content || "").trim();
+  if (!text) return { ok: false, status: 200, error: "Resposta vazia da IA." };
   return { ok: true, text };
 }
 
@@ -87,8 +62,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")   return res.status(405).json({ error: "Metodo nao permitido." });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY nao configurada." });
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "GROQ_API_KEY nao configurada." });
 
   try {
     const {
@@ -192,8 +167,8 @@ export default async function handler(req, res) {
         `Escreva agora o briefing em Português do Brasil. 2 parágrafos. Sem markdown. Sem mencionar o vendedor.`,
       ].join("\n");
 
-      const out = await callGemini(apiKey, system, user, 1024, false);
-      if (!out.ok) return res.status(502).json({ error: "Gemini erro: " + out.error });
+      const out = await callClaude(apiKey, system, user, 1024);
+      if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
       const resumoClean = (out.text || "").replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
       return res.status(200).json({ resumo: resumoClean || null });
     }
@@ -273,8 +248,8 @@ export default async function handler(req, res) {
         `}`,
       ].join("\n");
 
-      const out = await callGemini(apiKey, system, user, 8192, true);
-      if (!out.ok) return res.status(502).json({ error: "Gemini erro: " + out.error });
+      const out = await callClaude(apiKey, system, user, 8192);
+      if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
 
       let parsed;
       try { parsed = parseJSON(out.text); }
@@ -354,8 +329,8 @@ export default async function handler(req, res) {
       `{"touches":[{"day":1,"type":"linkedin","subject":"assunto impactante","body":"mensagem completa e disruptiva"},...]}`,
     ].join("\n");
 
-    const out = await callGemini(apiKey, seqSystem, seqUser, 12000, true);
-    if (!out.ok) return res.status(502).json({ error: "Gemini erro: " + out.error });
+    const out = await callClaude(apiKey, seqSystem, seqUser, 12000);
+    if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
 
     let parsed;
     try { parsed = parseJSON(out.text); }
