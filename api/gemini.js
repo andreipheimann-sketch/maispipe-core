@@ -175,95 +175,173 @@ export default async function handler(req, res) {
 
     // ── MODO MAPEAMENTO ───────────────────────────────────────────────────────
     if (mode === "mapeamento") {
-      const system = [
-        `Você é um especialista em account mapping e outbound B2B enterprise no Brasil.`,
-        `REGRA ABSOLUTA: Responda APENAS com JSON válido. Todo conteúdo em Português do Brasil. Sem markdown.`,
+
+      // ── Step A: ANALYSIS — fit, dores, triggers, SPIN, objeções ─────────────
+      // Kept deliberately compact so Llama can reliably produce it
+      const sysA = [
+        `Você é um especialista sênior em outbound B2B e account mapping no Brasil.`,
+        `Responda APENAS em JSON válido. Todo o conteúdo em Português do Brasil. Sem markdown.`,
         ``,
         `CONTEXTO DO VENDEDOR:`,
         sellerCtx,
       ].join("\n");
 
-      const user = [
-        `INSTRUÇÃO: Responda SOMENTE com o JSON abaixo. Nenhum texto antes ou depois. Tudo em Português do Brasil. Sem travessão (—), use vírgula.`,
+      // Strip English noise from context
+      const cleanRaw = (rawContext || "")
+        .split("\n")
+        .filter(l => l.trim().length > 20 && !(/;.*;/.test(l)) && !(/trk=|utm_|cnpj/i.test(l)))
+        .join("\n")
+        .slice(0, 2500);
+
+      const userA = [
+        `Empresa-alvo: "${empresa || "a empresa"}" — Setor: ${setor || "tecnologia"}`,
         ``,
-        `EMPRESA-ALVO: ${empresa || "a empresa"}`,
-        `SETOR: ${setor || "tecnologia"}`,
+        `Contexto coletado (pode estar em inglês — responda em português):`,
+        cleanRaw || "Sem dados adicionais.",
         ``,
-        `CONTEXTO (pode estar em inglês — sua resposta deve ser SEMPRE em português):`,
-        (rawContext || "Sem dados.").slice(0, 3500),
-        ``,
-        `INSTRUÇÕES DE QUALIDADE:`,
-        `- "dores": específicas ao setor e porte. Explore dores operacionais, tecnológicas, de pessoas, regulatórias e competitivas.`,
-        `- "triggers": eventos concretos — rodada de investimento, regulação, expansão, troca de liderança, IPO, fusão, vagas técnicas.`,
-        `- "perguntas_spin": SPIN real — Situação, Problema, Implicação, Necessidade. Específicas para esta empresa e setor.`,
-        `- "proximos_passos": ações concretas e sequenciadas.`,
-        `- Emails e cold_calls: personalizados para esta empresa. Mencione setor, porte ou contexto. Sem travessão.`,
-        ``,
+        `Retorne SOMENTE este JSON (sem texto antes ou depois):`,
         `{`,
-        `  "resumo": "2 parágrafos sobre o que a empresa faz e seu momento de mercado, NÃO mencione o vendedor",`,
-        `  "fit": { "score": "ALTO|MÉDIO|BAIXO", "justificativa": "3 frases específicas de fit com os produtos do vendedor" },`,
-        `  "dores": { "principais": ["dor operacional específica 1","dor tecnológica 2","dor de pessoas/org 3","dor regulatória ou competitiva 4","dor estratégica 5"] },`,
-        `  "triggers": ["evento concreto que abre janela de compra 1","trigger 2","trigger 3","trigger 4"],`,
-        `  "stakeholders": [`,
-        `    {"cargo":"cargo decisor primário","angulo":"ângulo específico","prioridade":"PRIMARIO","urgencia":"Alta","email":"","linkedin":"","phone":""},`,
-        `    {"cargo":"cargo secundário","angulo":"ângulo diferente","prioridade":"SECUNDARIO","urgencia":"Média","email":"","linkedin":"","phone":""},`,
-        `    {"cargo":"influenciador técnico","angulo":"ângulo técnico","prioridade":"TERCIARIO","urgencia":"Baixa","email":"","linkedin":"","phone":""}`,
-        `  ],`,
-        `  "estrategia": {`,
-        `    "emails": [`,
-        `      {"assunto":"assunto específico com contexto da empresa","corpo":"email de 150-200 palavras personalizado, 2-3 parágrafos, dor específica, CTA leve. Sem travessão."},`,
-        `      {"assunto":"ângulo diferente do 1o","corpo":"follow-up 150-200 palavras com prova social, dado de mercado ou discovery. Sem travessão."},`,
-        `      {"assunto":"breakup direto e com classe","corpo":"breakup 100-150 palavras com urgência e porta aberta. Sem travessão."}`,
-        `    ],`,
-        `    "inmails": [`,
-        `      {"assunto":"InMail direto para o cargo decisor","corpo":"100-140 palavras, gancho específico, 2 ideias conectadas, CTA. Sem travessão."},`,
-        `      {"assunto":"ângulo alternativo","corpo":"100-140 palavras com dado de setor ou referência a concorrente. Sem travessão."}`,
-        `    ],`,
-        `    "whatsapps": ["3-5 frases informais, contexto da empresa, pergunta direta. Sem travessão.","segunda opção com ângulo diferente. Sem travessão."],`,
-        `    "cold_calls": [`,
-        `      "script completo para ${empresa}: abertura 10-15s, pausa, pergunta de qualificação, resposta a objeção, ponte para solução, CTA para 20 min. Mín. 120 palavras. Sem travessão.",`,
-        `      "script alternativo mín. 120 palavras com trigger de compra ou dado do setor. Sem travessão."`,
-        `    ],`,
-        `    "perguntas_spin": [`,
-        `      "SITUAÇÃO: como ${empresa} opera hoje em relação à dor principal?",`,
-        `      "SITUAÇÃO: qual a estrutura, processo ou tecnologia atual da ${empresa}?",`,
-        `      "PROBLEMA: pergunta que revela a dor principal de forma não óbvia",`,
-        `      "PROBLEMA: pergunta que expõe limitação ou risco específico do setor",`,
-        `      "IMPLICAÇÃO: qual o impacto desta dor no resultado financeiro ou operacional da ${empresa}?",`,
-        `      "IMPLICAÇÃO: como esta limitação afeta a equipe, clientes ou posição competitiva?",`,
-        `      "NECESSIDADE: se isso fosse resolvido, qual seria o impacto nos resultados da ${empresa}?",`,
-        `      "NECESSIDADE: o que mudaria na operação se vocês tivessem [benefício do produto]?"`,
-        `    ],`,
-        `    "objecoes": [`,
-        `      {"objecao":"objeção comum neste setor, específica","resposta":"resposta com diferencial do produto e dado concreto"},`,
-        `      {"objecao":"segunda objeção provável","resposta":"resposta com case ou ROI"},`,
-        `      {"objecao":"objeção de timing ou prioridade","resposta":"resposta que cria urgência sem pressionar"}`,
+        `  "resumo": "Dois parágrafos densos e diretos: (1) o que a empresa faz, modelo de negócio, porte estimado, mercado atendido e momento atual; (2) pressões competitivas, desafios do setor e oportunidades estratégicas. NÃO mencione o vendedor.",`,
+        `  "fit": {`,
+        `    "score": "ALTO ou MÉDIO ou BAIXO",`,
+        `    "justificativa": "3 frases concretas explicando por que o produto do vendedor se encaixa nesta empresa agora"`,
+        `  },`,
+        `  "dores": {`,
+        `    "principais": [`,
+        `      "Dor operacional: descreva um problema real do dia a dia desta empresa neste setor",`,
+        `      "Dor tecnológica: limitação de sistema, stack legado ou gap digital específico do setor",`,
+        `      "Dor de pessoas/gestão: problema de hiring, retenção, produtividade ou estrutura org",`,
+        `      "Dor regulatória ou de compliance: norma, auditoria, risco jurídico ou fiscal real do setor",`,
+        `      "Dor estratégica/competitiva: pressão de mercado, perda de share ou ameaça de novo entrante"`,
         `    ]`,
         `  },`,
+        `  "triggers": [`,
+        `    "Descreva um evento concreto que indica momento de compra — ex: rodada de investimento, nova regulação, expansão de headcount, abertura de vagas técnicas, troca de liderança, M&A, IPO, lançamento de produto concorrente",`,
+        `    "Segundo trigger concreto e distinto do primeiro",`,
+        `    "Terceiro trigger — pode ser sazonalidade, renovação de contrato, fim de ano fiscal",`,
+        `    "Quarto trigger — sinal digital como vagas abertas, expansão geográfica ou press release"`,
+        `  ],`,
+        `  "perguntas_spin": {`,
+        `    "situacao": [`,
+        `      "Pergunta aberta sobre como a empresa opera hoje na área relacionada ao produto do vendedor",`,
+        `      "Pergunta sobre estrutura atual, tecnologia usada ou processo vigente"`,
+        `    ],`,
+        `    "problema": [`,
+        `      "Pergunta que revela uma dor latente sem ser óbvio — faça o prospect pensar",`,
+        `      "Pergunta que expõe uma limitação ou risco que eles talvez não tenham quantificado"`,
+        `    ],`,
+        `    "implicacao": [`,
+        `      "Pergunta que amplia a consequência da dor — impacto financeiro, operacional ou humano",`,
+        `      "Pergunta que conecta o problema a algo que o líder se importa: receita, risco, reputação"`,
+        `    ],`,
+        `    "necessidade": [`,
+        `      "Pergunta que leva o prospect a articular o valor da solução com as próprias palavras",`,
+        `      "Pergunta que ancora o benefício em um resultado mensurável para esta empresa"`,
+        `    ]`,
+        `  },`,
+        `  "objecoes": [`,
+        `    {`,
+        `      "objecao": "Objeção mais provável deste perfil de empresa/cargo — seja específico",`,
+        `      "resposta": "Resposta que usa um diferencial concreto do produto + dado ou lógica de ROI"`,
+        `    },`,
+        `    {`,
+        `      "objecao": "Segunda objeção — timing, prioridade ou budget",`,
+        `      "resposta": "Resposta que cria urgência sem pressionar, apoia com referência ou prova social"`,
+        `    },`,
+        `    {`,
+        `      "objecao": "Terceira objeção — já temos uma solução interna ou concorrente",`,
+        `      "resposta": "Resposta que diferencia sem denegrir, com perguntas de discovery que revelam gaps"`,
+        `    }`,
+        `  ],`,
         `  "proximos_passos": {`,
-        `    "ae": ["pesquisar no LinkedIn os decisores de ${empresa}","verificar vagas abertas em ${empresa}","buscar notícias recentes — M&A, expansão, novos produtos","preparar diagnóstico com dados do setor"],`,
-        `    "bdr": ["cold call para o decisor primário com script de 10s","InMail no LinkedIn com ângulo de dor","sequência de 3 emails em 10 dias","monitorar ${empresa} no Google Alerts"],`,
-        `    "prazo": "Prioridade MÉDIA — abordar em até 48h se houver trigger recente, senão em 7 dias."`,
+        `    "bdr": [`,
+        `      "Primeira ação concreta do BDR — com quem falar e por qual canal",`,
+        `      "Segunda ação — pesquisa específica a fazer antes do primeiro contato",`,
+        `      "Terceira ação — monitoramento ou alerta a configurar"`,
+        `    ],`,
+        `    "ae": [`,
+        `      "Primeira ação do AE após primeiro contato positivo",`,
+        `      "Segunda ação — material ou diagnóstico a preparar",`,
+        `      "Terceira ação — como avançar para proposta"`,
+        `    ],`,
+        `    "prazo": "Urgência recomendada com justificativa"`,
         `  }`,
         `}`,
       ].join("\n");
 
-      const out = await callClaude(apiKey, system, user, 8192);
-      if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
+      const outA = await callClaude(apiKey, sysA, userA, 4096);
+      if (!outA.ok) return res.status(502).json({ error: "Groq erro (análise): " + outA.error });
 
-      let parsed;
-      try { parsed = parseJSON(out.text); }
+      let analysis;
+      try { analysis = parseJSON(outA.text); }
       catch (e) {
         try {
-          const m = out.text.match(/\{[\s\S]+\}/);
-          if (m) parsed = JSON.parse(m[0]);
+          const m = outA.text.match(/\{[\s\S]+\}/);
+          if (m) analysis = JSON.parse(m[0]);
           else throw e;
         } catch (e2) {
-          return res.status(200).json({ error: "Falha ao interpretar resposta.", raw: out.text.slice(0, 200) });
+          return res.status(200).json({ error: "Falha ao interpretar análise.", raw: outA.text.slice(0, 300) });
         }
       }
 
-      return res.status(200).json(stripDashesDeep(parsed));
+      // ── Step B: MESSAGING — emails, inmails, whatsapps, cold calls ─────────
+      const sysB = [
+        `Você é o melhor copywriter de outbound B2B do Brasil.`,
+        `Responda APENAS em JSON válido. Português do Brasil. Sem markdown. Sem travessão (—).`,
+        ``,
+        `Você representa: ${vendedorEmpresa}`,
+        `${produtosPrompt}`,
+        ``,
+        `Empresa-alvo: ${empresa || "a empresa"} | Setor: ${setor || "tecnologia"}`,
+        `Dor principal mapeada: ${((analysis.dores && analysis.dores.principais) || [])[0] || "a ser descoberta"}`,
+        `Gatilho mais relevante: ${(analysis.triggers || [])[0] || "expansão ou crescimento"}`,
+      ].join("\n");
+
+      const userB = [
+        `Crie 3 emails, 2 inmails, 2 whatsapps e 2 cold call scripts para abordar ${empresa}.`,
+        ``,
+        `REGRAS:`,
+        `- Nunca use [Nome], [Empresa] ou qualquer placeholder. Use "${empresa}" diretamente.`,
+        `- Sem travessão. Use vírgula ou ponto.`,
+        `- Emails: 150-200 palavras, 2-3 parágrafos, CTA leve.`,
+        `- InMails: 80-100 palavras, gancho direto, CTA curto.`,
+        `- WhatsApp: 3-4 frases casuais que mostram pesquisa real.`,
+        `- Cold call: script falado completo, mín. 100 palavras, com pausa e resposta a objeção.`,
+        ``,
+        `{"emails":[{"assunto":"...","corpo":"..."},{"assunto":"...","corpo":"..."},{"assunto":"...","corpo":"..."}],"inmails":[{"assunto":"...","corpo":"..."},{"assunto":"...","corpo":"..."}],"whatsapps":["...","..."],"cold_calls":["...","..."]}`,
+      ].join("\n");
+
+      const outB = await callClaude(apiKey, sysB, userB, 4096);
+      let messaging = { emails: [], inmails: [], whatsapps: [], cold_calls: [] };
+      if (outB.ok) {
+        try {
+          const mb = outB.text.match(/\{[\s\S]+\}/);
+          if (mb) messaging = JSON.parse(mb[0]);
+        } catch (e) { /* messaging stays empty, not fatal */ }
+      }
+
+      // Merge and return
+      const result = Object.assign({}, analysis, {
+        estrategia: Object.assign({
+          emails:         messaging.emails     || [],
+          inmails:        messaging.inmails    || [],
+          whatsapps:      messaging.whatsapps  || [],
+          cold_calls:     messaging.cold_calls || [],
+          perguntas_spin: analysis.perguntas_spin
+            ? [
+                ...((analysis.perguntas_spin.situacao  || []).map(q => "SITUAÇÃO: "  + q)),
+                ...((analysis.perguntas_spin.problema  || []).map(q => "PROBLEMA: "  + q)),
+                ...((analysis.perguntas_spin.implicacao|| []).map(q => "IMPLICAÇÃO: "+ q)),
+                ...((analysis.perguntas_spin.necessidade||[]).map(q => "NECESSIDADE: "+ q)),
+              ]
+            : [],
+          objecoes: analysis.objecoes || [],
+          "objeções": analysis.objecoes || [],
+        }),
+      });
+
+      // Clean all strings
+      return res.status(200).json(stripDashesDeep(result));
     }
 
     // ── MODO SEQUÊNCIA ────────────────────────────────────────────────────────
