@@ -1218,11 +1218,12 @@ function StakeholdersFetchBtn(props) {
             contacts.forEach(function(s){
               var nomeReal = s.nome || s.name || "";
               if (!nomeReal) return;
-              var dedupKey = (nomeReal+"|"+acc.nome).toLowerCase();
+              var empresaNome = s.empresa || acc.nome || "";
+              var dedupKey = (nomeReal+"|"+empresaNome).toLowerCase();
               if (existingSet[dedupKey]) return;
               existingSet[dedupKey] = true;
               var cid = "contact:" + Date.now() + "-" + Math.random().toString(36).slice(2,8);
-              var contact = { id:cid, nome:nomeReal, cargo:s.cargo||s.title||"", empresa:acc.nome, email:s.email||"", emailValidated:!!s.email, linkedin:s.linkedin||"", savedAt:Date.now() };
+              var contact = { id:cid, nome:nomeReal, cargo:s.cargo||s.title||"", empresa:empresaNome, email:s.email||"", emailValidated:!!s.email, linkedin:s.linkedin||"", savedAt:Date.now() };
               storageSet(cid, contact);
             });
             if (props.onContactsRefresh) props.onContactsRefresh();
@@ -1405,7 +1406,7 @@ function AccountModal(props) {
               {sinais.length>0&&<Sec title="Sinais de Intenção"><div style={{background:"#0c2340",borderRadius:12,padding:"12px 16px"}}>{sinais.map(function(s,i){return <div key={i} style={{fontSize:11.5,color:"#7dd3fc",lineHeight:1.6,display:"flex",gap:8,marginBottom:5}}><span style={{color:"#38bdf8",flexShrink:0}}>o</span>{s}</div>;})}</div></Sec>}
               {concorrentes.length>0&&<Sec title="Concorrentes Prováveis"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{concorrentes.map(function(cc,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{cc}</span>;})}</div></Sec>}
               {noticias.length>0&&<Sec title="Notícias e Contexto">{noticias.map(function(n,i){return <div key={i} style={{background:"#fbfbfd",border:"1px solid #e6e9ef",borderRadius:12,padding:"12px 14px",marginBottom:8}}>{n.url?<a href={n.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,fontWeight:700,color:"#0ea5e9",textDecoration:"none",display:"block",marginBottom:3}}>{n.titulo}</a>:<div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:3}}>{n.titulo}</div>}<div style={{fontSize:11.5,color:"#52617a",lineHeight:1.6,marginBottom:3}}>{n.resumo}</div><div style={{fontSize:10,color:"#a5b4fc",fontWeight:600}}>{"-> "+n.relevancia}</div></div>;})}</Sec>}
-              {(dores.length===0 || triggers.length===0) && !acc.aiMapped && (_mappingInProgress.has((acc.nome||"").toLowerCase()) || (Date.now() - (acc.savedAt||0)) < 180000) && (
+              {(dores.length===0 || triggers.length===0) && !acc.aiMapped && _mappingInProgress.has((acc.nome||"").toLowerCase()) && (
                 <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
                   <div>
@@ -1549,7 +1550,7 @@ function AccountModal(props) {
             <div>
               <Sec title="Perguntas SPIN">
                 {spin.length === 0 ? (
-                  (_mappingInProgress.has((acc.nome||"").toLowerCase()) || (!acc.aiMapped && (Date.now() - (acc.savedAt||0)) < 180000)) ? (
+                  (_mappingInProgress.has((acc.nome||"").toLowerCase())) ? (
                     <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
                       <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
                       <div style={{fontSize:12,color:"#4f46e5",fontWeight:500}}>{"IA gerando perguntas SPIN... Feche e reabra este card em alguns segundos."}</div>
@@ -2049,6 +2050,111 @@ function ContactsTable(props) {
   );
 }
 
+// -- GROUPED CONTACTS VIEW (collapsible by company, like Biblioteca) -----------
+function GroupedContactsView(props) {
+  var contacts = props.contacts || [];
+  var enriching = props.enriching || {};
+  var enrichProgress = props.enrichProgress || {};
+  var _st_collapsed = useState({}); var collapsed = _st_collapsed[0]; var setCollapsed = _st_collapsed[1];
+
+  function toggleGroup(empresa) {
+    setCollapsed(function(c){ return Object.assign({},c,{[empresa]:!c[empresa]}); });
+  }
+
+  // Group by empresa
+  var groups = {};
+  contacts.forEach(function(c) {
+    var key = c.empresa || "Sem empresa";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  });
+  var sortedKeys = Object.keys(groups).sort(function(a,b){
+    var an=a.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    var bn=b.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    return an.localeCompare(bn,"pt",{sensitivity:"base"});
+  });
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {sortedKeys.map(function(empresa){
+        var group = groups[empresa];
+        var isOpen = !collapsed[empresa];
+        return (
+          <div key={empresa} style={{border:"1px solid #e6e9ef",borderRadius:14,overflow:"hidden"}}>
+            {/* Group header */}
+            <div onClick={function(){toggleGroup(empresa);}} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",background:"linear-gradient(135deg,rgba(99,102,241,.05),rgba(14,165,233,.03))",cursor:"pointer",userSelect:"none",transition:"background .15s"}} onMouseEnter={function(e){e.currentTarget.style.background="linear-gradient(135deg,rgba(99,102,241,.1),rgba(14,165,233,.06))";}} onMouseLeave={function(e){e.currentTarget.style.background="linear-gradient(135deg,rgba(99,102,241,.05),rgba(14,165,233,.03))";}}>
+              <Icon name="business" size={15} color="#6366f1"/>
+              <span style={{fontSize:13,fontWeight:700,color:"#0f172a",flex:1}}>{empresa}</span>
+              <span style={{fontSize:10,color:"#64748b",background:"#f1f5f9",borderRadius:20,padding:"2px 8px",fontWeight:600}}>
+                {group.length+" contato"+(group.length!==1?"s":"")}
+              </span>
+              <Icon name={isOpen?"expand_less":"expand_more"} size={18} color="#94a3b8"/>
+            </div>
+            {/* Contacts list */}
+            {isOpen && (
+              <div style={{borderTop:"1px solid #f1f5f9"}}>
+                {group.map(function(c, ci){
+                  var isLast = ci === group.length-1;
+                  var canSeq = !!(c.cargo || c.nome);
+                  return (
+                    <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",background:"#fff",borderBottom:isLast?"none":"1px solid #f8fafc",flexWrap:"wrap",gap:8,transition:"background .15s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(99,102,241,.02)";}} onMouseLeave={function(e){e.currentTarget.style.background="#fff";}}>
+                      {/* Avatar */}
+                      <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#6366f1,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:11,color:"#fff",fontWeight:700}}>{(c.nome||"?")[0].toUpperCase()}</span>
+                      </div>
+                      {/* Info */}
+                      <div style={{minWidth:140,flex:"1 1 140px"}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:1}}>{c.nome||"—"}</div>
+                        {c.cargo && <div style={{fontSize:11,color:"#64748b"}}>{c.cargo}</div>}
+                      </div>
+                      {/* Email */}
+                      <div style={{flex:"2 1 180px",minWidth:0}}>
+                        {c.email ? (
+                          <div style={{display:"flex",alignItems:"center",gap:5}}>
+                            <a href={"mailto:"+c.email} style={{color:"#0ea5e9",textDecoration:"none",fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{c.email}</a>
+                            {c.emailConfidence && <span style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 5px",flexShrink:0}}>{c.emailConfidence+"%"}</span>}
+                            <CopyBtn text={c.email}/>
+                          </div>
+                        ) : enriching[c.id] ? (
+                          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                            <div style={{fontSize:9,fontWeight:700,color:"#4f46e5"}}>{"Buscando..."}</div>
+                            {["hunter","apollo","snov"].map(function(key){
+                              var labels={hunter:"Hunter.io",apollo:"Apollo.io",snov:"Snov.io"};
+                              var st=(enrichProgress[c.id]||{})[key]||"pending";
+                              var col=st==="found"?"#10b981":st==="miss"?"#94a3b8":st==="err"?"#ef4444":"#a5b4fc";
+                              return <div key={key} style={{display:"flex",alignItems:"center",gap:4,fontSize:9,color:"#64748b"}}><span style={{color:col,fontWeight:700,width:8}}>{st==="found"?"✓":st==="miss"?"–":st==="err"?"✕":"⋯"}</span>{labels[key]}</div>;
+                            })}
+                          </div>
+                        ) : (
+                          <button onClick={function(){props.enrichEmail(c);}} style={{background:"#eff6ff",color:"#4f46e5",border:"1px solid #c7d0fa",borderRadius:7,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>{"Buscar e-mail"}</button>
+                        )}
+                      </div>
+                      {/* Actions */}
+                      <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0,flexWrap:"nowrap"}}>
+                        <button onClick={function(){if(canSeq&&props.onGenerateSequence)props.onGenerateSequence(c);}} disabled={!canSeq} title="Gerar sequência" style={{display:"flex",alignItems:"center",gap:4,background:"linear-gradient(135deg,#7c3aed,#6366f1)",color:"#fff",border:"none",borderRadius:7,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:canSeq?"pointer":"not-allowed",opacity:canSeq?1:.45,fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                          {"Seq"}
+                        </button>
+                        {c.linkedin && <a href={c.linkedin} target="_blank" rel="noreferrer" title="LinkedIn" style={{background:"rgba(10,102,194,.1)",border:"1px solid rgba(10,102,194,.25)",color:"#0a66c2",borderRadius:7,padding:"5px 9px",fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center"}}>{"in"}</a>}
+                        <button onClick={function(){props.toggleFavorite(c);}} title={c.favorite?"Remover dos favoritos":"Favoritar"} style={{background:c.favorite?"rgba(245,158,11,.12)":"none",border:"1px solid "+(c.favorite?"rgba(245,158,11,.4)":"#e2e8f0"),borderRadius:7,padding:"5px 7px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
+                          <Icon name="star" size={13} fill={c.favorite} color={c.favorite?"#f59e0b":"#94a3b8"}/>
+                        </button>
+                        <button onClick={function(){props.deleteContact(c.id);}} title="Remover" style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center"}}>
+                          <Icon name="delete" size={13}/>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ContactsView(props) {
   var _st_contacts = useState([]); var contacts = _st_contacts[0]; var setContacts = _st_contacts[1];
   var _st_loading = useState(true); var loadingC = _st_loading[0]; var setLoadingC = _st_loading[1];
@@ -2444,9 +2550,8 @@ function ContactsView(props) {
           </div>
         </div>
       ) : (
-        <ContactsTable
+        <GroupedContactsView
           contacts={activeTab==="favs" ? filteredFavs : filtered}
-          csort={csort}
           enriching={enriching}
           enrichProgress={enrichProgress}
           enrichEmail={enrichEmail}
@@ -3943,8 +4048,10 @@ function AccountsView(props) {
     if (search && !a.nome.toLowerCase().includes(search.toLowerCase()) && !a.setor.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).slice().sort(function(a,b) {
-    if (sortOrder === "az") return a.nome.localeCompare(b.nome, "pt");
-    if (sortOrder === "za") return b.nome.localeCompare(a.nome, "pt");
+    var an = (a.nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    var bn = (b.nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    if (sortOrder === "az") return an.localeCompare(bn, "pt", {sensitivity:"base"});
+    if (sortOrder === "za") return bn.localeCompare(an, "pt", {sensitivity:"base"});
     return (b.savedAt||0) - (a.savedAt||0);
   });
   var statCounts = {};
