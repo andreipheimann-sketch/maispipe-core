@@ -26,15 +26,16 @@ async function callGroq(apiKey, systemText, userText, maxTokens) {
 
 // ── Transport: Gemini ──────────────────────────────────────────────────────────
 async function callGemini(apiKey, systemText, userText, maxTokens) {
-  // Confirmed stable aliases on v1beta (no -latest suffix — removed late 2024)
+  // v1 endpoint — stable models (v1beta does NOT support these model names)
   const MODELS = [
-    "gemini-2.0-flash",     // primary — fast + generous free quota
-    "gemini-1.5-flash",     // fallback 1 — if 2.0 quota or unavailable
-    "gemini-1.5-flash-8b",  // fallback 2 — highest free RPM
+    "gemini-2.0-flash",   // primary
+    "gemini-1.5-flash",   // fallback 1
+    "gemini-1.5-flash-8b", // fallback 2
   ];
 
   async function tryModel(model) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    // Use v1 (not v1beta) — required for gemini-2.0-flash and gemini-1.5-flash
+    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
     const r = await fetch(url, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
@@ -51,21 +52,17 @@ async function callGemini(apiKey, systemText, userText, maxTokens) {
     if (!r.ok) {
       const msg     = data?.error?.message || ("HTTP " + r.status);
       const errCode = data?.error?.status  || "";
-      // Retry with next model on: quota, model-not-found, or permission errors
       const shouldRetry = r.status === 429
-        || r.status === 403
         || errCode === "RESOURCE_EXHAUSTED"
         || errCode === "NOT_FOUND"
-        || errCode === "PERMISSION_DENIED"
         || msg.toLowerCase().includes("not found")
-        || msg.toLowerCase().includes("quota")
-        || msg.toLowerCase().includes("resource_exhausted");
+        || msg.toLowerCase().includes("quota");
       return { ok: false, retry: shouldRetry, error: `[${model}] ${msg}` };
     }
     const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
     if (!text) {
       const reason = data?.candidates?.[0]?.finishReason || "UNKNOWN";
-      return { ok: false, retry: false, error: `[${model}] Resposta vazia — finishReason: ${reason}` };
+      return { ok: false, retry: false, error: `[${model}] Resposta vazia — ${reason}` };
     }
     return { ok: true, text };
   }
@@ -73,9 +70,9 @@ async function callGemini(apiKey, systemText, userText, maxTokens) {
   let lastError = "nenhum modelo tentado";
   for (const model of MODELS) {
     const result = await tryModel(model);
-    if (result.ok)           return result;
+    if (result.ok)     return result;
     lastError = result.error;
-    if (!result.retry)       break; // hard error, no point retrying
+    if (!result.retry) break;
   }
   return { ok: false, status: 502, error: lastError };
 }
@@ -499,7 +496,7 @@ export default async function handler(req, res) {
     // Pre-flight: validate the key is working before running the heavy prompt
     // Uses the lightweight models list endpoint — fast, no token cost
     try {
-      const pingUrl = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${geminiKey}`;
+      const pingUrl = `https://generativelanguage.googleapis.com/v1/models?pageSize=1&key=${geminiKey}`;
       const pingRes = await fetch(pingUrl);
       if (!pingRes.ok) {
         const pingData = await pingRes.json().catch(() => ({}));
