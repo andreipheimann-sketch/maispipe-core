@@ -24,63 +24,47 @@ async function callGroq(apiKey, systemText, userText, maxTokens) {
   return { ok: true, text };
 }
 
-// ── Transport: Gemini ──────────────────────────────────────────────────────────
+// ── Transport: Gemini (v1beta + system_instruction) ───────────────────────────
+// v1beta is the CORRECT endpoint for system_instruction + gemini-2.0-flash.
+// The /v1 endpoint rejects system_instruction (field unknown).
+// The /v1beta endpoint rejects -8b and -latest suffixes — use bare model names.
 async function callGemini(apiKey, systemText, userText, maxTokens) {
-  // Stable models on the /v1 endpoint
-  const MODELS = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b",
-  ];
+  const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
   async function tryModel(model) {
-    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
-
-    // /v1 does NOT support system_instruction — inject system as first user turn
-    // with a model acknowledgment turn, then the real user message.
-    // This is the documented workaround for system prompts on /v1.
-    const body = {
-      contents: [
-        { role: "user",  parts: [{ text: systemText }] },
-        { role: "model", parts: [{ text: "Entendido. Vou seguir essas instruções." }] },
-        { role: "user",  parts: [{ text: userText }] },
-      ],
-      generationConfig: {
-        maxOutputTokens: maxTokens || 8192,
-        temperature: 0.85,
-      },
-    };
-
-    const r    = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const url = `${BASE}/${model}:generateContent?key=${apiKey}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemText }] },
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+        generationConfig: { maxOutputTokens: maxTokens || 8192, temperature: 0.85 },
+      }),
+    });
     const data = await r.json();
-
     if (!r.ok) {
-      const msg      = data?.error?.message || ("HTTP " + r.status);
-      const errCode  = data?.error?.status  || "";
-      const canRetry = r.status === 429
-        || errCode === "RESOURCE_EXHAUSTED"
-        || errCode === "NOT_FOUND"
-        || msg.toLowerCase().includes("not found")
-        || msg.toLowerCase().includes("quota");
-      return { ok: false, retry: canRetry, error: `[${model}] ${msg}` };
+      const msg  = data?.error?.message || ("HTTP " + r.status);
+      const code = data?.error?.status  || "";
+      const retry = r.status === 429 || code === "RESOURCE_EXHAUSTED";
+      return { ok: false, retry, error: `[${model}] ${msg}` };
     }
-
     const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-    if (!text) {
-      const reason = data?.candidates?.[0]?.finishReason || "UNKNOWN";
-      return { ok: false, retry: false, error: `[${model}] Resposta vazia — ${reason}` };
-    }
+    if (!text) return { ok: false, retry: false, error: `[${model}] Resposta vazia (${data?.candidates?.[0]?.finishReason || "?"})` };
     return { ok: true, text };
   }
 
-  let lastError = "nenhum modelo tentado";
-  for (const model of MODELS) {
-    const result = await tryModel(model);
-    if (result.ok)     return result;
-    lastError = result.error;
-    if (!result.retry) break;
+  // Only models confirmed to exist on v1beta with generateContent support
+  // Bare names only — no -latest, no -8b, no version suffix
+  const models = ["gemini-2.0-flash", "gemini-1.5-flash"];
+  let lastError = "";
+  for (const model of models) {
+    const r = await tryModel(model);
+    if (r.ok) return r;
+    lastError = r.error;
+    if (!r.retry) break; // NOT_FOUND or hard error — no point retrying
   }
-  return { ok: false, status: 502, error: lastError };
+  return { ok: false, error: lastError };
 }
 // Keep old alias so nothing else breaks
 const callClaude = callGroq;
@@ -502,7 +486,7 @@ export default async function handler(req, res) {
     // Pre-flight: validate the key is working before running the heavy prompt
     // Uses the lightweight models list endpoint — fast, no token cost
     try {
-      const pingUrl = `https://generativelanguage.googleapis.com/v1/models?pageSize=1&key=${geminiKey}`;
+      const pingUrl = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${geminiKey}`;
       const pingRes = await fetch(pingUrl);
       if (!pingRes.ok) {
         const pingData = await pingRes.json().catch(() => ({}));
