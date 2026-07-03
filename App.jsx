@@ -381,37 +381,51 @@ function SequenceView(props) {
     });
   }
 
+  var _st_regenIdx = useState(null); var regenIdx = _st_regenIdx[0]; var setRegenIdx = _st_regenIdx[1];
+
   function regenerateTouch(idx) {
-    if (!generated || !selProfile) return;
+    if (!generated || !selProfile || regenIdx !== null) return;
     var p = selProfile.id === "custom" ? selProfile : (STAKEHOLDER_PROFILES.find(function(x){return x.id===selProfile.id;}) || STAKEHOLDER_PROFILES[0]);
     var touch = generated.touches[idx];
     var setor = (selAcc.data && selAcc.data.empresa && selAcc.data.empresa.setor) || selAcc.setor || "tecnologia";
-    function localFB() {
-      var newTouch = buildOneTouchVariant(touch, p, selAcc);
-      var nt = generated.touches.map(function(t,i){return i===idx?newTouch:t;});
-      var upd = Object.assign({},generated,{touches:nt});
-      setGenerated(upd);
-      persistSeq(upd);
-    }
+
+    setRegenIdx(idx);
+
     fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      empresa:selAcc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain, touches:[{day:touch.day,type:touch.type}],
-      icp: getStoredIcp(),
-      produtos: getStoredProducts(),
+      empresa:selAcc.nome, setor:setor, cargo:p.label, angulo:p.angle, pain:p.pain,
+      touches:[{day:touch.day, type:touch.type}],
+      icp: getStoredIcp(), produtos: getStoredProducts(),
       companySite: getCompanySite(), dna: getStoredDna(),
       assinatura: getCompanySite() ? ("Consultor | " + getCompanySite()) : "Consultor",
     })})
       .then(function(r){return r.json();})
       .then(function(data){
-        if (data && data.touches && data.touches.length) {
-          var t0 = data.touches[0];
-          var newTouch = Object.assign({}, touch, {subject:t0.subject||touch.subject, body:t0.body||touch.body});
-          var nt = generated.touches.map(function(t,i){return i===idx?newTouch:t;});
+        var t0 = data && data.touches && data.touches[0];
+        // Only update if we actually got non-empty body back
+        if (t0 && t0.body && t0.body.trim().length > 10) {
+          var newTouch = Object.assign({}, touch, {
+            subject: (t0.subject && t0.subject.trim()) || touch.subject,
+            body:    t0.body.trim(),
+          });
+          var nt = generated.touches.map(function(t,i){return i===idx ? newTouch : t;});
           var upd = Object.assign({},generated,{touches:nt});
           setGenerated(upd);
           persistSeq(upd);
-        } else { localFB(); }
+        } else {
+          // API returned empty — use local template fallback
+          var fb = buildOneTouchVariant(touch, p, selAcc);
+          if (fb && fb.body && fb.body.length > 10) {
+            var nt2 = generated.touches.map(function(t,i){return i===idx ? fb : t;});
+            var upd2 = Object.assign({},generated,{touches:nt2});
+            setGenerated(upd2);
+            persistSeq(upd2);
+          }
+        }
       })
-      .catch(localFB);
+      .catch(function(){
+        // Network error — silent, touch stays as-is
+      })
+      .finally(function(){ setRegenIdx(null); });
   }
 
     function buildCustomTemplate(profile, acc) {
@@ -692,18 +706,25 @@ function SequenceView(props) {
                     <div style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>{tc.label+" , Dia "+touch.day}</div>
                     {touch.subject && <div style={{fontSize:10,color:"#52617a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{"Assunto: "+touch.subject}</div>}
                   </div>
-                  <button onClick={function(){regenerateTouch(i);}} title="Gerar nova versao" style={{background:"none",border:"1px solid #e6e9ef",borderRadius:7,padding:"4px 8px",cursor:"pointer",color:"#94a3b8",display:"flex",alignItems:"center",gap:4,fontSize:10,fontFamily:"inherit",transition:"all .2s"}}
-                    onMouseEnter={function(e){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.color="#a5b4fc";}}
-                    onMouseLeave={function(e){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.color="#94a3b8";}}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                    Recarregar
+                  <button onClick={function(){regenerateTouch(i);}} disabled={regenIdx !== null} title="Gerar nova versão" style={{background:regenIdx===i?"rgba(99,102,241,.08)":"none",border:"1px solid "+(regenIdx===i?"rgba(99,102,241,.4)":"#e6e9ef"),borderRadius:7,padding:"4px 8px",cursor:regenIdx===i?"default":"pointer",color:regenIdx===i?"#6366f1":"#94a3b8",display:"flex",alignItems:"center",gap:4,fontSize:10,fontFamily:"inherit",transition:"all .2s"}}
+                    onMouseEnter={function(e){if(regenIdx===null){e.currentTarget.style.borderColor="rgba(99,102,241,.5)";e.currentTarget.style.color="#a5b4fc";}}}
+                    onMouseLeave={function(e){if(regenIdx===null){e.currentTarget.style.borderColor="#e6e9ef";e.currentTarget.style.color="#94a3b8";}}}>
+                    {regenIdx===i
+                      ? <><div style={{width:9,height:9,borderRadius:"50%",border:"1.5px solid rgba(99,102,241,.3)",borderTopColor:"#6366f1",animation:"spin .7s linear infinite",flexShrink:0}}/><span>{"Gerando..."}</span></>
+                      : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg><span>{"Recarregar"}</span></>
+                    }
                   </button>
                   <CopyBtn text={(touch.subject?"Assunto: "+touch.subject+"\n\n":"")+touch.body}/>
                 </div>
-                <div style={{padding:"14px 16px",borderLeft:"3px solid "+tc.color}}>
-                  {(touch.body||"").split("\n\n").filter(Boolean).map(function(para,pi){
-                    return <p key={pi} style={{fontSize:12.5,color:"#0f172a",lineHeight:1.85,margin:pi===0?"0 0 10px":"10px 0",whiteSpace:"pre-wrap"}}>{para.trim()}</p>;
-                  })}
+                <div style={{padding:"14px 16px",borderLeft:"3px solid "+tc.color,minHeight:60}}>
+                  {regenIdx === i
+                    ? <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {[100,80,90].map(function(w,si){return <div key={si} style={{height:11,borderRadius:6,background:"linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%)",backgroundSize:"200% 100%",animation:"shimmer 1.2s infinite",width:w+"%"}}/>;})}
+                      </div>
+                    : (touch.body||"").split("\n\n").filter(Boolean).map(function(para,pi){
+                        return <p key={pi} style={{fontSize:12.5,color:"#0f172a",lineHeight:1.85,margin:pi===0?"0 0 10px":"10px 0",whiteSpace:"pre-wrap"}}>{para.trim()}</p>;
+                      })
+                  }
                 </div>
               </div>
             );
@@ -5672,6 +5693,7 @@ export default function App() {
     "@keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}",
     "@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}",
     "@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}",
+    "@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}",
     "::-webkit-scrollbar{width:8px;height:8px}",
     "::-webkit-scrollbar-track{background:transparent}",
     "::-webkit-scrollbar-thumb{background:#cbd2dc;border-radius:4px}",
