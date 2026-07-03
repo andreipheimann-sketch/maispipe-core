@@ -485,53 +485,146 @@ export default async function handler(req, res) {
       `{"touches":[{"day":1,"type":"linkedin","subject":"assunto que gera curiosidade genuína","body":"mensagem completa aqui — mín 150 palavras"},...]}`,
     ].join("\n");
 
-    // ── Sequência usa Gemini exclusivamente ───────────────────────────────────
-    if (!geminiKey) return res.status(500).json({ error: "GEMINI_API_KEY nao configurada no Vercel." });
+    // ── MODO SEQUÊNCIA — Groq, um touch por chamada ───────────────────────────
+    // Gera cada touch individualmente para maximizar qualidade e evitar truncamento.
+    if (!groqKey) return res.status(500).json({ error: "GROQ_API_KEY nao configurada." });
 
-    // Pre-flight: validate key is reachable before the heavy prompt
-    try {
-      const pingUrl = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${geminiKey}`;
-      const pingRes = await fetch(pingUrl);
-      if (!pingRes.ok) {
-        const pingData = await pingRes.json().catch(() => ({}));
-        const pingMsg  = pingData?.error?.message || ("HTTP " + pingRes.status);
-        const isBilling = pingRes.status === 429 || pingMsg.includes("quota") || pingMsg.includes("billing");
-        return res.status(200).json({
-          touches: null,
-          error: isBilling
-            ? "Quota Gemini esgotada (limit: 0). Ative o faturamento em console.cloud.google.com/billing e vincule ao projeto da GEMINI_API_KEY. O plano pay-as-you-go tem tier gratuito generoso."
-            : `GEMINI_API_KEY inválida ou API não habilitada: ${pingMsg}`,
-        });
-      }
-    } catch (pingErr) {
-      return res.status(200).json({ touches: null, error: `Erro ao conectar ao Gemini: ${pingErr.message}` });
-    }
+    const CHANNEL_SPECS = {
+      email: {
+        label: "E-MAIL",
+        spec: [
+          `Escreva um e-mail de prospecção B2B com EXATAMENTE 3 parágrafos, mínimo 200 palavras no total.`,
+          `§1 SITUAÇÃO+PROBLEMA: abra com dado de mercado ou observação específica sobre ${empresa}. Mostre que entende o contexto. Nomeie a dor sem perguntar.`,
+          `§2 IMPLICAÇÃO: expanda a consequência — receita, reputação, time, vantagem competitiva em jogo. Seja concreto e específico ao setor.`,
+          `§3 NECESSIDADE+CTA: visão do que é possível resolver. CTA leve de baixo comprometimento. Assine com nome e empresa.`,
+        ].join("\n"),
+      },
+      linkedin: {
+        label: "LINKEDIN INMAIL",
+        spec: [
+          `Escreva um LinkedIn InMail com 2 parágrafos, mínimo 150 palavras.`,
+          `§1: Gancho SPIN com observação específica sobre ${empresa} + dor implícita do cargo. Tom de colega de setor, não de vendedor.`,
+          `§2: Implicação expandida + CTA direto mas não agressivo. Demonstre que você fez a lição de casa.`,
+        ].join("\n"),
+      },
+      call: {
+        label: "COLD CALL SCRIPT",
+        spec: [
+          `Escreva um script de cold call para ser lido em voz alta, mínimo 150 palavras.`,
+          `[Abertura 10s]: por que ligou + pergunta de permissão surpreendente (nunca "tudo bem?")`,
+          `[Situação]: 2-3 frases sobre o contexto do setor que demonstram pesquisa real`,
+          `[Problema]: pergunta cirúrgica que toca na dor sem revelar a solução`,
+          `[Pausa]: "...isso ressoa com o que vocês estão vivendo agora?"`,
+          `[Implicação]: expandir consequências se positivo, criar urgência se neutro`,
+          `[CTA]: proposta de 20 min de conversa ou envio de diagnóstico`,
+        ].join("\n"),
+      },
+      whatsapp: {
+        label: "WHATSAPP",
+        spec: [
+          `Escreva uma mensagem de WhatsApp com 4 a 5 frases curtas. Tom informal mas com substância.`,
+          `Linha 1: observação sobre ${empresa} que prova pesquisa real — sem "vi seu perfil no LinkedIn".`,
+          `Linha 2: dor específica do cargo nomeada de forma indireta e inteligente.`,
+          `Linha 3: resultado concreto que outros no setor alcançaram (sem citar nome).`,
+          `Linha 4-5: pergunta simples e direta de engajamento.`,
+        ].join("\n"),
+      },
+      breakup: {
+        label: "BREAKUP",
+        spec: [
+          `Escreva uma mensagem de breakup com mínimo 120 palavras.`,
+          `Reconheça que não é o momento certo, com classe e sem ressentimento.`,
+          `Deixe um insight final genuinamente valioso — algo que eles guardarão mesmo sem responder.`,
+          `Abra a porta para contato futuro de forma elegante. Ironia leve é bem-vinda se o tom permitir.`,
+        ].join("\n"),
+      },
+      follow: {
+        label: "FOLLOW-UP",
+        spec: [
+          `Escreva um follow-up com 2 parágrafos, mínimo 120 palavras.`,
+          `§1: referência indireta ao contato anterior + novo ângulo ou dado de mercado.`,
+          `§2: aprofunde a implicação da dor + CTA renovado com urgência leve.`,
+        ].join("\n"),
+      },
+    };
 
-    const out = await callGemini(geminiKey, seqSystem, seqUser, 14000);
-    if (!out.ok) return res.status(502).json({ error: "Gemini erro (sequencia): " + out.error });
+    const touchResults = [];
+    const touchAngles = [
+      "ângulo de impacto operacional — o que está quebrando no dia a dia",
+      "ângulo de risco estratégico — o que pode dar errado nos próximos 6 meses",
+      "ângulo de vantagem competitiva — o que concorrentes já estão fazendo",
+      "ângulo de custo oculto — o que a ineficiência está custando em receita",
+      "ângulo de timing — por que agora é o momento ideal para agir",
+      "ângulo de prova social — o que outros líderes do setor já resolveram",
+    ];
 
-    let parsed;
-    try { parsed = parseJSON(out.text); }
-    catch (e) {
+    for (let i = 0; i < cadencia.length; i++) {
+      const touch  = cadencia[i];
+      const spec   = CHANNEL_SPECS[touch.type] || CHANNEL_SPECS.email;
+      const angle  = touchAngles[i % touchAngles.length];
+
+      const sys = [
+        `Você é o maior especialista em outbound B2B do Brasil, unindo SPIN Selling (Neil Rackham), copywriting de resposta direta e neurociência da persuasão.`,
+        ``,
+        `Você representa: ${vendedorEmpresa}`,
+        sellerCtx,
+        ``,
+        `REGRAS INVIOLÁVEIS:`,
+        `- Português do Brasil perfeito. NUNCA inglês.`,
+        `- NUNCA use [Nome], [Empresa], [Cargo] ou qualquer placeholder. Use os dados reais fornecidos.`,
+        `- Sem travessão (— ou –). Use vírgula ou ponto.`,
+        `- NUNCA comece com "Olá", "Espero que esteja bem", "Me chamo" ou qualquer apresentação genérica.`,
+        `- Tom: colega sênior do setor, não vendedor. Alguém que já resolveu esse problema antes.`,
+        `- Responda APENAS com o JSON solicitado. Zero texto antes ou depois.`,
+      ].join("\n");
+
+      const usr = [
+        `Gere o TOUCH ${i + 1} de ${cadencia.length} de uma sequência de prospecção.`,
+        ``,
+        `CONTEXTO DO PROSPECT:`,
+        `- Empresa-alvo: ${empresa || "a empresa"}`,
+        `- Setor: ${setor || "tecnologia"}`,
+        `- Cargo: ${cargo || "C-Level / Diretor"}`,
+        nomeUsar ? `- Nome: ${nomeUsar}` : `- Nome: não informado`,
+        `- Dor central: ${doraPrincipal}`,
+        `- Ângulo DESTE touch: ${angle}`,
+        `- Dia da cadência: ${touch.day}`,
+        ``,
+        `CANAL: ${spec.label}`,
+        spec.spec,
+        ``,
+        `IMPORTANTE: Este é o touch ${i + 1}. Use o ângulo "${angle}" — diferente dos outros touches.`,
+        ``,
+        `Responda APENAS com este JSON:`,
+        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto criativo e específico","body":"mensagem completa aqui"}`,
+      ].join("\n");
+
       try {
-        const m = out.text.match(/\{[\s\S]*"touches"[\s\S]*\}/);
-        if (m) parsed = JSON.parse(m[0]);
-        else throw e;
-      } catch (e2) {
-        return res.status(200).json({ touches: null, message: "Falha ao interpretar: " + e.message, raw: out.text.slice(0, 200) });
+        const out = await callGroq(groqKey, sys, usr, 2000);
+        if (!out.ok) { touchResults.push({ day: touch.day, type: touch.type, subject: "", body: `[Erro: ${out.error}]` }); continue; }
+
+        let parsed;
+        try {
+          const clean = out.text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
+          const m = clean.match(/\{[\s\S]+\}/);
+          parsed = JSON.parse(m ? m[0] : clean);
+        } catch(e) {
+          // If JSON parse fails, wrap the raw text
+          parsed = { day: touch.day, type: touch.type, subject: `Touch ${i+1}`, body: out.text.replace(/```/g,"").trim() };
+        }
+
+        touchResults.push({
+          day:     parsed.day     || touch.day,
+          type:    parsed.type    || touch.type,
+          subject: (parsed.subject || "").replace(/\s*[—–]\s*/g, ", "),
+          body:    (parsed.body    || "").replace(/\s*[—–]\s*/g, ", "),
+        });
+      } catch(e) {
+        touchResults.push({ day: touch.day, type: touch.type, subject: "", body: `[Erro interno: ${e.message}]` });
       }
     }
 
-    // Strip dashes from all touch fields
-    const touchesOut = Array.isArray(parsed?.touches)
-      ? parsed.touches.map(t => ({
-          ...t,
-          subject: (t.subject || "").replace(/\s*[—–]\s*/g, ", "),
-          body:    (t.body    || "").replace(/\s*[—–]\s*/g, ", "),
-        }))
-      : null;
-
-    return res.status(200).json({ touches: touchesOut });
+    return res.status(200).json({ touches: touchResults });
 
   } catch (e) {
     return res.status(200).json({ error: "Erro interno: " + e.message });
