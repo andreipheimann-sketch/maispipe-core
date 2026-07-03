@@ -409,202 +409,150 @@ export default async function handler(req, res) {
       return res.status(200).json(stripDashesDeep(result));
     }
 
-    // ── MODO SEQUÊNCIA ────────────────────────────────────────────────────────
+    // ── MODO SEQUÊNCIA ─────────────────────────────────────────────────────────
     const cadencia = Array.isArray(touches) && touches.length ? touches : [
-      { day:1,  type:"linkedin" }, { day:3,  type:"email"    },
-      { day:6,  type:"call"     }, { day:10, type:"email"    },
-      { day:15, type:"whatsapp" }, { day:21, type:"breakup"  },
+      { day:1, type:"linkedin" }, { day:3,  type:"email"    },
+      { day:6, type:"call"     }, { day:10, type:"email"    },
+      { day:15,type:"whatsapp" }, { day:21, type:"breakup"  },
     ];
 
-    const contactFirstName = contato ? contato.split(" ")[0] : null;
-    const nomeUsar         = contactFirstName || null;
-    const doraPrincipal    = pain || "desafio central do setor";
-    const anguloUsar       = angulo || "impacto nos resultados";
+    const nomeUsar      = contato ? contato.split(" ")[0] : null;
+    const doraPrincipal = pain || "desafio central do setor";
 
-    const CHANNEL_SPECS = {
+    // Per-channel writing instructions (no § or [...] markers in instructions)
+    const SPECS = {
       email: {
         label: "E-MAIL",
-        spec: [
-          `Escreva um e-mail de prospecção B2B com EXATAMENTE 3 parágrafos, mínimo 200 palavras no total.`,
-          `§1 SITUAÇÃO+PROBLEMA: abra com dado de mercado ou observação específica sobre ${empresa}. Mostre que entende o contexto. Nomeie a dor sem perguntar.`,
-          `§2 IMPLICAÇÃO: expanda a consequência — receita, reputação, time, vantagem competitiva em jogo. Seja concreto e específico ao setor.`,
-          `§3 NECESSIDADE+CTA: visão do que é possível resolver. CTA leve de baixo comprometimento. Assine com nome e empresa.`,
-        ].join("\n"),
+        min: "mínimo 200 palavras, 3 parágrafos",
+        guide: `Parágrafo 1: Situação — dado de mercado ou observação sobre ${empresa || "a empresa"}, mostre que entende o contexto, nomeie a dor.\nParágrafo 2: Implicação — consequência concreta da dor (receita, reputação, time, competitividade).\nParágrafo 3: Necessidade e CTA — visão do possível, CTA leve, assine com nome e empresa.`,
       },
       linkedin: {
         label: "LINKEDIN INMAIL",
-        spec: [
-          `Escreva um LinkedIn InMail com 2 parágrafos, mínimo 150 palavras.`,
-          `§1: Gancho SPIN com observação específica sobre ${empresa} + dor implícita do cargo. Tom de colega de setor, não de vendedor.`,
-          `§2: Implicação expandida + CTA direto mas não agressivo. Demonstre que você fez a lição de casa.`,
-        ].join("\n"),
+        min: "mínimo 150 palavras, 2 parágrafos",
+        guide: `Parágrafo 1: Gancho com observação específica sobre ${empresa || "a empresa"} e dor implícita do cargo. Tom de colega de setor.\nParágrafo 2: Implicação expandida e CTA direto mas não agressivo.`,
       },
       call: {
         label: "COLD CALL SCRIPT",
-        spec: [
-          `Escreva um script de cold call para ser lido em voz alta, mínimo 150 palavras.`,
-          `[Abertura 10s]: por que ligou + pergunta de permissão surpreendente (nunca tudo bem?)`,
-          `[Situação]: 2-3 frases sobre o contexto do setor que demonstram pesquisa real`,
-          `[Problema]: pergunta cirúrgica que toca na dor sem revelar a solução`,
-          `[Pausa]: ...isso ressoa com o que vocês estão vivendo agora?`,
-          `[Implicação]: expandir consequências se positivo, criar urgência se neutro`,
-          `[CTA]: proposta de 20 min de conversa ou envio de diagnóstico`,
-        ].join("\n"),
+        min: "mínimo 150 palavras, script completo para leitura em voz alta",
+        guide: `Abertura (10s): apresente-se e faça uma pergunta de permissão surpreendente.\nContexto: 2-3 frases que demonstram pesquisa real sobre o setor.\nPergunta cirúrgica: toque na dor sem revelar a solução.\nPausa e escuta.\nImplicação: expanda as consequências.\nCTA: proponha 20 minutos ou envio de diagnóstico.`,
       },
       whatsapp: {
         label: "WHATSAPP",
-        spec: [
-          `Escreva uma mensagem de WhatsApp com 4 a 5 frases curtas. Tom informal mas com substância.`,
-          `Linha 1: observação sobre ${empresa} que prova pesquisa real, sem citar LinkedIn.`,
-          `Linha 2: dor específica do cargo nomeada de forma indireta e inteligente.`,
-          `Linha 3: resultado concreto que outros no setor alcançaram, sem citar nome.`,
-          `Linha 4-5: pergunta simples e direta de engajamento.`,
-        ].join("\n"),
+        min: "4 a 5 frases curtas, tom casual mas com substância",
+        guide: `Frase 1: observação sobre ${empresa || "a empresa"} que prova pesquisa real.\nFrase 2: dor do cargo de forma indireta.\nFrase 3: resultado que outros no setor alcançaram.\nFrase 4-5: pergunta direta de engajamento.`,
       },
       breakup: {
         label: "BREAKUP",
-        spec: [
-          `Escreva uma mensagem de breakup com mínimo 120 palavras.`,
-          `Reconheça que não é o momento certo, com classe e sem ressentimento.`,
-          `Deixe um insight final genuinamente valioso que eles guardarão mesmo sem responder.`,
-          `Abra a porta para contato futuro de forma elegante. Ironia leve é bem-vinda.`,
-        ].join("\n"),
+        min: "mínimo 120 palavras",
+        guide: `Reconheça que não é o momento, com classe. Deixe um insight valioso que eles guardarão. Abra a porta para contato futuro de forma elegante.`,
       },
       follow: {
         label: "FOLLOW-UP",
-        spec: [
-          `Escreva um follow-up com 2 parágrafos, mínimo 120 palavras.`,
-          `§1: referência indireta ao contato anterior + novo ângulo ou dado de mercado.`,
-          `§2: aprofunde a implicação da dor + CTA renovado com urgência leve.`,
-        ].join("\n"),
+        min: "mínimo 120 palavras, 2 parágrafos",
+        guide: `Parágrafo 1: referência ao contato anterior e novo ângulo ou dado de mercado.\nParágrafo 2: implicação aprofundada e CTA com leve urgência.`,
       },
     };
 
-    const touchAngles = [
-      "ângulo de impacto operacional — o que está quebrando no dia a dia",
-      "ângulo de risco estratégico — o que pode dar errado nos próximos 6 meses",
-      "ângulo de vantagem competitiva — o que concorrentes já estão fazendo",
-      "ângulo de custo oculto — o que a ineficiência está custando em receita",
-      "ângulo de timing — por que agora é o momento ideal para agir",
-      "ângulo de prova social — o que outros líderes do setor já resolveram",
+    const ANGLES = [
+      "impacto operacional — o que está quebrando no dia a dia",
+      "risco estratégico — o que pode dar errado nos próximos 6 meses",
+      "vantagem competitiva — o que concorrentes já estão fazendo",
+      "custo oculto — o que a ineficiência está custando em receita",
+      "timing — por que agora é o momento certo para agir",
+      "prova social — o que outros líderes do setor já resolveram",
     ];
 
-    // ── MODO SEQUÊNCIA — Groq, touches em paralelo ────────────────────────────
-    if (!groqKey) return res.status(200).json({ touches: null, error: "GROQ_API_KEY nao configurada." });
-
-    const touchPromises = cadencia.map(async (touch, i) => {
-      // Stagger calls by 200ms per touch to avoid hitting Groq's rate limit
-      // with 6 simultaneous requests. Total added latency: ~1s for 6 touches.
-      await new Promise(resolve => setTimeout(resolve, i * 200));
-      const spec  = CHANNEL_SPECS[touch.type] || CHANNEL_SPECS.email;
-      const angle = touchAngles[i % touchAngles.length];
-
-      const sys = [
-        `Você é o maior especialista em outbound B2B do Brasil, unindo SPIN Selling (Neil Rackham), copywriting de resposta direta e neurociência da persuasão.`,
+    function buildSys(spec, angle) {
+      return [
+        `Você é o maior especialista em outbound B2B do Brasil, combinando SPIN Selling (Neil Rackham) e copywriting de resposta direta.`,
         ``,
         `Você representa: ${vendedorEmpresa}`,
         sellerCtx,
         ``,
-        `REGRAS INVIOLÁVEIS:`,
-        `- Português do Brasil perfeito. NUNCA inglês.`,
-        `- NUNCA use [Nome], [Empresa], [Cargo] ou qualquer placeholder. Use os dados reais fornecidos.`,
-        `- Sem travessão (— ou –). Use vírgula ou ponto.`,
-        `- NUNCA comece com "Olá", "Espero que esteja bem", "Me chamo" ou qualquer apresentação genérica.`,
-        `- Tom: colega sênior do setor, não vendedor. Alguém que já resolveu esse problema antes.`,
-        `- Responda APENAS com o JSON solicitado. Zero texto antes ou depois. Sem markdown.`,
+        `REGRAS ABSOLUTAS:`,
+        `- Escreva em Português do Brasil. Nunca em inglês.`,
+        `- Nunca use placeholders como [Nome] ou [Empresa]. Use os dados reais fornecidos.`,
+        `- Nunca use travessão (— ou –). Use vírgula ou ponto.`,
+        `- Nunca comece com saudação genérica. Comece com gancho de impacto.`,
+        `- Responda SOMENTE com JSON válido. Nenhum texto antes ou depois.`,
+        ``,
+        `CANAL: ${spec.label} — ${spec.min}`,
+        `ÂNGULO DESTE TOUCH: ${angle}`,
+        ``,
+        `COMO ESCREVER:`,
+        spec.guide,
       ].join("\n");
+    }
 
-      const usr = [
-        `Gere o TOUCH ${i + 1} de ${cadencia.length} de uma sequência de prospecção B2B.`,
+    function buildUsr(touch, i, spec, angle) {
+      return [
+        `Empresa-alvo: ${empresa || "a empresa"} | Setor: ${setor || "tecnologia"} | Cargo: ${cargo || "C-Level"} | Dia: ${touch.day}`,
+        nomeUsar ? `Contato: ${nomeUsar}` : `Nome: não informado`,
+        `Dor central: ${doraPrincipal}`,
         ``,
-        `CONTEXTO DO PROSPECT:`,
-        `- Empresa-alvo: ${empresa || "a empresa"}`,
-        `- Setor: ${setor || "tecnologia"}`,
-        `- Cargo do decisor: ${cargo || "C-Level / Diretor"}`,
-        nomeUsar ? `- Nome do contato: ${nomeUsar}` : `- Nome: não informado — comece com gancho direto`,
-        `- Dor central: ${doraPrincipal}`,
-        `- Ângulo exclusivo deste touch: ${angle}`,
-        `- Dia da cadência: ${touch.day}`,
-        ``,
-        `CANAL: ${spec.label}`,
-        spec.spec,
-        ``,
-        `REGRA DE FORMATAÇÃO DO BODY:`,
-        `- Use \\n\\n para separar parágrafos dentro do body.`,
-        `- Não use aspas duplas dentro do body — use aspas simples se necessário.`,
-        `- Não inclua os marcadores de seção (§1, §2, [Abertura], etc.) no body.`,
-        ``,
-        `Responda SOMENTE com JSON válido neste formato exato:`,
-        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto criativo aqui","body":"parágrafo 1\\n\\nparágrafo 2\\n\\nparágrafo 3"}`,
+        `Retorne APENAS este JSON, com o body completo (${spec.min}):`,
+        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto específico e criativo","body":"texto completo aqui, use \\n\\n entre parágrafos"}`,
       ].join("\n");
+    }
 
-      function parseTouch(text) {
-        // Remove markdown fences
-        let clean = text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
-
-        // Try direct parse first
-        try { return JSON.parse(clean); } catch(_) {}
-
-        // Extract outermost JSON object
-        const m = clean.match(/\{[\s\S]+\}/);
-        if (m) {
-          try { return JSON.parse(m[0]); } catch(_) {}
-
-          // JSON truncated mid-body — extract fields manually
-          try {
-            const dayM     = m[0].match(/"day"\s*:\s*(\d+)/);
-            const typeM    = m[0].match(/"type"\s*:\s*"([^"]+)"/);
-            const subjectM = m[0].match(/"subject"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-            // body may be truncated — grab everything after "body": " until end
-            const bodyM    = m[0].match(/"body"\s*:\s*"([\s\S]*)/);
-            const bodyRaw  = bodyM ? bodyM[1].replace(/"?\s*\}?\s*$/, "").replace(/\\n/g, "\n") : "";
-            return {
-              day:     dayM     ? parseInt(dayM[1])  : touch.day,
-              type:    typeM    ? typeM[1]            : touch.type,
-              subject: subjectM ? subjectM[1]         : `Touch ${i+1}`,
-              body:    bodyRaw  || clean,
-            };
-          } catch(_) {}
-        }
-
-        // Last resort: use raw text as body
-        return { day: touch.day, type: touch.type, subject: `Touch ${i+1}`, body: clean };
+    function parseResult(text, touch) {
+      const clean = text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```$/i,"").trim();
+      // Direct parse
+      try { const p = JSON.parse(clean); if (p && p.body) return p; } catch(_) {}
+      // Extract from surrounding text
+      const m = clean.match(/\{[^{}]*"body"\s*:\s*"([\s\S]+?)"\s*\}/);
+      if (m) {
+        try { return JSON.parse(m[0]); } catch(_) {}
       }
+      // Manual field extraction for truncated JSON
+      const bodyM = clean.match(/"body"\s*:\s*"([\s\S]{20,})/);
+      if (bodyM) {
+        const bodyRaw = bodyM[1].replace(/"?\s*\}?\s*$/, "").replace(/\\n/g, "\n");
+        const subjectM = clean.match(/"subject"\s*:\s*"([^"]{5,})"/);
+        return {
+          day:     touch.day,
+          type:    touch.type,
+          subject: subjectM ? subjectM[1] : "",
+          body:    bodyRaw,
+        };
+      }
+      // Return raw text as body rather than empty
+      return { day: touch.day, type: touch.type, subject: "", body: clean.length > 20 ? clean : "" };
+    }
 
-      async function attemptGroq() {
-        const out = await callGroq(groqKey, sys, usr, 4000);
-        if (out.ok) {
-          const p = parseTouch(out.text);
-          return {
-            day:     p.day     || touch.day,
-            type:    p.type    || touch.type,
-            subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", ").replace(/§\d+\s*/g, "").trim(),
-            body:    cleanBody(p.body || ""),
-          };
-        }
-        // 429 rate-limit — back off and retry once
-        if (out.error && (out.error.includes("429") || out.error.includes("rate"))) {
-          await new Promise(r => setTimeout(r, 3000 + i * 500));
-          const retry = await callGroq(groqKey, sys, usr, 4000);
-          if (retry.ok) {
-            const p = parseTouch(retry.text);
-            return {
-              day:     p.day     || touch.day,
-              type:    p.type    || touch.type,
-              subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", ").replace(/§\d+\s*/g, "").trim(),
-              body:    cleanBody(p.body || ""),
-            };
+    function normalise(p, touch) {
+      return {
+        day:     p.day     || touch.day,
+        type:    p.type    || touch.type,
+        subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
+        body:    (p.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
+      };
+    }
+
+    const touchPromises = cadencia.map(async (touch, i) => {
+      await new Promise(r => setTimeout(r, i * 300)); // stagger to avoid rate limits
+      const spec  = SPECS[touch.type] || SPECS.email;
+      const angle = ANGLES[i % ANGLES.length];
+      const sys   = buildSys(spec, angle);
+      const usr   = buildUsr(touch, i, spec, angle);
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
+        try {
+          const out = await callGroq(groqKey, sys, usr, 4000);
+          if (out.ok && out.text && out.text.length > 20) {
+            const p = parseResult(out.text, touch);
+            if (p.body && p.body.length > 20) return normalise(p, touch);
           }
+          // If 429 wait longer before retry
+          if (out.error && (out.error.includes("429") || out.error.includes("rate_limit"))) {
+            await new Promise(r => setTimeout(r, 4000 + i * 500));
+          }
+        } catch(e) {
+          // Network/timeout error — retry
         }
-        return null;
       }
-
-      try {
-        const result = await attemptGroq();
-        if (result) return result;
-      } catch(_) {}
-
-      return { day: touch.day, type: touch.type, subject: "", body: "" };
+      return { day: touch.day, type: touch.type, subject: "", body: "Clique em Recarregar para gerar esta mensagem." };
     });
 
     const touchResults = await Promise.all(touchPromises);
