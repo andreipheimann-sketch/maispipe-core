@@ -485,9 +485,8 @@ export default async function handler(req, res) {
       `{"touches":[{"day":1,"type":"linkedin","subject":"assunto que gera curiosidade genuína","body":"mensagem completa aqui — mín 150 palavras"},...]}`,
     ].join("\n");
 
-    // ── MODO SEQUÊNCIA — Groq, um touch por chamada ───────────────────────────
-    // Gera cada touch individualmente para maximizar qualidade e evitar truncamento.
-    if (!groqKey) return res.status(500).json({ error: "GROQ_API_KEY nao configurada." });
+    // ── MODO SEQUÊNCIA — Gemini 2.5 Flash, touches em paralelo ──────────────
+    if (!geminiKey) return res.status(200).json({ touches: null, error: "GEMINI_API_KEY nao configurada no Vercel." });
 
     const CHANNEL_SPECS = {
       email: {
@@ -548,7 +547,6 @@ export default async function handler(req, res) {
       },
     };
 
-    const touchResults = [];
     const touchAngles = [
       "ângulo de impacto operacional — o que está quebrando no dia a dia",
       "ângulo de risco estratégico — o que pode dar errado nos próximos 6 meses",
@@ -558,10 +556,9 @@ export default async function handler(req, res) {
       "ângulo de prova social — o que outros líderes do setor já resolveram",
     ];
 
-    for (let i = 0; i < cadencia.length; i++) {
-      const touch  = cadencia[i];
-      const spec   = CHANNEL_SPECS[touch.type] || CHANNEL_SPECS.email;
-      const angle  = touchAngles[i % touchAngles.length];
+    const touchPromises = cadencia.map(async (touch, i) => {
+      const spec  = CHANNEL_SPECS[touch.type] || CHANNEL_SPECS.email;
+      const angle = touchAngles[i % touchAngles.length];
 
       const sys = [
         `Você é o maior especialista em outbound B2B do Brasil, unindo SPIN Selling (Neil Rackham), copywriting de resposta direta e neurociência da persuasão.`,
@@ -575,55 +572,65 @@ export default async function handler(req, res) {
         `- Sem travessão (— ou –). Use vírgula ou ponto.`,
         `- NUNCA comece com "Olá", "Espero que esteja bem", "Me chamo" ou qualquer apresentação genérica.`,
         `- Tom: colega sênior do setor, não vendedor. Alguém que já resolveu esse problema antes.`,
-        `- Responda APENAS com o JSON solicitado. Zero texto antes ou depois.`,
+        `- Responda APENAS com o JSON solicitado. Zero texto antes ou depois. Sem markdown.`,
       ].join("\n");
 
       const usr = [
-        `Gere o TOUCH ${i + 1} de ${cadencia.length} de uma sequência de prospecção.`,
+        `Gere o TOUCH ${i + 1} de ${cadencia.length} de uma sequência de prospecção B2B.`,
         ``,
         `CONTEXTO DO PROSPECT:`,
         `- Empresa-alvo: ${empresa || "a empresa"}`,
         `- Setor: ${setor || "tecnologia"}`,
-        `- Cargo: ${cargo || "C-Level / Diretor"}`,
-        nomeUsar ? `- Nome: ${nomeUsar}` : `- Nome: não informado`,
+        `- Cargo do decisor: ${cargo || "C-Level / Diretor"}`,
+        nomeUsar ? `- Nome do contato: ${nomeUsar}` : `- Nome: não informado — comece com gancho direto`,
         `- Dor central: ${doraPrincipal}`,
-        `- Ângulo DESTE touch: ${angle}`,
+        `- Ângulo exclusivo deste touch: ${angle}`,
         `- Dia da cadência: ${touch.day}`,
         ``,
         `CANAL: ${spec.label}`,
         spec.spec,
         ``,
-        `IMPORTANTE: Este é o touch ${i + 1}. Use o ângulo "${angle}" — diferente dos outros touches.`,
-        ``,
-        `Responda APENAS com este JSON:`,
-        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto criativo e específico","body":"mensagem completa aqui"}`,
+        `Responda APENAS com este JSON (sem nenhum texto fora dele):`,
+        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto criativo e específico para ${empresa}","body":"mensagem completa seguindo as especificações do canal"}`,
       ].join("\n");
 
-      try {
-        const out = await callGroq(groqKey, sys, usr, 2000);
-        if (!out.ok) { touchResults.push({ day: touch.day, type: touch.type, subject: "", body: `[Erro: ${out.error}]` }); continue; }
-
-        let parsed;
+      function parseTouch(text) {
         try {
-          const clean = out.text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
+          const clean = text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
           const m = clean.match(/\{[\s\S]+\}/);
-          parsed = JSON.parse(m ? m[0] : clean);
-        } catch(e) {
-          // If JSON parse fails, wrap the raw text
-          parsed = { day: touch.day, type: touch.type, subject: `Touch ${i+1}`, body: out.text.replace(/```/g,"").trim() };
+          return JSON.parse(m ? m[0] : clean);
+        } catch(_) {
+          return { day: touch.day, type: touch.type, subject: `Touch ${i+1}`, body: text.replace(/```/g,"").trim() };
         }
-
-        touchResults.push({
-          day:     parsed.day     || touch.day,
-          type:    parsed.type    || touch.type,
-          subject: (parsed.subject || "").replace(/\s*[—–]\s*/g, ", "),
-          body:    (parsed.body    || "").replace(/\s*[—–]\s*/g, ", "),
-        });
-      } catch(e) {
-        touchResults.push({ day: touch.day, type: touch.type, subject: "", body: `[Erro interno: ${e.message}]` });
       }
-    }
 
+      function normalise(p) {
+        return {
+          day:     p.day     || touch.day,
+          type:    p.type    || touch.type,
+          subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", "),
+          body:    (p.body    || "").replace(/\s*[—–]\s*/g, ", "),
+        };
+      }
+
+      // Primary: Gemini
+      try {
+        const out = await callGemini(geminiKey, sys, usr, 3000);
+        if (out.ok) return normalise(parseTouch(out.text));
+      } catch(_) {}
+
+      // Fallback: Groq
+      if (groqKey) {
+        try {
+          const out = await callGroq(groqKey, sys, usr, 2000);
+          if (out.ok) return normalise(parseTouch(out.text));
+        } catch(_) {}
+      }
+
+      return { day: touch.day, type: touch.type, subject: "", body: "" };
+    });
+
+    const touchResults = await Promise.all(touchPromises);
     return res.status(200).json({ touches: touchResults });
 
   } catch (e) {
