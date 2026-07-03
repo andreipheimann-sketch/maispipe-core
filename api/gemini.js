@@ -485,76 +485,8 @@ export default async function handler(req, res) {
       `{"touches":[{"day":1,"type":"linkedin","subject":"assunto que gera curiosidade genuína","body":"mensagem completa aqui — mín 150 palavras"},...]}`,
     ].join("\n");
 
-    // ── MODO SEQUÊNCIA — Gemini 2.5 Flash, touches em paralelo ──────────────
-    if (!geminiKey) return res.status(200).json({ touches: null, error: "GEMINI_API_KEY nao configurada no Vercel." });
-
-    const CHANNEL_SPECS = {
-      email: {
-        label: "E-MAIL",
-        spec: [
-          `Escreva um e-mail de prospecção B2B com EXATAMENTE 3 parágrafos, mínimo 200 palavras no total.`,
-          `§1 SITUAÇÃO+PROBLEMA: abra com dado de mercado ou observação específica sobre ${empresa}. Mostre que entende o contexto. Nomeie a dor sem perguntar.`,
-          `§2 IMPLICAÇÃO: expanda a consequência — receita, reputação, time, vantagem competitiva em jogo. Seja concreto e específico ao setor.`,
-          `§3 NECESSIDADE+CTA: visão do que é possível resolver. CTA leve de baixo comprometimento. Assine com nome e empresa.`,
-        ].join("\n"),
-      },
-      linkedin: {
-        label: "LINKEDIN INMAIL",
-        spec: [
-          `Escreva um LinkedIn InMail com 2 parágrafos, mínimo 150 palavras.`,
-          `§1: Gancho SPIN com observação específica sobre ${empresa} + dor implícita do cargo. Tom de colega de setor, não de vendedor.`,
-          `§2: Implicação expandida + CTA direto mas não agressivo. Demonstre que você fez a lição de casa.`,
-        ].join("\n"),
-      },
-      call: {
-        label: "COLD CALL SCRIPT",
-        spec: [
-          `Escreva um script de cold call para ser lido em voz alta, mínimo 150 palavras.`,
-          `[Abertura 10s]: por que ligou + pergunta de permissão surpreendente (nunca "tudo bem?")`,
-          `[Situação]: 2-3 frases sobre o contexto do setor que demonstram pesquisa real`,
-          `[Problema]: pergunta cirúrgica que toca na dor sem revelar a solução`,
-          `[Pausa]: "...isso ressoa com o que vocês estão vivendo agora?"`,
-          `[Implicação]: expandir consequências se positivo, criar urgência se neutro`,
-          `[CTA]: proposta de 20 min de conversa ou envio de diagnóstico`,
-        ].join("\n"),
-      },
-      whatsapp: {
-        label: "WHATSAPP",
-        spec: [
-          `Escreva uma mensagem de WhatsApp com 4 a 5 frases curtas. Tom informal mas com substância.`,
-          `Linha 1: observação sobre ${empresa} que prova pesquisa real — sem "vi seu perfil no LinkedIn".`,
-          `Linha 2: dor específica do cargo nomeada de forma indireta e inteligente.`,
-          `Linha 3: resultado concreto que outros no setor alcançaram (sem citar nome).`,
-          `Linha 4-5: pergunta simples e direta de engajamento.`,
-        ].join("\n"),
-      },
-      breakup: {
-        label: "BREAKUP",
-        spec: [
-          `Escreva uma mensagem de breakup com mínimo 120 palavras.`,
-          `Reconheça que não é o momento certo, com classe e sem ressentimento.`,
-          `Deixe um insight final genuinamente valioso — algo que eles guardarão mesmo sem responder.`,
-          `Abra a porta para contato futuro de forma elegante. Ironia leve é bem-vinda se o tom permitir.`,
-        ].join("\n"),
-      },
-      follow: {
-        label: "FOLLOW-UP",
-        spec: [
-          `Escreva um follow-up com 2 parágrafos, mínimo 120 palavras.`,
-          `§1: referência indireta ao contato anterior + novo ângulo ou dado de mercado.`,
-          `§2: aprofunde a implicação da dor + CTA renovado com urgência leve.`,
-        ].join("\n"),
-      },
-    };
-
-    const touchAngles = [
-      "ângulo de impacto operacional — o que está quebrando no dia a dia",
-      "ângulo de risco estratégico — o que pode dar errado nos próximos 6 meses",
-      "ângulo de vantagem competitiva — o que concorrentes já estão fazendo",
-      "ângulo de custo oculto — o que a ineficiência está custando em receita",
-      "ângulo de timing — por que agora é o momento ideal para agir",
-      "ângulo de prova social — o que outros líderes do setor já resolveram",
-    ];
+    // ── MODO SEQUÊNCIA — Groq, touches em paralelo ────────────────────────────
+    if (!groqKey) return res.status(200).json({ touches: null, error: "GROQ_API_KEY nao configurada." });
 
     const touchPromises = cadencia.map(async (touch, i) => {
       const spec  = CHANNEL_SPECS[touch.type] || CHANNEL_SPECS.email;
@@ -604,28 +536,18 @@ export default async function handler(req, res) {
         }
       }
 
-      function normalise(p) {
-        return {
-          day:     p.day     || touch.day,
-          type:    p.type    || touch.type,
-          subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", "),
-          body:    (p.body    || "").replace(/\s*[—–]\s*/g, ", "),
-        };
-      }
-
-      // Primary: Gemini
       try {
-        const out = await callGemini(geminiKey, sys, usr, 3000);
-        if (out.ok) return normalise(parseTouch(out.text));
+        const out = await callGroq(groqKey, sys, usr, 2000);
+        if (out.ok) {
+          const p = parseTouch(out.text);
+          return {
+            day:     p.day     || touch.day,
+            type:    p.type    || touch.type,
+            subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", "),
+            body:    (p.body    || "").replace(/\s*[—–]\s*/g, ", "),
+          };
+        }
       } catch(_) {}
-
-      // Fallback: Groq
-      if (groqKey) {
-        try {
-          const out = await callGroq(groqKey, sys, usr, 2000);
-          if (out.ok) return normalise(parseTouch(out.text));
-        } catch(_) {}
-      }
 
       return { day: touch.day, type: touch.type, subject: "", body: "" };
     });
