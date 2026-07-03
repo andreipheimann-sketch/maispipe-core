@@ -494,7 +494,28 @@ export default async function handler(req, res) {
     ].join("\n");
 
     // ── Sequência usa Gemini exclusivamente ───────────────────────────────────
-    if (!geminiKey) return res.status(500).json({ error: "GEMINI_API_KEY nao configurada (necessaria para sequencias)." });
+    if (!geminiKey) return res.status(500).json({ error: "GEMINI_API_KEY nao configurada no Vercel." });
+
+    // Pre-flight: validate the key is working before running the heavy prompt
+    // Uses the lightweight models list endpoint — fast, no token cost
+    try {
+      const pingUrl = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${geminiKey}`;
+      const pingRes = await fetch(pingUrl);
+      if (!pingRes.ok) {
+        const pingData = await pingRes.json().catch(() => ({}));
+        const pingMsg  = pingData?.error?.message || ("HTTP " + pingRes.status);
+        return res.status(200).json({
+          touches: null,
+          error: `GEMINI_API_KEY inválida ou sem acesso à API: ${pingMsg}. Verifique a chave no painel Vercel e certifique-se de que a Gemini API está ativada em console.cloud.google.com.`,
+        });
+      }
+    } catch (pingErr) {
+      return res.status(200).json({
+        touches: null,
+        error: `Não foi possível alcançar a API do Gemini: ${pingErr.message}. Verifique conectividade ou a chave GEMINI_API_KEY.`,
+      });
+    }
+
     const out = await callGemini(geminiKey, seqSystem, seqUser, 14000);
     if (!out.ok) return res.status(502).json({ error: "Gemini erro (sequencia): " + out.error });
 
