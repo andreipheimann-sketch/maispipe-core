@@ -526,22 +526,50 @@ export default async function handler(req, res) {
         `CANAL: ${spec.label}`,
         spec.spec,
         ``,
-        `Responda APENAS com este JSON (sem nenhum texto fora dele):`,
-        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto criativo e específico para ${empresa}","body":"mensagem completa seguindo as especificações do canal"}`,
+        `REGRA DE FORMATAÇÃO DO BODY:`,
+        `- Use \\n\\n para separar parágrafos dentro do body.`,
+        `- Não use aspas duplas dentro do body — use aspas simples se necessário.`,
+        `- Não inclua os marcadores de seção (§1, §2, [Abertura], etc.) no body.`,
+        ``,
+        `Responda SOMENTE com JSON válido neste formato exato:`,
+        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto criativo aqui","body":"parágrafo 1\\n\\nparágrafo 2\\n\\nparágrafo 3"}`,
       ].join("\n");
 
       function parseTouch(text) {
-        try {
-          const clean = text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
-          const m = clean.match(/\{[\s\S]+\}/);
-          return JSON.parse(m ? m[0] : clean);
-        } catch(_) {
-          return { day: touch.day, type: touch.type, subject: `Touch ${i+1}`, body: text.replace(/```/g,"").trim() };
+        // Remove markdown fences
+        let clean = text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
+
+        // Try direct parse first
+        try { return JSON.parse(clean); } catch(_) {}
+
+        // Extract outermost JSON object
+        const m = clean.match(/\{[\s\S]+\}/);
+        if (m) {
+          try { return JSON.parse(m[0]); } catch(_) {}
+
+          // JSON truncated mid-body — extract fields manually
+          try {
+            const dayM     = m[0].match(/"day"\s*:\s*(\d+)/);
+            const typeM    = m[0].match(/"type"\s*:\s*"([^"]+)"/);
+            const subjectM = m[0].match(/"subject"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+            // body may be truncated — grab everything after "body": " until end
+            const bodyM    = m[0].match(/"body"\s*:\s*"([\s\S]*)/);
+            const bodyRaw  = bodyM ? bodyM[1].replace(/"?\s*\}?\s*$/, "").replace(/\\n/g, "\n") : "";
+            return {
+              day:     dayM     ? parseInt(dayM[1])  : touch.day,
+              type:    typeM    ? typeM[1]            : touch.type,
+              subject: subjectM ? subjectM[1]         : `Touch ${i+1}`,
+              body:    bodyRaw  || clean,
+            };
+          } catch(_) {}
         }
+
+        // Last resort: use raw text as body
+        return { day: touch.day, type: touch.type, subject: `Touch ${i+1}`, body: clean };
       }
 
       try {
-        const out = await callGroq(groqKey, sys, usr, 2000);
+        const out = await callGroq(groqKey, sys, usr, 4000);  // raised from 2000
         if (out.ok) {
           const p = parseTouch(out.text);
           return {
