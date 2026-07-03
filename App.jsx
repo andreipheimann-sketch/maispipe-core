@@ -478,11 +478,14 @@ function SequenceView(props) {
           props.showToast("Sequência gerada com IA e salva na biblioteca.", "#10b981");
         } else {
           var reason = (data && (data.error || data.message)) || ("HTTP " + res.status);
-          var isQuota = reason.toLowerCase().includes("quota") || reason.toLowerCase().includes("resource_exhausted") || String(res.status) === "429";
-          if (isQuota) {
-            props.showToast("Limite de quota do Gemini atingido. Aguarde alguns minutos e tente novamente.", "#ef4444");
+          var isQuota  = reason.toLowerCase().includes("quota") || reason.toLowerCase().includes("resource_exhausted") || String(res.status) === "429";
+          var isKeyErr = reason.toLowerCase().includes("gemini_api_key") || reason.toLowerCase().includes("inválida") || reason.toLowerCase().includes("sem acesso") || reason.toLowerCase().includes("api_key");
+          if (isKeyErr) {
+            props.showToast("Erro de configuração: " + reason, "#ef4444", 8000);
+          } else if (isQuota) {
+            props.showToast("Quota do Gemini atingida. Aguarde alguns minutos.", "#ef4444");
           } else {
-            props.showToast("IA indisponível (" + reason.slice(0,60) + "), usando templates.", "#f59e0b");
+            props.showToast("IA indisponível: " + reason, "#f59e0b", 6000);
           }
           localFallback();
         }
@@ -5453,8 +5456,9 @@ export default function App() {
       });
     });
   }
-  function showToast(msg, color) {
+  function showToast(msg, color, duration) {
     setToast({msg:msg,color:color||"#4f46e5"});
+    setTimeout(function(){setToast(null);}, duration||3000);
     setTimeout(function(){setToast(null);}, 3000);
   }
   useEffect(function() {
@@ -5790,7 +5794,7 @@ export default function App() {
       {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onReEnrich={function(acc){doEnrichAccount(acc);}}/>}
       {openSeq && <SequenceModal seq={openSeq} onClose={function(){setOpenSeq(null);}}/>}
       {toast && (
-        <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:340,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:480,display:"flex",alignItems:"flex-start",gap:10,wordBreak:"break-word",lineHeight:1.5}}>
           {toast.msg}
         </div>
       )}
