@@ -26,50 +26,58 @@ async function callGroq(apiKey, systemText, userText, maxTokens) {
 
 // ── Transport: Gemini ──────────────────────────────────────────────────────────
 async function callGemini(apiKey, systemText, userText, maxTokens) {
-  const model = "gemini-2.0-flash";
-  const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const r = await fetch(url, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemText }] },
-      contents: [{ role: "user", parts: [{ text: userText }] }],
-      generationConfig: {
-        maxOutputTokens: maxTokens || 8192,
-        temperature: 0.85,
-      },
-    }),
-  });
-  const data = await r.json();
-  if (!r.ok) {
-    const msg    = data?.error?.message || ("HTTP " + r.status);
-    const isQuota = r.status === 429 || (data?.error?.status === "RESOURCE_EXHAUSTED");
-    // Fallback to 1.5-flash-latest on quota
-    if (isQuota) {
-      const url2 = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-      const r2 = await fetch(url2, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemText }] },
-          contents: [{ role: "user", parts: [{ text: userText }] }],
-          generationConfig: { maxOutputTokens: maxTokens || 8192, temperature: 0.85 },
-        }),
-      });
-      const d2 = await r2.json();
-      if (!r2.ok) return { ok: false, status: r2.status, error: d2?.error?.message || ("HTTP " + r2.status) };
-      const t2 = (d2?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-      if (!t2) return { ok: false, status: 200, error: "Resposta vazia (Gemini fallback)." };
-      return { ok: true, text: t2 };
+  // Confirmed stable aliases on v1beta (no -latest suffix — removed late 2024)
+  const MODELS = [
+    "gemini-2.0-flash",     // primary — fast + generous free quota
+    "gemini-1.5-flash",     // fallback 1 — if 2.0 quota or unavailable
+    "gemini-1.5-flash-8b",  // fallback 2 — highest free RPM
+  ];
+
+  async function tryModel(model) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const r = await fetch(url, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemText }] },
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+        generationConfig: {
+          maxOutputTokens: maxTokens || 8192,
+          temperature: 0.85,
+        },
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      const msg     = data?.error?.message || ("HTTP " + r.status);
+      const errCode = data?.error?.status  || "";
+      // Retry with next model on: quota, model-not-found, or permission errors
+      const shouldRetry = r.status === 429
+        || r.status === 403
+        || errCode === "RESOURCE_EXHAUSTED"
+        || errCode === "NOT_FOUND"
+        || errCode === "PERMISSION_DENIED"
+        || msg.toLowerCase().includes("not found")
+        || msg.toLowerCase().includes("quota")
+        || msg.toLowerCase().includes("resource_exhausted");
+      return { ok: false, retry: shouldRetry, error: `[${model}] ${msg}` };
     }
-    return { ok: false, status: r.status, error: msg };
+    const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+    if (!text) {
+      const reason = data?.candidates?.[0]?.finishReason || "UNKNOWN";
+      return { ok: false, retry: false, error: `[${model}] Resposta vazia — finishReason: ${reason}` };
+    }
+    return { ok: true, text };
   }
-  const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-  if (!text) {
-    const reason = data?.candidates?.[0]?.finishReason;
-    return { ok: false, status: 200, error: "Resposta vazia (Gemini)" + (reason ? ` — ${reason}` : "") + "." };
+
+  let lastError = "nenhum modelo tentado";
+  for (const model of MODELS) {
+    const result = await tryModel(model);
+    if (result.ok)           return result;
+    lastError = result.error;
+    if (!result.retry)       break; // hard error, no point retrying
   }
-  return { ok: true, text };
+  return { ok: false, status: 502, error: lastError };
 }
 // Keep old alias so nothing else breaks
 const callClaude = callGroq;
