@@ -299,7 +299,9 @@ function Icon(props) {
 function fmtDate(ts) {
   if (!ts) return "";
   var d = new Date(ts);
-  return d.toLocaleDateString("pt-BR", { day:"2-digit", month:"short", year:"2-digit" });
+  var date = d.toLocaleDateString("pt-BR", { day:"2-digit", month:"short", year:"2-digit" });
+  var time = d.toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" });
+  return date + " às " + time;
 }
 function applyVars(text, acc, contactName) {
   var out = text
@@ -1781,10 +1783,11 @@ function BibliotecaView(props) {
   var filtered = seqs.filter(function(s){
     if (!search) return true;
     var q = search.toLowerCase();
-    var nome = ((s.account&&s.account.nome)||"").toLowerCase();
-    var perfil = ((s.profile&&s.profile.label)||"").toLowerCase();
+    var nome    = ((s.account&&s.account.nome)||"").toLowerCase();
+    var perfil  = ((s.profile&&s.profile.label)||"").toLowerCase();
     var contato = (s.contactName||"").toLowerCase();
-    return nome.includes(q) || perfil.includes(q) || contato.includes(q);
+    var data    = fmtDate(s.createdAt).toLowerCase();
+    return nome.includes(q) || perfil.includes(q) || contato.includes(q) || data.includes(q);
   });
 
   // Group by empresa
@@ -1885,20 +1888,33 @@ function BibliotecaView(props) {
                     {group.map(function(seq, si){
                       var isLast = si === group.length - 1;
                       return (
-                        <div key={seq.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:"#ffffff",borderBottom:isLast?"none":"1px solid #f8fafc",transition:"background .15s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(99,102,241,.02)";}} onMouseLeave={function(e){e.currentTarget.style.background="#ffffff";}}>
+                        <div key={seq.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"#ffffff",borderBottom:isLast?"none":"1px solid #f8fafc",transition:"background .15s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(99,102,241,.02)";}} onMouseLeave={function(e){e.currentTarget.style.background="#ffffff";}}>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
+                            {/* Row 1 — perfil + fit badge */}
+                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
                               <span style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>{seq.profile&&seq.profile.label}</span>
-                              {seq.contactName && <span style={{fontSize:10,color:"#64748b"}}>{"· "+seq.contactName}</span>}
                               <span style={{background:fc.bg,border:"1px solid "+fc.border,color:fc.text,borderRadius:6,padding:"1px 7px",fontSize:8,fontWeight:700}}>{"FIT "+(seq.account&&seq.account.fit)}</span>
+                              {seq.engine==="ai" && <span style={{background:"rgba(99,102,241,.1)",color:"#4f46e5",borderRadius:6,padding:"1px 6px",fontSize:8,fontWeight:700}}>{"IA"}</span>}
                             </div>
-                            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:3}}>
+                            {/* Row 2 — destinatário */}
+                            {seq.contactName && (
+                              <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+                                <Icon name="person" size={11} color="#6366f1"/>
+                                <span style={{fontSize:11,fontWeight:600,color:"#334155"}}>{seq.contactName}</span>
+                              </div>
+                            )}
+                            {/* Row 3 — touch badges */}
+                            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>
                               {safeArr(seq.touches).map(function(t,ti){
                                 var tc=TOUCH_TYPES_LOCAL[t.type]||TOUCH_TYPES_LOCAL.email;
                                 return <span key={ti} style={{background:tc.bg,color:tc.color,borderRadius:5,padding:"1px 6px",fontSize:8,fontWeight:700}}>{"D"+t.day+" "+tc.label}</span>;
                               })}
                             </div>
-                            <div style={{fontSize:10,color:"#94a3b8"}}>{fmtDate(seq.createdAt)}</div>
+                            {/* Row 4 — timestamp */}
+                            <div style={{display:"flex",alignItems:"center",gap:4}}>
+                              <Icon name="schedule" size={10} color="#94a3b8"/>
+                              <span style={{fontSize:10,color:"#94a3b8"}}>{fmtDate(seq.createdAt)}</span>
+                            </div>
                           </div>
                           <button onClick={function(){props.onOpenSeq(seq);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>{"Abrir"}</button>
                           <button onClick={function(){downloadSeqPDF(seq);}} title="PDF" style={{background:"rgba(99,102,241,.1)",border:"1px solid rgba(56,189,248,.3)",color:"#0369a1",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontFamily:"inherit",flexShrink:0,display:"flex",alignItems:"center"}}>
