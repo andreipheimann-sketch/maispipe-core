@@ -535,10 +535,9 @@ export default async function handler(req, res) {
     const sharedSys = [
       `Especialista em outbound B2B no Brasil. SPIN Selling + copywriting de resposta direta.`,
       `Representa: ${vendedorEmpresa}`,
-      (dna && dna.empresa && dna.empresa.descricao) ? `Produto: ${dna.empresa.descricao}` : (Array.isArray(produtos) && produtos[0]) ? `Produto: ${produtos[0].nome} — ${produtos[0].descricao||""}` : "",
-      (dna && dna.icp_refinado && dna.icp_refinado.segmento) ? `ICP: ${dna.icp_refinado.segmento}, ${dna.icp_refinado.porte||""}` : "",
-      ``,
-      `REGRAS: Português do Brasil. Sem placeholders. Sem travessão. Sem saudação genérica. Responda SOMENTE com JSON.`,
+      (dna?.empresa?.descricao) ? `Produto: ${dna.empresa.descricao.slice(0,120)}` : (produtos?.[0]) ? `Produto: ${produtos[0].nome}` : "",
+      (dna?.icp_refinado?.segmento) ? `ICP: ${dna.icp_refinado.segmento}, ${dna.icp_refinado.porte||""}` : "",
+      `REGRAS: Português BR. Sem placeholders. Sem travessão. Sem saudação. JSON somente.`,
     ].filter(Boolean).join("\n");
 
     // ── Run sequentially — avoids Groq rate limit (6k tokens/min free tier) ─
@@ -603,8 +602,8 @@ export default async function handler(req, res) {
       }
 
       touchResults.push(result || { day: touch.day, type: touch.type, subject: "", body: "" });
-      // Small gap between touches to stay under rate limit
-      if (i < cadencia.length - 1) await new Promise(r => setTimeout(r, 500));
+      // 1.2s gap between touches — keeps us well under Groq's 30 RPM free tier limit
+      if (i < cadencia.length - 1) await new Promise(r => setTimeout(r, 1200));
     }
 
     return res.status(200).json({ touches: touchResults });
