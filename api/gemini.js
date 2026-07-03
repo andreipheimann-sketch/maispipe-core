@@ -95,6 +95,26 @@ function stripDashesDeep(obj) {
   return obj;
 }
 
+// Strip prompt-spec markers that the model sometimes echoes back into the body
+function cleanBody(text) {
+  return (text || "")
+    .replace(/\s*[—–]\s*/g, ", ")          // em-dashes
+    .replace(/§\d+\s*[—–]?\s*/g, "")       // §1, §2, §3
+    .replace(/\[Abertura[^\]]*\]\s*/gi, "")
+    .replace(/\[Situação[^\]]*\]\s*/gi, "")
+    .replace(/\[Situacao[^\]]*\]\s*/gi, "")
+    .replace(/\[Problema[^\]]*\]\s*/gi, "")
+    .replace(/\[Pausa[^\]]*\]\s*/gi, "")
+    .replace(/\[Implicação[^\]]*\]\s*/gi, "")
+    .replace(/\[Implicacao[^\]]*\]\s*/gi, "")
+    .replace(/\[CTA[^\]]*\]\s*/gi, "")
+    .replace(/\[Necessidade[^\]]*\]\s*/gi, "")
+    .replace(/^(SITUAÇÃO|PROBLEMA|IMPLICAÇÃO|NECESSIDADE|ABERTURA|CTA)\s*:\s*/gim, "")
+    .replace(/,\s*,/g, ",")
+    .replace(/\n{3,}/g, "\n\n")            // collapse excess blank lines
+    .trim();
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin",  "*");
@@ -527,8 +547,8 @@ export default async function handler(req, res) {
           return {
             day:     p.day     || touch.day,
             type:    p.type    || touch.type,
-            subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", "),
-            body:    (p.body    || "").replace(/\s*[—–]\s*/g, ", "),
+            subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", ").replace(/§\d+\s*/g, "").trim(),
+            body:    cleanBody(p.body || ""),
           };
         }
       } catch(_) {}
