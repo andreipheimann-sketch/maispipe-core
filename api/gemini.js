@@ -493,6 +493,9 @@ export default async function handler(req, res) {
     if (!groqKey) return res.status(200).json({ touches: null, error: "GROQ_API_KEY nao configurada." });
 
     const touchPromises = cadencia.map(async (touch, i) => {
+      // Stagger calls by 200ms per touch to avoid hitting Groq's rate limit
+      // with 6 simultaneous requests. Total added latency: ~1s for 6 touches.
+      await new Promise(resolve => setTimeout(resolve, i * 200));
       const spec  = CHANNEL_SPECS[touch.type] || CHANNEL_SPECS.email;
       const angle = touchAngles[i % touchAngles.length];
 
@@ -568,8 +571,8 @@ export default async function handler(req, res) {
         return { day: touch.day, type: touch.type, subject: `Touch ${i+1}`, body: clean };
       }
 
-      try {
-        const out = await callGroq(groqKey, sys, usr, 4000);  // raised from 2000
+      async function attemptGroq() {
+        const out = await callGroq(groqKey, sys, usr, 4000);
         if (out.ok) {
           const p = parseTouch(out.text);
           return {
@@ -579,6 +582,26 @@ export default async function handler(req, res) {
             body:    cleanBody(p.body || ""),
           };
         }
+        // 429 rate-limit — back off and retry once
+        if (out.error && (out.error.includes("429") || out.error.includes("rate"))) {
+          await new Promise(r => setTimeout(r, 3000 + i * 500));
+          const retry = await callGroq(groqKey, sys, usr, 4000);
+          if (retry.ok) {
+            const p = parseTouch(retry.text);
+            return {
+              day:     p.day     || touch.day,
+              type:    p.type    || touch.type,
+              subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", ").replace(/§\d+\s*/g, "").trim(),
+              body:    cleanBody(p.body || ""),
+            };
+          }
+        }
+        return null;
+      }
+
+      try {
+        const result = await attemptGroq();
+        if (result) return result;
       } catch(_) {}
 
       return { day: touch.day, type: touch.type, subject: "", body: "" };
