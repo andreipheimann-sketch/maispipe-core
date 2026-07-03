@@ -529,33 +529,84 @@ export default async function handler(req, res) {
       };
     }
 
-    const touchPromises = cadencia.map(async (touch, i) => {
-      await new Promise(r => setTimeout(r, i * 300)); // stagger to avoid rate limits
+    const touchResults = [];
+
+    // ── Build the seller context ONCE (shared across all touches) ────────────
+    const sharedSys = [
+      `Especialista em outbound B2B no Brasil. SPIN Selling + copywriting de resposta direta.`,
+      `Representa: ${vendedorEmpresa}`,
+      (dna && dna.empresa && dna.empresa.descricao) ? `Produto: ${dna.empresa.descricao}` : (Array.isArray(produtos) && produtos[0]) ? `Produto: ${produtos[0].nome} — ${produtos[0].descricao||""}` : "",
+      (dna && dna.icp_refinado && dna.icp_refinado.segmento) ? `ICP: ${dna.icp_refinado.segmento}, ${dna.icp_refinado.porte||""}` : "",
+      ``,
+      `REGRAS: Português do Brasil. Sem placeholders. Sem travessão. Sem saudação genérica. Responda SOMENTE com JSON.`,
+    ].filter(Boolean).join("\n");
+
+    // ── Run sequentially — avoids Groq rate limit (6k tokens/min free tier) ─
+    for (let i = 0; i < cadencia.length; i++) {
+      const touch = cadencia[i];
       const spec  = SPECS[touch.type] || SPECS.email;
       const angle = ANGLES[i % ANGLES.length];
-      const sys   = buildSys(spec, angle);
-      const usr   = buildUsr(touch, i, spec, angle);
 
-      for (let attempt = 0; attempt < 2; attempt++) {
-        if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
+      const sys = sharedSys;
+
+      const usr = [
+        `Touch ${i+1}/${cadencia.length} — Canal: ${spec.label} (${spec.min})`,
+        `Empresa: ${empresa||"a empresa"} | Setor: ${setor||"tecnologia"} | Cargo: ${cargo||"C-Level"} | Dia ${touch.day}`,
+        nomeUsar ? `Contato: ${nomeUsar}` : null,
+        `Dor: ${doraPrincipal} | Ângulo: ${angle}`,
+        ``,
+        `Como escrever:`,
+        spec.guide,
+        ``,
+        `JSON de saída:`,
+        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto criativo","body":"mensagem completa com \\n\\n entre parágrafos"}`,
+      ].filter(Boolean).join("\n");
+
+      let result = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
         try {
-          const out = await callGroq(groqKey, sys, usr, 4000);
-          if (out.ok && out.text && out.text.length > 20) {
-            const p = parseResult(out.text, touch);
-            if (p.body && p.body.length > 20) return normalise(p, touch);
+          const out = await callGroq(groqKey, sys, usr, 3000);
+          if (!out.ok) {
+            if (out.error && (out.error.includes("429") || out.error.includes("rate"))) continue; // retry
+            break; // non-retryable error
           }
-          // If 429 wait longer before retry
-          if (out.error && (out.error.includes("429") || out.error.includes("rate_limit"))) {
-            await new Promise(r => setTimeout(r, 4000 + i * 500));
-          }
-        } catch(e) {
-          // Network/timeout error — retry
-        }
-      }
-      return { day: touch.day, type: touch.type, subject: "", body: "Clique em Recarregar para gerar esta mensagem." };
-    });
+          if (!out.text || out.text.length < 10) continue;
 
-    const touchResults = await Promise.all(touchPromises);
+          // Parse: try JSON first, then manual extraction
+          let p = null;
+          const clean = out.text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/,"").trim();
+          try { p = JSON.parse(clean); } catch(_) {
+            const m = clean.match(/\{[\s\S]+\}/);
+            if (m) { try { p = JSON.parse(m[0]); } catch(_) {} }
+            if (!p) {
+              // Extract body directly even from truncated JSON
+              const bm = clean.match(/"body"\s*:\s*"([\s\S]{30,})/);
+              if (bm) {
+                const bodyRaw = bm[1].replace(/"?\s*\}?\s*$/, "").replace(/\\n/g, "\n").trim();
+                const sm = clean.match(/"subject"\s*:\s*"([^"]+)"/);
+                p = { day: touch.day, type: touch.type, subject: sm?sm[1]:"", body: bodyRaw };
+              }
+            }
+          }
+
+          if (p && p.body && p.body.length > 30) {
+            result = {
+              day:     p.day     || touch.day,
+              type:    p.type    || touch.type,
+              subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
+              body:    (p.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
+            };
+            break; // success
+          }
+        } catch(_) { /* timeout/network — retry */ }
+      }
+
+      touchResults.push(result || { day: touch.day, type: touch.type, subject: "", body: "" });
+      // Small gap between touches to stay under rate limit
+      if (i < cadencia.length - 1) await new Promise(r => setTimeout(r, 500));
+    }
+
     return res.status(200).json({ touches: touchResults });
 
   } catch (e) {
