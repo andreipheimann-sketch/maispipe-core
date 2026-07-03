@@ -1418,23 +1418,23 @@ function AccountModal(props) {
               {useCases.length>0&&<Sec title="Use Cases Prioritários">{useCases.map(function(u,i){return <R key={i} icon=">" color="#6366f1">{u}</R>;})}</Sec>}
 
               {/* ── Dores ── */}
-              {dores.length>0 ? (
+              {dores.length>0 && (
                 <Sec title="Possíveis Dores para Mapear">
                   {dores.map(function(d2,i){return <R key={i} icon="!" color="#ef4444">{d2}</R>;})}
                   {exposicao.length>0&&<div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:6}}>{exposicao.map(function(r,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{r}</span>;})}</div>}
                 </Sec>
-              ) : !_mappingInProgress.has((acc.nome||"").toLowerCase()) && (
+              )}
+
+              {/* ── Empty state: no dores yet ── */}
+              {dores.length === 0 && !enrichingNow && (
                 <div style={{background:"#fafbff",border:"1.5px dashed #e0e4ef",borderRadius:14,padding:"20px",marginBottom:16,textAlign:"center"}}>
-                  <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>{"Nenhuma dor mapeada. Clique em \"Enriquecer com IA\" para gerar inteligência de conta."}</div>
-                  {props.onReEnrich && <button onClick={function(){
-                    setEnrichingNow(true);
-                    props.onReEnrich(acc);
-                  }} disabled={enrichingNow} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:enrichingNow?"default":"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 4px 12px rgba(99,102,241,.3)",opacity:enrichingNow?.7:1}}>
-                    {enrichingNow
-                      ? <><div style={{width:10,height:10,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",animation:"spin .7s linear infinite"}}/><span>{"Mapeando..."}</span></>
-                      : <><Icon name="auto_awesome" size={14}/>{"Enriquecer com IA"}</>
-                    }
-                  </button>}
+                  <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>{"Nenhuma dor mapeada ainda. Gere inteligência de conta com IA."}</div>
+                  {props.onReEnrich && (
+                    <button onClick={function(){setEnrichingNow(true); props.onReEnrich(acc);}}
+                      style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
+                      <Icon name="auto_awesome" size={14}/>{"Enriquecer com IA"}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1443,33 +1443,33 @@ function AccountModal(props) {
                 <Sec title="Gatilhos Comerciais">
                   {triggers.map(function(t,i){return <R key={i} icon="T" color="#7c3aed">{t}</R>;})}
                 </Sec>
-              ) : dores.length===0 ? null : (
+              ) : dores.length > 0 && !enrichingNow ? (
                 <Sec title="Gatilhos Comerciais"><p style={{fontSize:12,color:"#94a3b8"}}>{"Nenhum gatilho identificado — reenriqueça para gerar."}</p></Sec>
-              )}
+              ) : null}
 
               {sinais.length>0&&<Sec title="Sinais de Intenção"><div style={{background:"#0c2340",borderRadius:12,padding:"12px 16px"}}>{sinais.map(function(s,i){return <div key={i} style={{fontSize:11.5,color:"#7dd3fc",lineHeight:1.6,display:"flex",gap:8,marginBottom:5}}><span style={{color:"#38bdf8",flexShrink:0}}>o</span>{s}</div>;})}</div></Sec>}
               {concorrentes.length>0&&<Sec title="Concorrentes Prováveis"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{concorrentes.map(function(cc,i){return <span key={i} style={{background:"rgba(251,191,36,.14)",border:"1px solid rgba(245,158,11,.4)",color:"#92400e",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:600}}>{cc}</span>;})}</div></Sec>}
               {noticias.length>0&&<Sec title="Notícias e Contexto">{noticias.map(function(n,i){return <div key={i} style={{background:"#fbfbfd",border:"1px solid #e6e9ef",borderRadius:12,padding:"12px 14px",marginBottom:8}}>{n.url?<a href={n.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,fontWeight:700,color:"#0ea5e9",textDecoration:"none",display:"block",marginBottom:3}}>{n.titulo}</a>:<div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:3}}>{n.titulo}</div>}<div style={{fontSize:11.5,color:"#52617a",lineHeight:1.6,marginBottom:3}}>{n.resumo}</div><div style={{fontSize:10,color:"#a5b4fc",fontWeight:600}}>{"-> "+n.relevancia}</div></div>;})}</Sec>}
 
-              {/* ── Mapping in progress banner ── */}
-              {_mappingInProgress.has((acc.nome||"").toLowerCase()) && (
-                <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:10,height:10,borderRadius:"50%",background:"#6366f1",flexShrink:0,animation:"pulse 1.2s ease-in-out infinite"}}/>
+              {/* ── Mapping in-progress banner (driven by enrichingNow, not the mutable Set) ── */}
+              {enrichingNow && (
+                <div style={{background:"linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.03))",border:"1.5px dashed rgba(99,102,241,.3)",borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                  <div style={{width:12,height:12,borderRadius:"50%",border:"2px solid rgba(99,102,241,.3)",borderTopColor:"#6366f1",flexShrink:0,animation:"spin .8s linear infinite"}}/>
                   <div>
-                    <div style={{fontSize:12,fontWeight:700,color:"#4f46e5",marginBottom:2}}>{"IA mapeando a conta..."}</div>
-                    <div style={{fontSize:11,color:"#64748b"}}>{"Aguarde. As informações aparecerão quando o mapeamento terminar."}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#4f46e5",marginBottom:2}}>{"Mapeando conta com IA..."}</div>
+                    <div style={{fontSize:11,color:"#64748b"}}>{"Analisando dores, gatilhos, perguntas SPIN e gerando mensagens. Isso leva ~30s."}</div>
                   </div>
                 </div>
               )}
 
-              {/* ── Re-enrich button (when mapping exists but user wants to refresh) ── */}
-              {dores.length>0 && !_mappingInProgress.has((acc.nome||"").toLowerCase()) && props.onReEnrich && (
+              {/* ── Re-enrich button (only when data exists and not loading) ── */}
+              {dores.length > 0 && !enrichingNow && props.onReEnrich && (
                 <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
-                  <button onClick={function(){setEnrichingNow(true);props.onReEnrich(acc);}} disabled={enrichingNow} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 12px",fontSize:11,color:enrichingNow?"#4f46e5":"#64748b",cursor:enrichingNow?"default":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5,opacity:enrichingNow?.7:1}}>
-                    {enrichingNow
-                      ? <><div style={{width:9,height:9,borderRadius:"50%",border:"1.5px solid rgba(99,102,241,.3)",borderTopColor:"#4f46e5",animation:"spin .7s linear infinite"}}/><span>{"Mapeando..."}</span></>
-                      : <><Icon name="refresh" size={13}/>{"Re-enriquecer com IA"}</>
-                    }
+                  <button onClick={function(){setEnrichingNow(true); props.onReEnrich(acc);}}
+                    style={{background:"none",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 12px",fontSize:11,color:"#64748b",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5,transition:"all .15s"}}
+                    onMouseEnter={function(e){e.currentTarget.style.borderColor="#a5b4fc";e.currentTarget.style.color="#4f46e5";}}
+                    onMouseLeave={function(e){e.currentTarget.style.borderColor="#e2e8f0";e.currentTarget.style.color="#64748b";}}>
+                    <Icon name="refresh" size={13}/>{"Re-enriquecer com IA"}
                   </button>
                 </div>
               )}
@@ -5374,28 +5374,38 @@ export default function App() {
   function refreshUsage() { getUsage().then(setUsage); }
 
   // Re-enrich any account by name — runs directly without navigating away
-  function doEnrichAccount(acc) {
-    var nome    = typeof acc === "string" ? acc : (acc && acc.nome) || "";
+  function doEnrichAccount(accOrName) {
+    var nome    = typeof accOrName === "string" ? accOrName : (accOrName && accOrName.nome) || "";
+    var accId   = typeof accOrName === "object" && accOrName ? accOrName.id : null;
     var nomeKey = nome.toLowerCase();
 
-    // Clear guards so the enrich can run fresh
+    // Clear in-progress guard so this can run fresh
     _mappingInProgress.delete(nomeKey);
 
-    // Mark the account for force re-enrich, then run immediately
+    // onUpdateAccount: refresh accounts list + keep modal open with fresh data
+    function onUpdate(updated) {
+      setAccounts(function(prev){
+        return prev.map(function(a){ return a.id === updated.id ? updated : a; });
+      });
+      // Update the open modal if it belongs to this account (use id or nome match)
+      setOpenAcc(function(cur) {
+        if (!cur) return cur;
+        if ((accId && cur.id === accId) || cur.nome.toLowerCase() === nomeKey) return updated;
+        return cur;
+      });
+    }
+
+    // Write force flag then immediately kick off enrichment — no navigation needed
     storageList("acc:").then(function(keys){
+      var found = false;
       keys.forEach(function(k){
         storageGet(k).then(function(stored){
           if (!stored || stored.nome.toLowerCase() !== nomeKey) return;
-          // Set _forceEnrich flag so the guard inside runAccountEnrich is bypassed
+          if (found) return; // dedup
+          found = true;
           storageSet(k, Object.assign({}, stored, { aiMapped: false, _forceEnrich: true }))
             .then(function(){
-              runAccountEnrich(nome,
-                function(updated){
-                  setAccounts(function(prev){ return prev.map(function(a){ return a.id===updated.id ? updated : a; }); });
-                  if (openAcc && openAcc.id === updated.id) setOpenAcc(updated);
-                },
-                triggerContactsRefresh
-              );
+              runAccountEnrich(nome, onUpdate, triggerContactsRefresh);
             });
         });
       });
@@ -5777,7 +5787,7 @@ export default function App() {
           )}
         </div>
       </div>
-      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onReEnrich={function(acc){doEnrichAccount(acc.nome);}}/>}
+      {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onReEnrich={function(acc){doEnrichAccount(acc);}}/>}
       {openSeq && <SequenceModal seq={openSeq} onClose={function(){setOpenSeq(null);}}/>}
       {toast && (
         <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:340,display:"flex",alignItems:"center",gap:10}}>
