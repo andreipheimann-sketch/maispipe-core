@@ -24,12 +24,19 @@ async function callGroq(apiKey, systemText, userText, maxTokens) {
   return { ok: true, text };
 }
 
-// ── Transport: Gemini (v1beta + system_instruction) ───────────────────────────
-// v1beta is the CORRECT endpoint for system_instruction + gemini-2.0-flash.
-// The /v1 endpoint rejects system_instruction (field unknown).
-// The /v1beta endpoint rejects -8b and -latest suffixes — use bare model names.
+// ── Transport: Gemini (v1beta) ─────────────────────────────────────────────────
+// Confirmed available via ModelService.ListModels on this account:
+//   gemini-2.5-flash, gemini-2.0-flash, gemini-2.0-flash-lite (v1beta + v1)
+// v1beta chosen because it supports system_instruction natively.
 async function callGemini(apiKey, systemText, userText, maxTokens) {
   const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
+  // Models confirmed available on this account (from gemini-test diagnostic)
+  const MODELS = [
+    "gemini-2.5-flash",      // best quality, confirmed available
+    "gemini-2.0-flash",      // fallback 1, confirmed available
+    "gemini-2.0-flash-lite", // fallback 2, confirmed available, lightest
+  ];
 
   async function tryModel(model) {
     const url = `${BASE}/${model}:generateContent?key=${apiKey}`;
@@ -46,6 +53,7 @@ async function callGemini(apiKey, systemText, userText, maxTokens) {
     if (!r.ok) {
       const msg  = data?.error?.message || ("HTTP " + r.status);
       const code = data?.error?.status  || "";
+      // Only retry on quota exhaustion — NOT on model not found (that means wrong name)
       const retry = r.status === 429 || code === "RESOURCE_EXHAUSTED";
       return { ok: false, retry, error: `[${model}] ${msg}` };
     }
@@ -54,15 +62,12 @@ async function callGemini(apiKey, systemText, userText, maxTokens) {
     return { ok: true, text };
   }
 
-  // Only models confirmed to exist on v1beta with generateContent support
-  // Bare names only — no -latest, no -8b, no version suffix
-  const models = ["gemini-2.0-flash", "gemini-1.5-flash"];
   let lastError = "";
-  for (const model of models) {
+  for (const model of MODELS) {
     const r = await tryModel(model);
     if (r.ok) return r;
     lastError = r.error;
-    if (!r.retry) break; // NOT_FOUND or hard error — no point retrying
+    if (!r.retry) break; // hard error — stop immediately
   }
   return { ok: false, error: lastError };
 }
@@ -483,24 +488,23 @@ export default async function handler(req, res) {
     // ── Sequência usa Gemini exclusivamente ───────────────────────────────────
     if (!geminiKey) return res.status(500).json({ error: "GEMINI_API_KEY nao configurada no Vercel." });
 
-    // Pre-flight: validate the key is working before running the heavy prompt
-    // Uses the lightweight models list endpoint — fast, no token cost
+    // Pre-flight: validate key is reachable before the heavy prompt
     try {
       const pingUrl = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${geminiKey}`;
       const pingRes = await fetch(pingUrl);
       if (!pingRes.ok) {
         const pingData = await pingRes.json().catch(() => ({}));
         const pingMsg  = pingData?.error?.message || ("HTTP " + pingRes.status);
+        const isBilling = pingRes.status === 429 || pingMsg.includes("quota") || pingMsg.includes("billing");
         return res.status(200).json({
           touches: null,
-          error: `GEMINI_API_KEY inválida ou sem acesso à API: ${pingMsg}. Verifique a chave no painel Vercel e certifique-se de que a Gemini API está ativada em console.cloud.google.com.`,
+          error: isBilling
+            ? "Quota Gemini esgotada (limit: 0). Ative o faturamento em console.cloud.google.com/billing e vincule ao projeto da GEMINI_API_KEY. O plano pay-as-you-go tem tier gratuito generoso."
+            : `GEMINI_API_KEY inválida ou API não habilitada: ${pingMsg}`,
         });
       }
     } catch (pingErr) {
-      return res.status(200).json({
-        touches: null,
-        error: `Não foi possível alcançar a API do Gemini: ${pingErr.message}. Verifique conectividade ou a chave GEMINI_API_KEY.`,
-      });
+      return res.status(200).json({ touches: null, error: `Erro ao conectar ao Gemini: ${pingErr.message}` });
     }
 
     const out = await callGemini(geminiKey, seqSystem, seqUser, 14000);
