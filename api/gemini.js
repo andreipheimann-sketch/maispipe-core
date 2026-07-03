@@ -1,18 +1,15 @@
 // api/gemini.js — Vercel serverless
-// Powered by Groq (Llama 3.3 70B) — resumo, mapeamento e sequencias.
-// Variavel de ambiente necessaria: GROQ_API_KEY
+// Groq (Llama 3.3 70B)  → resumo + mapeamento   (GROQ_API_KEY)
+// Gemini 2.0 Flash       → sequências            (GEMINI_API_KEY)
 
-// ── Transport layer ────────────────────────────────────────────────────────────
-async function callClaude(apiKey, systemText, userText, maxTokens) {
+// ── Transport: Groq ────────────────────────────────────────────────────────────
+async function callGroq(apiKey, systemText, userText, maxTokens) {
   const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method:  "POST",
-    headers: {
-      "Content-Type":  "application/json",
-      "Authorization": "Bearer " + apiKey,
-    },
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
     body: JSON.stringify({
-      model:       "llama-3.3-70b-versatile",
-      max_tokens:  maxTokens || 4096,
+      model: "llama-3.3-70b-versatile",
+      max_tokens: maxTokens || 4096,
       temperature: 0.7,
       messages: [
         { role: "system", content: systemText },
@@ -20,18 +17,62 @@ async function callClaude(apiKey, systemText, userText, maxTokens) {
       ],
     }),
   });
-
   const data = await r.json();
-
-  if (!r.ok) {
-    const msg = data?.error?.message || ("HTTP " + r.status);
-    return { ok: false, status: r.status, error: msg };
-  }
-
+  if (!r.ok) return { ok: false, status: r.status, error: data?.error?.message || ("HTTP " + r.status) };
   const text = ((data.choices || [])[0]?.message?.content || "").trim();
-  if (!text) return { ok: false, status: 200, error: "Resposta vazia da IA." };
+  if (!text) return { ok: false, status: 200, error: "Resposta vazia (Groq)." };
   return { ok: true, text };
 }
+
+// ── Transport: Gemini ──────────────────────────────────────────────────────────
+async function callGemini(apiKey, systemText, userText, maxTokens) {
+  const model = "gemini-2.0-flash";
+  const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const r = await fetch(url, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemText }] },
+      contents: [{ role: "user", parts: [{ text: userText }] }],
+      generationConfig: {
+        maxOutputTokens: maxTokens || 8192,
+        temperature: 0.85,
+      },
+    }),
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    const msg    = data?.error?.message || ("HTTP " + r.status);
+    const isQuota = r.status === 429 || (data?.error?.status === "RESOURCE_EXHAUSTED");
+    // Fallback to 1.5-flash-latest on quota
+    if (isQuota) {
+      const url2 = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+      const r2 = await fetch(url2, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemText }] },
+          contents: [{ role: "user", parts: [{ text: userText }] }],
+          generationConfig: { maxOutputTokens: maxTokens || 8192, temperature: 0.85 },
+        }),
+      });
+      const d2 = await r2.json();
+      if (!r2.ok) return { ok: false, status: r2.status, error: d2?.error?.message || ("HTTP " + r2.status) };
+      const t2 = (d2?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+      if (!t2) return { ok: false, status: 200, error: "Resposta vazia (Gemini fallback)." };
+      return { ok: true, text: t2 };
+    }
+    return { ok: false, status: r.status, error: msg };
+  }
+  const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+  if (!text) {
+    const reason = data?.candidates?.[0]?.finishReason;
+    return { ok: false, status: 200, error: "Resposta vazia (Gemini)" + (reason ? ` — ${reason}` : "") + "." };
+  }
+  return { ok: true, text };
+}
+// Keep old alias so nothing else breaks
+const callClaude = callGroq;
 
 // ── JSON helpers ───────────────────────────────────────────────────────────────
 function parseJSON(raw) {
@@ -62,8 +103,12 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")   return res.status(405).json({ error: "Metodo nao permitido." });
 
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "GROQ_API_KEY nao configurada." });
+  const groqKey   = process.env.GROQ_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+
+  if (!groqKey)   return res.status(500).json({ error: "GROQ_API_KEY nao configurada." });
+  // geminiKey is only required for sequences — validated below
+  const apiKey = groqKey; // default for resumo + mapeamento
 
   try {
     const {
@@ -440,8 +485,10 @@ export default async function handler(req, res) {
       `{"touches":[{"day":1,"type":"linkedin","subject":"assunto que gera curiosidade genuína","body":"mensagem completa aqui — mín 150 palavras"},...]}`,
     ].join("\n");
 
-    const out = await callClaude(apiKey, seqSystem, seqUser, 14000);
-    if (!out.ok) return res.status(502).json({ error: "Groq erro: " + out.error });
+    // ── Sequência usa Gemini exclusivamente ───────────────────────────────────
+    if (!geminiKey) return res.status(500).json({ error: "GEMINI_API_KEY nao configurada (necessaria para sequencias)." });
+    const out = await callGemini(geminiKey, seqSystem, seqUser, 14000);
+    if (!out.ok) return res.status(502).json({ error: "Gemini erro (sequencia): " + out.error });
 
     let parsed;
     try { parsed = parseJSON(out.text); }
