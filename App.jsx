@@ -1270,6 +1270,13 @@ function AccountModal(props) {
   var fc = FIT_CONFIG[fit] || FIT_CONFIG.ALTO;
   var sc = STATUS_CONFIG[acc.status] || STATUS_CONFIG.prospecting;
   var _st_activeTab = useState("overview"); var activeTab = _st_activeTab[0]; var setActiveTab = _st_activeTab[1];
+  var _st_enrichingNow = useState(false); var enrichingNow = _st_enrichingNow[0]; var setEnrichingNow = _st_enrichingNow[1];
+  // Clear the enriching spinner when fresh data lands in the modal
+  useEffect(function(){
+    if (enrichingNow && acc.aiMapped && acc.data && acc.data.dores && (acc.data.dores.principais||[]).length > 0) {
+      setEnrichingNow(false);
+    }
+  }, [acc.aiMapped, acc.data]);
   var _st_enrichedContacts = useState([]); var enrichedContacts = _st_enrichedContacts[0]; var setEnrichedContacts = _st_enrichedContacts[1];
   var _st_enrichedSources = useState([]); var enrichedSources = _st_enrichedSources[0]; var setEnrichedSources = _st_enrichedSources[1];
   // Load enriched stakeholder data from localStorage on open
@@ -1419,8 +1426,14 @@ function AccountModal(props) {
               ) : !_mappingInProgress.has((acc.nome||"").toLowerCase()) && (
                 <div style={{background:"#fafbff",border:"1.5px dashed #e0e4ef",borderRadius:14,padding:"20px",marginBottom:16,textAlign:"center"}}>
                   <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>{"Nenhuma dor mapeada. Clique em \"Enriquecer com IA\" para gerar inteligência de conta."}</div>
-                  {props.onReEnrich && <button onClick={function(){props.onClose();props.onReEnrich(acc);}} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
-                    <Icon name="auto_awesome" size={14}/>{"Enriquecer com IA"}
+                  {props.onReEnrich && <button onClick={function(){
+                    setEnrichingNow(true);
+                    props.onReEnrich(acc);
+                  }} disabled={enrichingNow} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:enrichingNow?"default":"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 4px 12px rgba(99,102,241,.3)",opacity:enrichingNow?.7:1}}>
+                    {enrichingNow
+                      ? <><div style={{width:10,height:10,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",animation:"spin .7s linear infinite"}}/><span>{"Mapeando..."}</span></>
+                      : <><Icon name="auto_awesome" size={14}/>{"Enriquecer com IA"}</>
+                    }
                   </button>}
                 </div>
               )}
@@ -1452,8 +1465,11 @@ function AccountModal(props) {
               {/* ── Re-enrich button (when mapping exists but user wants to refresh) ── */}
               {dores.length>0 && !_mappingInProgress.has((acc.nome||"").toLowerCase()) && props.onReEnrich && (
                 <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
-                  <button onClick={function(){props.onClose();props.onReEnrich(acc);}} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 12px",fontSize:11,color:"#64748b",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5}}>
-                    <Icon name="refresh" size={13}/>{"Re-enriquecer com IA"}
+                  <button onClick={function(){setEnrichingNow(true);props.onReEnrich(acc);}} disabled={enrichingNow} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 12px",fontSize:11,color:enrichingNow?"#4f46e5":"#64748b",cursor:enrichingNow?"default":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5,opacity:enrichingNow?.7:1}}>
+                    {enrichingNow
+                      ? <><div style={{width:9,height:9,borderRadius:"50%",border:"1.5px solid rgba(99,102,241,.3)",borderTopColor:"#4f46e5",animation:"spin .7s linear infinite"}}/><span>{"Mapeando..."}</span></>
+                      : <><Icon name="refresh" size={13}/>{"Re-enriquecer com IA"}</>
+                    }
                   </button>
                 </div>
               )}
@@ -2169,9 +2185,9 @@ function GroupedContactsView(props) {
                       </div>
                       {/* Actions */}
                       <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0,flexWrap:"nowrap"}}>
-                        <button onClick={function(){if(canSeq&&props.onGenerateSequence)props.onGenerateSequence(c);}} disabled={!canSeq} title="Gerar sequência" style={{display:"flex",alignItems:"center",gap:4,background:"linear-gradient(135deg,#7c3aed,#6366f1)",color:"#fff",border:"none",borderRadius:7,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:canSeq?"pointer":"not-allowed",opacity:canSeq?1:.45,fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                        <button onClick={function(){if(canSeq&&props.onGenerateSequence)props.onGenerateSequence(c);}} disabled={!canSeq} title="Gerar sequência de 6 toques" style={{display:"flex",alignItems:"center",gap:5,background:"linear-gradient(135deg,#7c3aed,#6366f1)",color:"#fff",border:"none",borderRadius:7,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:canSeq?"pointer":"not-allowed",opacity:canSeq?1:.45,fontFamily:"inherit",whiteSpace:"nowrap"}}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                          {"Seq"}
+                          {"Gerar Sequência"}
                         </button>
                         {c.linkedin && <a href={c.linkedin} target="_blank" rel="noreferrer" title="LinkedIn" style={{background:"rgba(10,102,194,.1)",border:"1px solid rgba(10,102,194,.25)",color:"#0a66c2",borderRadius:7,padding:"5px 9px",fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center"}}>{"in"}</a>}
                         <button onClick={function(){props.toggleFavorite(c);}} title={c.favorite?"Remover dos favoritos":"Favoritar"} style={{background:c.favorite?"rgba(245,158,11,.12)":"none",border:"1px solid "+(c.favorite?"rgba(245,158,11,.4)":"#e2e8f0"),borderRadius:7,padding:"5px 7px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
@@ -3595,6 +3611,145 @@ function buildData(company, searchResults) {
 // In-memory set of account names currently being AI-mapped (never persisted)
 var _mappingInProgress = new Set();
 
+// ── Module-level enrichment — callable from anywhere without nav side-effects ──
+function runAccountEnrich(nome, onUpdateAccount, onContactsRefresh) {
+  var icp       = getStoredIcp();
+  var produtos  = getStoredProducts();
+  var dna       = getStoredDna();
+  var site      = getCompanySite();
+  var assinatura = site ? ("Consultor | " + site) : "Consultor";
+
+  storageList("acc:").then(function(keys){
+    keys.forEach(function(k){
+      storageGet(k).then(function(stored){
+        if (!stored || stored.nome.toLowerCase() !== nome.toLowerCase()) return;
+        var nomeKey = stored.nome.toLowerCase();
+        if (_mappingInProgress.has(nomeKey)) return;
+
+        // Force re-run: clear guards set by re-enrich callers
+        var hasDores = stored.aiMapped && stored.data && stored.data.dores && (stored.data.dores.principais||[]).length > 0;
+        var hasSpin  = stored.data && stored.data.estrategia && (stored.data.estrategia.perguntas_spin||[]).length > 0;
+        // Only block if BOTH are already populated (not a forced re-enrich)
+        if (hasDores && hasSpin && stored._forceEnrich !== true) return;
+
+        _mappingInProgress.add(nomeKey);
+
+        var emp        = (stored.data && stored.data.empresa) || {};
+        var rawContext = emp.rawContext || emp.resumo || "";
+        var setor      = emp.setor || stored.setor || "tecnologia";
+        var domain     = (emp.site||"").replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0] || "";
+
+        // ── Resumo enhancement (fire-and-forget) ──────────────────────────────
+        (function(){
+          if (stored.data && stored.data.empresa && stored.data.empresa.resumoAI) return;
+          var cleanRaw = rawContext.split("\n").filter(function(l){
+            return l.trim().length >= 20 && !(/;.*;/.test(l)) && !(/trk=|utm_|cnpj/i.test(l));
+          }).join("\n").slice(0,3000);
+          fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+            mode:"resumo", empresa:nome, setor:setor, rawContext:cleanRaw, icp:icp, produtos:produtos, companySite:site, dna:dna,
+          })}).then(function(r){return r.json();}).then(function(d){
+            if(!d||!d.resumo) return;
+            storageGet(k).then(function(cur){
+              if(!cur) return;
+              var up = Object.assign({},cur,{data:Object.assign({},cur.data,{empresa:Object.assign({},(cur.data&&cur.data.empresa)||{},{resumo:d.resumo,resumoAI:true})})});
+              storageSet(k,up);
+              if(onUpdateAccount) onUpdateAccount(up);
+            });
+          }).catch(function(){});
+        })();
+
+        // ── Full AI mapping ───────────────────────────────────────────────────
+        fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+          mode:"mapeamento", empresa:nome, setor:setor, rawContext:rawContext,
+          icp:icp, produtos:produtos, companySite:site, dna:dna, assinatura:assinatura,
+        })})
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(mapped){
+          _mappingInProgress.delete(nomeKey);
+          if (!mapped || mapped.error) { console.warn("Enrich failed:", mapped&&mapped.error); return; }
+          var est = mapped.estrategia || mapped["estratégia"] || {};
+          var spinFlat = est.perguntas_spin || [];
+          if (!spinFlat.length && mapped.perguntas_spin) {
+            var ps = mapped.perguntas_spin;
+            spinFlat = [
+              ...(ps.situacao   ||[]).map(function(q){return "SITUAÇÃO: "+q;}),
+              ...(ps.problema   ||[]).map(function(q){return "PROBLEMA: "+q;}),
+              ...(ps.implicacao ||[]).map(function(q){return "IMPLICAÇÃO: "+q;}),
+              ...(ps.necessidade||[]).map(function(q){return "NECESSIDADE: "+q;}),
+            ];
+          }
+          var objecoesFlat = est.objecoes || est["objeções"] || mapped.objecoes || [];
+          storageGet(k).then(function(cur){
+            if (!cur) return;
+            var updated = Object.assign({}, cur, {
+              _forceEnrich: false,
+              aiMapped: !!(mapped.dores && (mapped.dores.principais||[]).length > 0),
+              data: Object.assign({}, cur.data, {
+                fit:          mapped.fit          || cur.data.fit,
+                dores:        mapped.dores        || cur.data.dores,
+                triggers:     mapped.triggers     || cur.data.triggers,
+                stakeholders: mapped.stakeholders || cur.data.stakeholders,
+                empresa: Object.assign({}, (cur.data.empresa||{}), {
+                  resumo:   mapped.resumo || (cur.data.empresa && cur.data.empresa.resumo) || "",
+                  resumoAI: !!mapped.resumo,
+                }),
+                estrategia: Object.assign({}, (cur.data.estrategia||{}), {
+                  emails:         est.emails      || [],
+                  inmails:        est.inmails     || [],
+                  whatsapps:      est.whatsapps   || [],
+                  cold_calls:     est.cold_calls  || [],
+                  perguntas_spin: spinFlat,
+                  "objeções":     objecoesFlat,
+                  objecoes:       objecoesFlat,
+                  tier: (cur.data.estrategia && cur.data.estrategia.tier) || "Tier 2",
+                }),
+                proximos_passos: mapped.proximos_passos || cur.data.proximos_passos,
+              }),
+            });
+            storageSet(k, updated);
+            if (onUpdateAccount) onUpdateAccount(updated);
+          });
+        })
+        .catch(function(){ _mappingInProgress.delete(nomeKey); });
+
+        // ── Stakeholders via /api/stakeholders ────────────────────────────────
+        fetch("/api/stakeholders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,domain:domain,dna:dna})})
+          .then(function(r){return r.ok?r.json():null;})
+          .then(function(stakhData){
+            if(!stakhData||!stakhData.contacts||!stakhData.contacts.length) return;
+            storageList("contact:").then(function(ckeys){
+              Promise.all(ckeys.map(storageGet)).then(function(existing){
+                var existingSet={};
+                existing.filter(Boolean).forEach(function(ec){ existingSet[((ec.nome||"")+"|"+(ec.empresa||"")).toLowerCase()]=true; });
+                stakhData.contacts.forEach(function(s){
+                  var nomeReal = s.nome||s.name||"";
+                  if(!nomeReal) return;
+                  var dedupKey = (nomeReal+"|"+nome).toLowerCase();
+                  if(existingSet[dedupKey]) return;
+                  existingSet[dedupKey]=true;
+                  var cid = "contact:"+Date.now()+"-"+Math.random().toString(36).slice(2,8);
+                  storageSet(cid,{id:cid,nome:nomeReal,cargo:s.cargo||s.title||"",empresa:nome,email:s.email||"",emailValidated:!!s.email,linkedin:s.linkedin||"",savedAt:Date.now()});
+                });
+                if(onContactsRefresh) onContactsRefresh();
+              });
+            });
+            storageList("acc:").then(function(akeys){
+              akeys.forEach(function(ak){
+                storageGet(ak).then(function(st){
+                  if(!st||st.nome.toLowerCase()!==nome.toLowerCase()) return;
+                  var merged = mergeStakeholders((st.data&&st.data.stakeholders)||[], stakhData.contacts);
+                  var up = Object.assign({},st,{data:Object.assign({},st.data,{stakeholders:merged}),enriched:{contacts:stakhData.contacts,sources:stakhData.sources||[]}});
+                  storageSet(ak,up);
+                  if(onUpdateAccount) onUpdateAccount(up);
+                });
+              });
+            });
+          }).catch(function(){});
+      });
+    });
+  });
+}
+
 function SearchView(props) {
   var _st_inputVal = useState(""); var inputVal = _st_inputVal[0]; var setInputVal = _st_inputVal[1];
   var _st_loading = useState(false); var loading = _st_loading[0]; var setLoading = _st_loading[1];
@@ -3609,14 +3764,6 @@ function SearchView(props) {
   var _st_csvInfo = useState(false); var csvInfo = _st_csvInfo[0]; var setCsvInfo = _st_csvInfo[1];
   var csvRef = useRef(null);
   var usage = props.usage;
-
-  // Handle re-enrich triggered from AccountModal
-  useEffect(function(){
-    if (props.pendingEnrich) {
-      doEnrich(props.pendingEnrich, "");
-      if (props.onPendingEnrichDone) props.onPendingEnrichDone();
-    }
-  }, [props.pendingEnrich]);
   function onCsvPick(e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -5192,7 +5339,6 @@ export default function App() {
   }); var setupDone = _st_setupDone[0]; var setSetupDone = _st_setupDone[1];
   var _st_setupUnlocking = useState(false); var setupUnlocking = _st_setupUnlocking[0]; var setSetupUnlocking = _st_setupUnlocking[1];
   var _st_pendingContactSearch = useState(""); var pendingContactSearch = _st_pendingContactSearch[0]; var setPendingContactSearch = _st_pendingContactSearch[1];
-  var _st_pendingEnrich = useState(null); var pendingEnrich = _st_pendingEnrich[0]; var setPendingEnrich = _st_pendingEnrich[1];
   var _st_openAcc = useState(null); var openAcc = _st_openAcc[0]; var setOpenAcc = _st_openAcc[1];
   var _st_toast = useState(null); var toast = _st_toast[0]; var setToast = _st_toast[1];
   var _st_sidebarOpen = useState(false); var sidebarOpen = _st_sidebarOpen[0]; var setSidebarOpen = _st_sidebarOpen[1];
@@ -5227,25 +5373,33 @@ export default function App() {
   }
   function refreshUsage() { getUsage().then(setUsage); }
 
-  // Re-enrich any account by name — clears the in-progress guard so it can run fresh
-  function doEnrichAccount(nome) {
-    var nomeKey = (nome||"").toLowerCase();
-    _mappingInProgress.delete(nomeKey); // allow re-run
+  // Re-enrich any account by name — runs directly without navigating away
+  function doEnrichAccount(acc) {
+    var nome    = typeof acc === "string" ? acc : (acc && acc.nome) || "";
+    var nomeKey = nome.toLowerCase();
+
+    // Clear guards so the enrich can run fresh
+    _mappingInProgress.delete(nomeKey);
+
+    // Mark the account for force re-enrich, then run immediately
     storageList("acc:").then(function(keys){
       keys.forEach(function(k){
         storageGet(k).then(function(stored){
           if (!stored || stored.nome.toLowerCase() !== nomeKey) return;
-          // Reset aiMapped so doEnrich in SearchView can pick it up
-          storageSet(k, Object.assign({},stored,{aiMapped:false}));
+          // Set _forceEnrich flag so the guard inside runAccountEnrich is bypassed
+          storageSet(k, Object.assign({}, stored, { aiMapped: false, _forceEnrich: true }))
+            .then(function(){
+              runAccountEnrich(nome,
+                function(updated){
+                  setAccounts(function(prev){ return prev.map(function(a){ return a.id===updated.id ? updated : a; }); });
+                  if (openAcc && openAcc.id === updated.id) setOpenAcc(updated);
+                },
+                triggerContactsRefresh
+              );
+            });
         });
       });
     });
-    // Navigate to search and trigger via SearchView's doEnrich
-    setNav("search");
-    setTimeout(function(){
-      // Push the name into a pending enrich queue that SearchView will pick up
-      setPendingEnrich(nome);
-    }, 300);
   }
 
   // ── Finish onboarding ──────────────────────────────────────────────────────
@@ -5599,7 +5753,7 @@ export default function App() {
           ) : (
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage} onChangePlan={changePlan} showToast={showToast}/>}
-              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch} pendingEnrich={pendingEnrich} onPendingEnrichDone={function(){setPendingEnrich(null);}}/>}
+              {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
