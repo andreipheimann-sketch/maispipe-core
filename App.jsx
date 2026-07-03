@@ -698,7 +698,11 @@ function SequenceView(props) {
                   </button>
                   <CopyBtn text={(touch.subject?"Assunto: "+touch.subject+"\n\n":"")+touch.body}/>
                 </div>
-                <div style={{padding:"14px 16px",fontSize:12.5,color:"#0f172a",whiteSpace:"pre-wrap",lineHeight:1.85,borderLeft:"3px solid "+tc.color}}>{touch.body}</div>
+                <div style={{padding:"14px 16px",borderLeft:"3px solid "+tc.color}}>
+                  {(touch.body||"").split("\n\n").filter(Boolean).map(function(para,pi){
+                    return <p key={pi} style={{fontSize:12.5,color:"#0f172a",lineHeight:1.85,margin:pi===0?"0 0 10px":"10px 0",whiteSpace:"pre-wrap"}}>{para.trim()}</p>;
+                  })}
+                </div>
               </div>
             );
           })}
@@ -733,7 +737,11 @@ function SequenceModal(props) {
                   <div style={{flex:1,minWidth:40,fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{touch.subject}</div>
                   <CopyBtn text={(touch.type==="email"||touch.type==="linkedin"?"Assunto: "+touch.subject+"\n\n":"")+touch.body}/>
                 </div>
-                <div style={{padding:"10px",fontSize:12,color:"#0f172a",whiteSpace:"pre-wrap",lineHeight:1.75,wordBreak:"break-word",overflowWrap:"break-word"}}>{touch.body}</div>
+                <div style={{padding:"10px 14px"}}>
+                  {(touch.body||"").split("\n\n").filter(Boolean).map(function(para,pi){
+                    return <p key={pi} style={{fontSize:12,color:"#0f172a",lineHeight:1.75,margin:pi===0?"0 0 9px":"9px 0",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{para.trim()}</p>;
+                  })}
+                </div>
               </div>
             );
           })}
@@ -1708,7 +1716,11 @@ function CollapsibleChannels(props) {
                         {cfg.isObj&&item.assunto&&<span style={{fontSize:11,color:"#52617a",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{", "+item.assunto}</span>}
                         <CopyBtn text={(cfg.isObj&&item.assunto?"Assunto: "+item.assunto+"\n\n":"")+text}/>
                       </div>
-                      <div style={{padding:"14px 16px",fontSize:12.5,color:"#0f172a",whiteSpace:"pre-wrap",lineHeight:1.85,borderLeft:"3px solid "+cfg.color}}>{text}</div>
+                      <div style={{padding:"14px 16px",borderLeft:"3px solid "+cfg.color}}>
+                      {(text||"").split("\n\n").filter(Boolean).map(function(para,pi){
+                        return <p key={pi} style={{fontSize:12.5,color:"#0f172a",lineHeight:1.85,margin:pi===0?"0 0 10px":"10px 0",whiteSpace:"pre-wrap"}}>{para.trim()}</p>;
+                      })}
+                    </div>
                     </div>
                   );
                 })}
