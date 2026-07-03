@@ -1284,12 +1284,30 @@ function AccountModal(props) {
   var sc = STATUS_CONFIG[acc.status] || STATUS_CONFIG.prospecting;
   var _st_activeTab = useState("overview"); var activeTab = _st_activeTab[0]; var setActiveTab = _st_activeTab[1];
   var _st_enrichingNow = useState(false); var enrichingNow = _st_enrichingNow[0]; var setEnrichingNow = _st_enrichingNow[1];
-  // Clear the enriching spinner when fresh data lands in the modal
+  var _st_enrichTimer  = useState(null);  var enrichTimer  = _st_enrichTimer[0];  var setEnrichTimer  = _st_enrichTimer[1];
+
+  // Reset spinner when fresh mapping data lands (success) or when failure is signalled
   useEffect(function(){
-    if (enrichingNow && acc.aiMapped && acc.data && acc.data.dores && (acc.data.dores.principais||[]).length > 0) {
+    if (!enrichingNow) return;
+    var hasDores = acc.data && acc.data.dores && (acc.data.dores.principais||[]).length > 0;
+    if (hasDores || acc._enrichFailed) {
       setEnrichingNow(false);
+      if (enrichTimer) { clearTimeout(enrichTimer); setEnrichTimer(null); }
     }
-  }, [acc.aiMapped, acc.data]);
+  }, [acc.aiMapped, acc.data, acc._enrichFailed]);
+
+  // Safety net: always reset spinner after 90s regardless of outcome
+  function startEnrich() {
+    setEnrichingNow(true);
+    if (enrichTimer) clearTimeout(enrichTimer);
+    var t = setTimeout(function(){ setEnrichingNow(false); setEnrichTimer(null); }, 90000);
+    setEnrichTimer(t);
+  }
+
+  // Cleanup timer on unmount
+  useEffect(function(){
+    return function(){ if (enrichTimer) clearTimeout(enrichTimer); };
+  }, [enrichTimer]);
   var _st_enrichedContacts = useState([]); var enrichedContacts = _st_enrichedContacts[0]; var setEnrichedContacts = _st_enrichedContacts[1];
   var _st_enrichedSources = useState([]); var enrichedSources = _st_enrichedSources[0]; var setEnrichedSources = _st_enrichedSources[1];
   // Load enriched stakeholder data from localStorage on open
@@ -1443,7 +1461,7 @@ function AccountModal(props) {
                 <div style={{background:"#fafbff",border:"1.5px dashed #e0e4ef",borderRadius:14,padding:"20px",marginBottom:16,textAlign:"center"}}>
                   <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>{"Nenhuma dor mapeada ainda. Gere inteligência de conta com IA."}</div>
                   {props.onReEnrich && (
-                    <button onClick={function(){setEnrichingNow(true); props.onReEnrich(acc);}}
+                    <button onClick={function(){startEnrich(); props.onReEnrich(acc);}}
                       style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
                       <Icon name="auto_awesome" size={14}/>{"Enriquecer com IA"}
                     </button>
@@ -1478,7 +1496,7 @@ function AccountModal(props) {
               {/* ── Re-enrich button (only when data exists and not loading) ── */}
               {dores.length > 0 && !enrichingNow && props.onReEnrich && (
                 <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
-                  <button onClick={function(){setEnrichingNow(true); props.onReEnrich(acc);}}
+                  <button onClick={function(){startEnrich(); props.onReEnrich(acc);}}
                     style={{background:"none",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 12px",fontSize:11,color:"#64748b",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5,transition:"all .15s"}}
                     onMouseEnter={function(e){e.currentTarget.style.borderColor="#a5b4fc";e.currentTarget.style.color="#4f46e5";}}
                     onMouseLeave={function(e){e.currentTarget.style.borderColor="#e2e8f0";e.currentTarget.style.color="#64748b";}}>
@@ -3643,7 +3661,7 @@ function buildData(company, searchResults) {
 var _mappingInProgress = new Set();
 
 // ── Module-level enrichment — callable from anywhere without nav side-effects ──
-function runAccountEnrich(nome, onUpdateAccount, onContactsRefresh) {
+function runAccountEnrich(nome, onUpdateAccount, onContactsRefresh, onDone) {
   var icp       = getStoredIcp();
   var produtos  = getStoredProducts();
   var dna       = getStoredDna();
@@ -3697,6 +3715,7 @@ function runAccountEnrich(nome, onUpdateAccount, onContactsRefresh) {
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(mapped){
           _mappingInProgress.delete(nomeKey);
+          if (onDone) onDone(mapped && !mapped.error);
           if (!mapped || mapped.error) { console.warn("Enrich failed:", mapped&&mapped.error); return; }
           var est = mapped.estrategia || mapped["estratégia"] || {};
           var spinFlat = est.perguntas_spin || [];
@@ -3741,7 +3760,7 @@ function runAccountEnrich(nome, onUpdateAccount, onContactsRefresh) {
             if (onUpdateAccount) onUpdateAccount(updated);
           });
         })
-        .catch(function(){ _mappingInProgress.delete(nomeKey); });
+        .catch(function(){ _mappingInProgress.delete(nomeKey); if (onDone) onDone(false); });
 
         // ── Stakeholders via /api/stakeholders ────────────────────────────────
         fetch("/api/stakeholders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,domain:domain,dna:dna})})
@@ -5436,7 +5455,18 @@ export default function App() {
           found = true;
           storageSet(k, Object.assign({}, stored, { aiMapped: false, _forceEnrich: true }))
             .then(function(){
-              runAccountEnrich(nome, onUpdate, triggerContactsRefresh);
+              runAccountEnrich(nome, onUpdate, triggerContactsRefresh, function(success){
+                // On failure, touch openAcc to trigger enrichingNow reset via useEffect
+                if (!success) {
+                  setOpenAcc(function(cur){
+                    if (!cur) return cur;
+                    if (cur.id === accId || cur.nome.toLowerCase() === nomeKey) {
+                      return Object.assign({}, cur, {_enrichFailed: Date.now()});
+                    }
+                    return cur;
+                  });
+                }
+              });
             });
         });
       });
