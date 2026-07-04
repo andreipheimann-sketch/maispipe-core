@@ -477,8 +477,35 @@ export default async function handler(req, res) {
     ].filter(Boolean).join("\n");
 
     const out = await callGemini(geminiKey, seqSys, seqUsr, 8192, true); // true = JSON mode
+
+    // If Gemini fails (quota/billing), fall back to Groq with a simpler prompt
     if (!out.ok) {
-      return res.status(200).json({ touches: null, error: "Gemini erro: " + out.error });
+      if (!groqKey) return res.status(200).json({ touches: null, error: "Gemini indisponível e GROQ_API_KEY não configurada." });
+
+      const groqSys = seqSys;
+      // Simpler user prompt for Groq — ask for one touch at a time joined in array
+      const groqUsr = seqUsr + "\n\nIMPORTANTE: Responda SOMENTE com JSON válido. Não use aspas duplas dentro dos valores — use aspas simples se necessário.";
+      const groqOut = await callGroq(groqKey, groqSys, groqUsr, 8000);
+      if (!groqOut.ok) {
+        return res.status(200).json({ touches: null, error: "Gemini e Groq indisponíveis. Tente novamente em alguns minutos." });
+      }
+      // Parse Groq response (may have markdown fences)
+      let groqParsed;
+      const groqClean = groqOut.text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
+      try { groqParsed = JSON.parse(groqClean); } catch (_) {
+        const m = groqClean.match(/\{[\s\S]+\}/);
+        try { groqParsed = m ? JSON.parse(m[0]) : null; } catch (_) { groqParsed = null; }
+      }
+      const groqTouches = groqParsed?.touches;
+      if (!groqTouches?.length) return res.status(200).json({ touches: null, error: "Gemini indisponível (quota). " + out.error });
+      return res.status(200).json({
+        touches: groqTouches.map((t, i) => ({
+          day:     t.day     || cadencia[i]?.day  || i + 1,
+          type:    t.type    || cadencia[i]?.type || "email",
+          subject: (t.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
+          body:    (t.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
+        }))
+      });
     }
 
     let parsed;
