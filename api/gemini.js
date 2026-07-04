@@ -24,52 +24,46 @@ async function callGroq(apiKey, systemText, userText, maxTokens) {
   return { ok: true, text };
 }
 
-// ── Transport: Gemini (v1beta) ─────────────────────────────────────────────────
-// Confirmed available via ModelService.ListModels on this account:
-//   gemini-2.5-flash, gemini-2.0-flash, gemini-2.0-flash-lite (v1beta + v1)
-// v1beta chosen because it supports system_instruction natively.
-async function callGemini(apiKey, systemText, userText, maxTokens) {
-  const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+// ── Transport: Gemini (v1beta + JSON mode) ────────────────────────────────────
+// Uses responseMimeType:"application/json" — eliminates markdown wrapping and parse failures.
+// Models confirmed on this account: gemini-2.5-flash, gemini-2.0-flash, gemini-2.0-flash-lite
+async function callGemini(apiKey, systemText, userText, maxTokens, jsonMode) {
+  const BASE   = "https://generativelanguage.googleapis.com/v1beta/models";
+  const MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
 
-  // Models confirmed available on this account (from gemini-test diagnostic)
-  const MODELS = [
-    "gemini-2.5-flash",      // best quality, confirmed available
-    "gemini-2.0-flash",      // fallback 1, confirmed available
-    "gemini-2.0-flash-lite", // fallback 2, confirmed available, lightest
-  ];
-
-  async function tryModel(model) {
+  for (const model of MODELS) {
     const url = `${BASE}/${model}:generateContent?key=${apiKey}`;
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemText }] },
-        contents: [{ role: "user", parts: [{ text: userText }] }],
-        generationConfig: { maxOutputTokens: maxTokens || 8192, temperature: 0.85 },
-      }),
-    });
-    const data = await r.json();
-    if (!r.ok) {
-      const msg  = data?.error?.message || ("HTTP " + r.status);
-      const code = data?.error?.status  || "";
-      // Only retry on quota exhaustion — NOT on model not found (that means wrong name)
-      const retry = r.status === 429 || code === "RESOURCE_EXHAUSTED";
-      return { ok: false, retry, error: `[${model}] ${msg}` };
+    let r, data;
+    try {
+      r    = await fetch(url, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemText }] },
+          contents:           [{ role: "user", parts: [{ text: userText }] }],
+          generationConfig:   {
+            maxOutputTokens: maxTokens || 8192,
+            temperature:     0.85,
+            ...(jsonMode ? { responseMimeType: "application/json" } : {}),
+          },
+        }),
+      });
+      data = await r.json();
+    } catch (e) {
+      continue; // network error — try next model
     }
+
+    if (!r.ok) {
+      const retry = r.status === 429 || data?.error?.status === "RESOURCE_EXHAUSTED";
+      if (!retry) return { ok: false, error: `[${model}] ${data?.error?.message || "HTTP "+r.status}` };
+      continue; // quota — try next model
+    }
+
     const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-    if (!text) return { ok: false, retry: false, error: `[${model}] Resposta vazia (${data?.candidates?.[0]?.finishReason || "?"})` };
+    if (!text) continue;
     return { ok: true, text };
   }
-
-  let lastError = "";
-  for (const model of MODELS) {
-    const r = await tryModel(model);
-    if (r.ok) return r;
-    lastError = r.error;
-    if (!r.retry) break; // hard error — stop immediately
-  }
-  return { ok: false, error: lastError };
+  return { ok: false, error: "Todos os modelos Gemini falharam." };
 }
 // Keep old alias so nothing else breaks
 const callClaude = callGroq;
@@ -409,7 +403,9 @@ export default async function handler(req, res) {
       return res.status(200).json(stripDashesDeep(result));
     }
 
-    // ── MODO SEQUÊNCIA ─────────────────────────────────────────────────────────
+    // ── MODO SEQUÊNCIA — Gemini 2.5 Flash, JSON mode, single call ──────────────
+    if (!geminiKey) return res.status(200).json({ touches: null, error: "GEMINI_API_KEY nao configurada." });
+
     const cadencia = Array.isArray(touches) && touches.length ? touches : [
       { day:1, type:"linkedin" }, { day:3,  type:"email"    },
       { day:6, type:"call"     }, { day:10, type:"email"    },
@@ -419,195 +415,93 @@ export default async function handler(req, res) {
     const nomeUsar      = contato ? contato.split(" ")[0] : null;
     const doraPrincipal = pain || "desafio central do setor";
 
-    // Per-channel writing instructions (no § or [...] markers in instructions)
-    const SPECS = {
-      email: {
-        label: "E-MAIL",
-        min: "mínimo 200 palavras, 3 parágrafos",
-        guide: `Parágrafo 1: Situação — dado de mercado ou observação sobre ${empresa || "a empresa"}, mostre que entende o contexto, nomeie a dor.\nParágrafo 2: Implicação — consequência concreta da dor (receita, reputação, time, competitividade).\nParágrafo 3: Necessidade e CTA — visão do possível, CTA leve, assine com nome e empresa.`,
-      },
-      linkedin: {
-        label: "LINKEDIN INMAIL",
-        min: "mínimo 150 palavras, 2 parágrafos",
-        guide: `Parágrafo 1: Gancho com observação específica sobre ${empresa || "a empresa"} e dor implícita do cargo. Tom de colega de setor.\nParágrafo 2: Implicação expandida e CTA direto mas não agressivo.`,
-      },
-      call: {
-        label: "COLD CALL SCRIPT",
-        min: "mínimo 150 palavras, script completo para leitura em voz alta",
-        guide: `Abertura (10s): apresente-se e faça uma pergunta de permissão surpreendente.\nContexto: 2-3 frases que demonstram pesquisa real sobre o setor.\nPergunta cirúrgica: toque na dor sem revelar a solução.\nPausa e escuta.\nImplicação: expanda as consequências.\nCTA: proponha 20 minutos ou envio de diagnóstico.`,
-      },
-      whatsapp: {
-        label: "WHATSAPP",
-        min: "4 a 5 frases curtas, tom casual mas com substância",
-        guide: `Frase 1: observação sobre ${empresa || "a empresa"} que prova pesquisa real.\nFrase 2: dor do cargo de forma indireta.\nFrase 3: resultado que outros no setor alcançaram.\nFrase 4-5: pergunta direta de engajamento.`,
-      },
-      breakup: {
-        label: "BREAKUP",
-        min: "mínimo 120 palavras",
-        guide: `Reconheça que não é o momento, com classe. Deixe um insight valioso que eles guardarão. Abra a porta para contato futuro de forma elegante.`,
-      },
-      follow: {
-        label: "FOLLOW-UP",
-        min: "mínimo 120 palavras, 2 parágrafos",
-        guide: `Parágrafo 1: referência ao contato anterior e novo ângulo ou dado de mercado.\nParágrafo 2: implicação aprofundada e CTA com leve urgência.`,
-      },
-    };
-
     const ANGLES = [
       "impacto operacional — o que está quebrando no dia a dia",
       "risco estratégico — o que pode dar errado nos próximos 6 meses",
       "vantagem competitiva — o que concorrentes já estão fazendo",
       "custo oculto — o que a ineficiência está custando em receita",
-      "timing — por que agora é o momento certo para agir",
+      "timing — por que agora é o momento certo",
       "prova social — o que outros líderes do setor já resolveram",
     ];
 
-    function buildSys(spec, angle) {
-      return [
-        `Você é o maior especialista em outbound B2B do Brasil, combinando SPIN Selling (Neil Rackham) e copywriting de resposta direta.`,
-        ``,
-        `Você representa: ${vendedorEmpresa}`,
-        sellerCtx,
-        ``,
-        `REGRAS ABSOLUTAS:`,
-        `- Escreva em Português do Brasil. Nunca em inglês.`,
-        `- Nunca use placeholders como [Nome] ou [Empresa]. Use os dados reais fornecidos.`,
-        `- Nunca use travessão (— ou –). Use vírgula ou ponto.`,
-        `- Nunca comece com saudação genérica. Comece com gancho de impacto.`,
-        `- Responda SOMENTE com JSON válido. Nenhum texto antes ou depois.`,
-        ``,
-        `CANAL: ${spec.label} — ${spec.min}`,
-        `ÂNGULO DESTE TOUCH: ${angle}`,
-        ``,
-        `COMO ESCREVER:`,
-        spec.guide,
-      ].join("\n");
-    }
+    const CHANNEL_GUIDE = {
+      email:    "E-mail de prospecção: 3 parágrafos, mínimo 200 palavras. P1: situação + problema específico. P2: implicação concreta (receita, time, risco). P3: visão do possível + CTA leve.",
+      linkedin: "LinkedIn InMail: 2 parágrafos, mínimo 120 palavras. P1: gancho com observação sobre a empresa + dor do cargo. P2: implicação + CTA não agressivo.",
+      call:     "Script de cold call para leitura em voz alta: mínimo 150 palavras. Inclua: abertura de 10s, contexto do setor, pergunta cirúrgica sobre a dor, pausa, implicação, CTA de 20 min.",
+      whatsapp: "WhatsApp: 4-5 frases curtas e casuais. Frase 1: observação sobre a empresa que prova pesquisa. Frase 2: dor indireta do cargo. Frase 3: resultado que outros alcançaram. Frase 4-5: pergunta de engajamento.",
+      breakup:  "Mensagem de breakup: mínimo 120 palavras. Reconheça que não é o momento. Deixe insight valioso. Abra porta para contato futuro com classe.",
+      follow:   "Follow-up: 2 parágrafos, mínimo 120 palavras. P1: novo ângulo ou dado de mercado. P2: implicação aprofundada + CTA com leve urgência.",
+    };
 
-    function buildUsr(touch, i, spec, angle) {
-      return [
-        `Empresa-alvo: ${empresa || "a empresa"} | Setor: ${setor || "tecnologia"} | Cargo: ${cargo || "C-Level"} | Dia: ${touch.day}`,
-        nomeUsar ? `Contato: ${nomeUsar}` : `Nome: não informado`,
-        `Dor central: ${doraPrincipal}`,
-        ``,
-        `Retorne APENAS este JSON, com o body completo (${spec.min}):`,
-        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto específico e criativo","body":"texto completo aqui, use \\n\\n entre parágrafos"}`,
-      ].join("\n");
-    }
-
-    function parseResult(text, touch) {
-      const clean = text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```$/i,"").trim();
-      // Direct parse
-      try { const p = JSON.parse(clean); if (p && p.body) return p; } catch(_) {}
-      // Extract from surrounding text
-      const m = clean.match(/\{[^{}]*"body"\s*:\s*"([\s\S]+?)"\s*\}/);
-      if (m) {
-        try { return JSON.parse(m[0]); } catch(_) {}
-      }
-      // Manual field extraction for truncated JSON
-      const bodyM = clean.match(/"body"\s*:\s*"([\s\S]{20,})/);
-      if (bodyM) {
-        const bodyRaw = bodyM[1].replace(/"?\s*\}?\s*$/, "").replace(/\\n/g, "\n");
-        const subjectM = clean.match(/"subject"\s*:\s*"([^"]{5,})"/);
-        return {
-          day:     touch.day,
-          type:    touch.type,
-          subject: subjectM ? subjectM[1] : "",
-          body:    bodyRaw,
-        };
-      }
-      // Return raw text as body rather than empty
-      return { day: touch.day, type: touch.type, subject: "", body: clean.length > 20 ? clean : "" };
-    }
-
-    function normalise(p, touch) {
-      return {
-        day:     p.day     || touch.day,
-        type:    p.type    || touch.type,
-        subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
-        body:    (p.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
-      };
-    }
-
-    const touchResults = [];
-
-    // ── Build the seller context ONCE (shared across all touches) ────────────
-    const sharedSys = [
-      `Especialista em outbound B2B no Brasil. SPIN Selling + copywriting de resposta direta.`,
+    const seqSys = [
+      `Você é o maior especialista em outbound B2B do Brasil, combinando SPIN Selling e copywriting de resposta direta.`,
       `Representa: ${vendedorEmpresa}`,
-      (dna?.empresa?.descricao) ? `Produto: ${dna.empresa.descricao.slice(0,120)}` : (produtos?.[0]) ? `Produto: ${produtos[0].nome}` : "",
-      (dna?.icp_refinado?.segmento) ? `ICP: ${dna.icp_refinado.segmento}, ${dna.icp_refinado.porte||""}` : "",
-      `REGRAS: Português BR. Sem placeholders. Sem travessão. Sem saudação. JSON somente.`,
+      produtosPrompt ? `Produto/solução: ${produtosPrompt.slice(0, 200)}` : "",
+      ``,
+      `REGRAS ABSOLUTAS:`,
+      `- Português do Brasil. Nunca inglês.`,
+      `- Nunca use [Nome], [Empresa] ou qualquer placeholder. Use dados reais.`,
+      `- Nunca use travessão (— ou –). Use vírgula.`,
+      `- Nunca comece mensagem com saudação genérica. Comece com gancho de impacto.`,
+      `- Retorne APENAS JSON válido conforme o schema solicitado.`,
     ].filter(Boolean).join("\n");
 
-    // ── Run sequentially — avoids Groq rate limit (6k tokens/min free tier) ─
-    for (let i = 0; i < cadencia.length; i++) {
-      const touch = cadencia[i];
-      const spec  = SPECS[touch.type] || SPECS.email;
-      const angle = ANGLES[i % ANGLES.length];
+    const touchList = cadencia.map((t, i) => ({
+      day:   t.day,
+      type:  t.type,
+      guide: CHANNEL_GUIDE[t.type] || CHANNEL_GUIDE.email,
+      angle: ANGLES[i % ANGLES.length],
+    }));
 
-      const sys = sharedSys;
+    const seqUsr = [
+      `Crie uma sequência de prospecção B2B para:`,
+      `- Empresa-alvo: ${empresa || "a empresa"}`,
+      `- Setor: ${setor || "tecnologia"}`,
+      `- Cargo do decisor: ${cargo || "C-Level / Diretor"}`,
+      nomeUsar ? `- Nome do contato: ${nomeUsar}` : null,
+      `- Dor central: ${doraPrincipal}`,
+      ``,
+      `Gere ${cadencia.length} touches com os seguintes canais e ângulos:`,
+      touchList.map((t, i) => `${i+1}. Dia ${t.day} — ${t.type.toUpperCase()} — Ângulo: ${t.angle}\n   Guia: ${t.guide}`).join("\n"),
+      ``,
+      `Retorne um JSON com este schema exato:`,
+      `{`,
+      `  "touches": [`,
+      `    { "day": 1, "type": "linkedin", "subject": "assunto aqui", "body": "mensagem completa aqui" },`,
+      `    ...`,
+      `  ]`,
+      `}`,
+      ``,
+      `Cada body deve seguir o guia do canal. Use \\n\\n para separar parágrafos.`,
+      `Não inclua texto fora do JSON.`,
+    ].filter(Boolean).join("\n");
 
-      const usr = [
-        `Touch ${i+1}/${cadencia.length} — Canal: ${spec.label} (${spec.min})`,
-        `Empresa: ${empresa||"a empresa"} | Setor: ${setor||"tecnologia"} | Cargo: ${cargo||"C-Level"} | Dia ${touch.day}`,
-        nomeUsar ? `Contato: ${nomeUsar}` : null,
-        `Dor: ${doraPrincipal} | Ângulo: ${angle}`,
-        ``,
-        `Como escrever:`,
-        spec.guide,
-        ``,
-        `JSON de saída:`,
-        `{"day":${touch.day},"type":"${touch.type}","subject":"assunto criativo","body":"mensagem completa com \\n\\n entre parágrafos"}`,
-      ].filter(Boolean).join("\n");
-
-      let result = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
-        try {
-          const out = await callGroq(groqKey, sys, usr, 3000);
-          if (!out.ok) {
-            if (out.error && (out.error.includes("429") || out.error.includes("rate"))) continue; // retry
-            break; // non-retryable error
-          }
-          if (!out.text || out.text.length < 10) continue;
-
-          // Parse: try JSON first, then manual extraction
-          let p = null;
-          const clean = out.text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/,"").trim();
-          try { p = JSON.parse(clean); } catch(_) {
-            const m = clean.match(/\{[\s\S]+\}/);
-            if (m) { try { p = JSON.parse(m[0]); } catch(_) {} }
-            if (!p) {
-              // Extract body directly even from truncated JSON
-              const bm = clean.match(/"body"\s*:\s*"([\s\S]{30,})/);
-              if (bm) {
-                const bodyRaw = bm[1].replace(/"?\s*\}?\s*$/, "").replace(/\\n/g, "\n").trim();
-                const sm = clean.match(/"subject"\s*:\s*"([^"]+)"/);
-                p = { day: touch.day, type: touch.type, subject: sm?sm[1]:"", body: bodyRaw };
-              }
-            }
-          }
-
-          if (p && p.body && p.body.length > 30) {
-            result = {
-              day:     p.day     || touch.day,
-              type:    p.type    || touch.type,
-              subject: (p.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
-              body:    (p.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
-            };
-            break; // success
-          }
-        } catch(_) { /* timeout/network — retry */ }
-      }
-
-      touchResults.push(result || { day: touch.day, type: touch.type, subject: "", body: "" });
-      // 1.2s gap between touches — keeps us well under Groq's 30 RPM free tier limit
-      if (i < cadencia.length - 1) await new Promise(r => setTimeout(r, 1200));
+    const out = await callGemini(geminiKey, seqSys, seqUsr, 8192, true); // true = JSON mode
+    if (!out.ok) {
+      return res.status(200).json({ touches: null, error: "Gemini erro: " + out.error });
     }
 
-    return res.status(200).json({ touches: touchResults });
+    let parsed;
+    try {
+      parsed = JSON.parse(out.text);
+    } catch (_) {
+      const m = out.text.match(/\{[\s\S]+\}/);
+      try { parsed = m ? JSON.parse(m[0]) : null; } catch (_) { parsed = null; }
+    }
 
+    const rawTouches = parsed?.touches || [];
+    if (!rawTouches.length) {
+      return res.status(200).json({ touches: null, error: "Gemini retornou sequência vazia." });
+    }
+
+    const finalTouches = rawTouches.map((t, i) => ({
+      day:     t.day     || cadencia[i]?.day  || i + 1,
+      type:    t.type    || cadencia[i]?.type || "email",
+      subject: (t.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
+      body:    (t.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
+    }));
+
+    return res.status(200).json({ touches: finalTouches });
   } catch (e) {
     return res.status(200).json({ error: "Erro interno: " + e.message });
   }
