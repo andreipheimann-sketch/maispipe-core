@@ -5867,6 +5867,36 @@ function AuthScreen(props) {
 }
 
 // ── MY ACCOUNT MODAL ──────────────────────────────────────────────────────────
+// ── ACCOUNT FIELD — module-scope (same pattern as AuthField) ─────────────────
+// Must NOT be declared inside MyAccountModal — would cause cursor-jump on re-render.
+function AccountField(fp) {
+  var hasErr = fp.touched && fp.touched[fp.name] && fp.errors && fp.errors[fp.name];
+  return (
+    <div style={{marginBottom:16}}>
+      <label htmlFor={"acc-"+fp.name} style={{display:"block",fontSize:11,fontWeight:700,color:"#334155",marginBottom:5,letterSpacing:.3}}>
+        {fp.label}{fp.required && <span style={{color:"#ef4444",marginLeft:2}} aria-hidden="true">*</span>}
+      </label>
+      <div style={{position:"relative"}}>
+        {fp.icon && <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center"}} aria-hidden="true"><Icon name={fp.icon} size={14} color={hasErr?"#ef4444":"#94a3b8"}/></span>}
+        <input
+          id={"acc-"+fp.name} name={fp.name}
+          type={fp.type||"text"} value={fp.value}
+          autoComplete={fp.autoComplete} placeholder={fp.placeholder}
+          disabled={fp.disabled}
+          aria-invalid={hasErr?"true":"false"}
+          aria-describedby={hasErr?("acc-"+fp.name+"-err"):undefined}
+          onChange={fp.onChange} onBlur={fp.onBlur||function(){}}
+          onFocus={function(e){e.target.style.borderColor="#6366f1";e.target.style.boxShadow="0 0 0 3px rgba(99,102,241,.12)";}}
+          onBlurCapture={function(e){e.target.style.borderColor=hasErr?"#ef4444":"#e2e8f0";e.target.style.boxShadow=hasErr?"0 0 0 3px rgba(239,68,68,.1)":"none";}}
+          style={{width:"100%",boxSizing:"border-box",fontFamily:"inherit",background:fp.disabled?"#f8fafc":"#fff",border:"1.5px solid "+(hasErr?"#ef4444":"#e2e8f0"),borderRadius:10,padding:fp.icon?"10px 40px 10px 36px":"10px 14px",fontSize:13,color:"#0f172a",outline:"none",transition:"border-color .15s, box-shadow .15s",boxShadow:hasErr?"0 0 0 3px rgba(239,68,68,.1)":"none"}}
+        />
+        {fp.rightSlot}
+      </div>
+      {hasErr && <div id={"acc-"+fp.name+"-err"} role="alert" style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}><Icon name="error" size={11} color="#ef4444"/><span style={{fontSize:11,color:"#ef4444",fontWeight:500}}>{fp.errors[fp.name]}</span></div>}
+    </div>
+  );
+}
+
 function MyAccountModal(props) {
   var user    = props.user;    // current session user
   var onClose = props.onClose;
@@ -5978,30 +6008,6 @@ function MyAccountModal(props) {
 
   var TABS = [{id:"profile",icon:"person",label:"Dados pessoais"},{id:"password",icon:"lock",label:"Alterar senha"}];
 
-  function Field(fp) {
-    var hasErr = fp.touched && fp.touched[fp.name] && errors[fp.name];
-    return (
-      <div style={{marginBottom:16}}>
-        <label htmlFor={"acc-"+fp.name} style={{display:"block",fontSize:11,fontWeight:700,color:"#334155",marginBottom:5,letterSpacing:.3}}>
-          {fp.label}{fp.required && <span style={{color:"#ef4444",marginLeft:2}} aria-hidden="true">*</span>}
-        </label>
-        <div style={{position:"relative"}}>
-          {fp.icon && <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center"}} aria-hidden="true"><Icon name={fp.icon} size={14} color={hasErr?"#ef4444":"#94a3b8"}/></span>}
-          <input id={"acc-"+fp.name} name={fp.name} type={fp.type||"text"} value={fp.value}
-            autoComplete={fp.autoComplete} placeholder={fp.placeholder} disabled={saving}
-            aria-invalid={hasErr?"true":"false"}
-            aria-describedby={hasErr?("acc-"+fp.name+"-err"):undefined}
-            onChange={fp.onChange} onBlur={fp.onBlur||function(){}}
-            onFocus={function(e){e.target.style.borderColor="#6366f1";e.target.style.boxShadow="0 0 0 3px rgba(99,102,241,.12)";}}
-            onBlurCapture={function(e){e.target.style.borderColor=hasErr?"#ef4444":"#e2e8f0";e.target.style.boxShadow=hasErr?"0 0 0 3px rgba(239,68,68,.1)":"none";}}
-            style={{width:"100%",boxSizing:"border-box",fontFamily:"inherit",background:saving?"#f8fafc":"#fff",border:"1.5px solid "+(hasErr?"#ef4444":"#e2e8f0"),borderRadius:10,padding:fp.icon?"10px 40px 10px 36px":"10px 14px",fontSize:13,color:"#0f172a",outline:"none",transition:"border-color .15s, box-shadow .15s",boxShadow:hasErr?"0 0 0 3px rgba(239,68,68,.1)":"none"}}/>
-          {fp.rightSlot}
-        </div>
-        {hasErr && <div id={"acc-"+fp.name+"-err"} role="alert" style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}><Icon name="error" size={11} color="#ef4444"/><span style={{fontSize:11,color:"#ef4444",fontWeight:500}}>{errors[fp.name]}</span></div>}
-      </div>
-    );
-  }
-
   var pwdSlot = (
     <button type="button" onClick={function(){setShow(function(s){return !s;});}} aria-label={show?"Ocultar":"Mostrar"}
       style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",alignItems:"center",color:"#94a3b8"}}>
@@ -6049,9 +6055,9 @@ function MyAccountModal(props) {
         <div style={{overflowY:"auto",padding:"24px",flex:1}} tabIndex={0}>
           {tab === "profile" ? (
             <form onSubmit={function(e){e.preventDefault();handleSaveProfile();}} noValidate>
-              <Field name="nome" label="Nome completo" icon="person" placeholder="Maria Silva" required value={nome} onChange={sh.current.nome} touched={touched} autoComplete="name"/>
-              <Field name="email" label="E-mail" icon="mail" type="email" placeholder="maria@empresa.com.br" required value={email} onChange={sh.current.email} touched={touched} autoComplete="email"/>
-              <Field name="whatsapp" label="WhatsApp" icon="phone" type="tel" placeholder="(11) 91234-5678" value={whatsapp} onChange={sh.current.whatsapp} touched={touched} autoComplete="tel"/>
+              <AccountField name="nome" label="Nome completo" icon="person" placeholder="Maria Silva" required value={nome} onChange={sh.current.nome} touched={touched} errors={errors} disabled={saving} autoComplete="name"/>
+              <AccountField name="email" label="E-mail" icon="mail" type="email" placeholder="maria@empresa.com.br" required value={email} onChange={sh.current.email} touched={touched} errors={errors} disabled={saving} autoComplete="email"/>
+              <AccountField name="whatsapp" label="WhatsApp" icon="phone" type="tel" placeholder="(11) 91234-5678" value={whatsapp} onChange={sh.current.whatsapp} touched={touched} errors={errors} disabled={saving} autoComplete="tel"/>
 
               <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10,marginTop:8}}>
                 <button type="button" onClick={onClose} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:10,padding:"9px 18px",fontSize:13,color:"#64748b",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Cancelar</button>
@@ -6067,10 +6073,10 @@ function MyAccountModal(props) {
                 <Icon name="info" size={15} color="#6366f1"/>
                 <p style={{margin:0,fontSize:12,color:"#475569",lineHeight:1.6}}>{"Use mínimo 8 caracteres. Recomendamos uma combinação de letras, números e símbolos."}</p>
               </div>
-              <Field name="pwdOld" label="Senha atual" icon="lock" type={show?"text":"password"} placeholder="Sua senha atual" required value={pwdOld} onChange={sh.current.pwdOld} touched={touched} autoComplete="current-password" rightSlot={pwdSlot}/>
+              <AccountField name="pwdOld" label="Senha atual" icon="lock" type={show?"text":"password"} placeholder="Sua senha atual" required value={pwdOld} onChange={sh.current.pwdOld} touched={touched} errors={errors} disabled={saving} autoComplete="current-password" rightSlot={pwdSlot}/>
               <div style={{height:1,background:"#f1f5f9",margin:"4px 0 16px"}}/>
-              <Field name="pwdNew" label="Nova senha" icon="lock_reset" type={show?"text":"password"} placeholder="Mínimo 8 caracteres" required value={pwdNew} onChange={sh.current.pwdNew} touched={touched} autoComplete="new-password"/>
-              <Field name="pwdC" label="Confirmar nova senha" icon="lock_reset" type={show?"text":"password"} placeholder="Repita a nova senha" required value={pwdC} onChange={sh.current.pwdC} touched={touched} autoComplete="new-password"/>
+              <AccountField name="pwdNew" label="Nova senha" icon="lock_reset" type={show?"text":"password"} placeholder="Mínimo 8 caracteres" required value={pwdNew} onChange={sh.current.pwdNew} touched={touched} errors={errors} disabled={saving} autoComplete="new-password"/>
+              <AccountField name="pwdC" label="Confirmar nova senha" icon="lock_reset" type={show?"text":"password"} placeholder="Repita a nova senha" required value={pwdC} onChange={sh.current.pwdC} touched={touched} errors={errors} disabled={saving} autoComplete="new-password"/>
               {/* Strength bar */}
               {pwdNew.length > 0 && (function(){
                 var s = 0; if(pwdNew.length>=8)s++; if(/[A-Z]/.test(pwdNew))s++; if(/[0-9]/.test(pwdNew))s++; if(/[^A-Za-z0-9]/.test(pwdNew))s++;
