@@ -6482,7 +6482,7 @@ export default function App() {
       <BetaBanner/>
     <div style={{display:"flex",flex:1,overflowX:"clip",minWidth:0,width:"100%"}}>
       <style>{css}</style>
-      <div className="sidebar sidebar-desktop" style={{width:sidebarExpanded?224:64,background:"linear-gradient(180deg,#15192b 0%,#10131f 100%)",borderRight:"1px solid #1f2438",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"4px 0 24px rgba(15,23,42,.18)",position:"relative",overflow:"hidden",transition:"width .35s cubic-bezier(.4,0,.2,1)",zIndex:2}}>
+      <div className="sidebar sidebar-desktop" style={{width:sidebarExpanded?224:64,background:"linear-gradient(180deg,#15192b 0%,#10131f 100%)",borderRight:"1px solid #1f2438",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"4px 0 24px rgba(15,23,42,.18)",position:"relative",overflowX:"hidden",overflowY:"hidden",transition:"width .35s cubic-bezier(.4,0,.2,1)",zIndex:2}}>
         <div style={{height:3,background:"linear-gradient(90deg,#6366f1,#7c3aed,#a78bfa)",flexShrink:0}}/>
         {sidebarExpanded ? (<>
           <div style={{padding:"14px 14px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -6528,7 +6528,7 @@ export default function App() {
           </div>
         )}
         <div style={{height:1,background:"rgba(255,255,255,.07)",margin:"0 10px 8px",flexShrink:0}}/>
-        <nav style={{padding:"0 8px",flex:1,overflow:"hidden"}}>
+        <nav style={{padding:"0 8px",flex:1,overflowY:"auto",overflowX:"hidden"}}>
           {NAV.map(function(item) {
             var active = nav===item.id;
             var isHome = item.id === "home";
@@ -6551,7 +6551,7 @@ export default function App() {
           })}
         </nav>
         {sidebarExpanded && (
-          <div style={{padding:"12px 14px 16px",borderTop:"1px solid rgba(255,255,255,.07)",flexShrink:0}}>
+          <div style={{padding:"12px 14px 16px",borderTop:"1px solid rgba(255,255,255,.07)",flexShrink:0,marginTop:"auto"}}>
             {usage ? (
               <div style={{background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.2)",borderRadius:11,padding:"11px 13px"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7}}>
