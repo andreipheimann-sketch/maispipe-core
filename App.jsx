@@ -5400,6 +5400,161 @@ function MobileNav(props) {
   );
 }
 
+// ── LEGAL MODAL ───────────────────────────────────────────────────────────────
+// Self-contained — no external links required for early-stage SaaS.
+// Follows the pattern used by Ramper, Hunter.io, Apollo.io, and Pipedrive
+// for their sidebar-bottom legal footer: minimal, accessible, non-intrusive.
+
+var LEGAL_CONTENT = {
+  terms: {
+    title: "Termos de Uso",
+    lastUpdated: "01 de julho de 2026",
+    sections: [
+      {
+        heading: "1. Aceitação dos Termos",
+        body: "Ao acessar e usar a plataforma +Pipe (\"Serviço\"), você concorda com estes Termos de Uso. Se não concordar, não utilize o Serviço. Estes termos constituem um acordo legal entre você (\"Usuário\") e a +Pipe.",
+      },
+      {
+        heading: "2. Descrição do Serviço",
+        body: "O +Pipe é uma plataforma B2B de prospecção e account mapping que auxilia profissionais de vendas a identificar, mapear e engajar contas-alvo. O Serviço inclui funcionalidades de enriquecimento de dados, geração de sequências de outreach e inteligência de conta via IA.",
+      },
+      {
+        heading: "3. Uso Permitido",
+        body: "Você pode usar o Serviço exclusivamente para fins legítimos de prospecção comercial B2B. É vedado: (a) usar o Serviço para envio de spam ou comunicações não solicitadas em massa; (b) coletar dados de pessoas físicas sem base legal adequada; (c) revender ou sublicenciar o acesso ao Serviço; (d) realizar engenharia reversa, descompilar ou tentar extrair o código-fonte da plataforma.",
+      },
+      {
+        heading: "4. Dados e Privacidade",
+        body: "O uso de dados de contatos profissionais deve estar em conformidade com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018) e demais legislações aplicáveis. O usuário é responsável por garantir que possui base legal para contatar os prospects identificados pela plataforma.",
+      },
+      {
+        heading: "5. Propriedade Intelectual",
+        body: "Todo o conteúdo, software, algoritmos e interfaces do +Pipe são propriedade exclusiva da +Pipe e seus licenciadores. Os dados inseridos pelo Usuário permanecem de sua propriedade. Você concede à +Pipe licença limitada para processar esses dados com o objetivo de prestar o Serviço.",
+      },
+      {
+        heading: "6. Limitação de Responsabilidade",
+        body: "O Serviço é fornecido \"como está\". A +Pipe não garante que os dados de prospecção sejam completos, precisos ou atualizados. Em nenhum caso a +Pipe será responsável por danos indiretos, incidentais ou consequenciais decorrentes do uso ou incapacidade de uso do Serviço.",
+      },
+      {
+        heading: "7. Modificações",
+        body: "A +Pipe reserva-se o direito de modificar estes Termos a qualquer momento. Alterações substanciais serão comunicadas com pelo menos 15 dias de antecedência. O uso continuado do Serviço após a vigência das alterações constitui aceitação dos novos termos.",
+      },
+      {
+        heading: "8. Lei Aplicável",
+        body: "Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica eleito o foro da Comarca de São Paulo, SP, para dirimir quaisquer controvérsias.",
+      },
+    ],
+  },
+  privacy: {
+    title: "Política de Privacidade",
+    lastUpdated: "01 de julho de 2026",
+    sections: [
+      {
+        heading: "1. Controlador dos Dados",
+        body: "A +Pipe atua como controladora dos dados pessoais tratados nesta plataforma, nos termos da Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018). Para exercer seus direitos ou tirar dúvidas, entre em contato pelo e-mail: privacidade@maispipe.com.br",
+      },
+      {
+        heading: "2. Dados que Coletamos",
+        body: "Coletamos: (a) Dados de cadastro: nome, e-mail corporativo e informações da empresa fornecidos no onboarding; (b) Dados de uso: interações com a plataforma, contas pesquisadas e sequências geradas; (c) Dados de prospects: informações sobre empresas e contatos profissionais buscados via integrações com Hunter.io, Apollo.io e Tavily — todos dados de caráter estritamente profissional e de acesso público.",
+      },
+      {
+        heading: "3. Finalidade do Tratamento",
+        body: "Tratamos seus dados para: prestação do Serviço e suas funcionalidades; melhoria contínua da plataforma; comunicações sobre o Serviço; cumprimento de obrigações legais. Não vendemos, alugamos ou compartilhamos seus dados pessoais com terceiros para fins de marketing.",
+      },
+      {
+        heading: "4. Base Legal",
+        body: "O tratamento de dados está fundado em: execução do contrato (art. 7º, V, LGPD) para a prestação do Serviço; interesse legítimo (art. 7º, IX, LGPD) para melhorias e segurança; consentimento (art. 7º, I, LGPD) quando aplicável.",
+      },
+      {
+        heading: "5. Compartilhamento com Terceiros",
+        body: "Compartilhamos dados exclusivamente com: (a) Groq Inc. e Google LLC para processamento de IA — sob acordos de processamento de dados adequados; (b) Hunter.io e Apollo.io para enriquecimento de e-mails profissionais; (c) Vercel Inc. para hospedagem da infraestrutura. Todos os subprocessadores são contratualmente obrigados a proteger seus dados.",
+      },
+      {
+        heading: "6. Retenção de Dados",
+        body: "Dados de conta são mantidos enquanto o contrato estiver vigente e por até 5 anos após o encerramento, conforme obrigações legais. Dados de uso são anonimizados após 12 meses. Você pode solicitar a exclusão de seus dados a qualquer momento.",
+      },
+      {
+        heading: "7. Seus Direitos (LGPD)",
+        body: "Você possui os seguintes direitos: confirmação de tratamento; acesso aos dados; correção de dados incompletos ou desatualizados; anonimização, bloqueio ou eliminação de dados desnecessários; portabilidade; informação sobre compartilhamento; revogação do consentimento. Para exercê-los, contate: privacidade@maispipe.com.br",
+      },
+      {
+        heading: "8. Segurança",
+        body: "Adotamos medidas técnicas e organizacionais adequadas para proteger seus dados, incluindo criptografia em trânsito (TLS 1.3), controles de acesso por princípio do menor privilégio e monitoramento contínuo de segurança.",
+      },
+      {
+        heading: "9. Cookies",
+        body: "A plataforma utiliza armazenamento local (localStorage) para salvar preferências e dados de sessão. Não utilizamos cookies de rastreamento de terceiros ou pixels de publicidade.",
+      },
+    ],
+  },
+};
+
+function LegalModal(props) {
+  var type    = props.type; // "terms" | "privacy"
+  var onClose = props.onClose;
+  var content = LEGAL_CONTENT[type];
+  if (!content) return null;
+
+  // Trap focus + close on Escape
+  useEffect(function(){
+    var prev = document.activeElement;
+    function onKey(e){ if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return function(){ document.removeEventListener("keydown", onKey); if(prev && prev.focus) prev.focus(); };
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="legal-modal-title"
+      onClick={function(e){ if (e.target === e.currentTarget) onClose(); }}
+      style={{position:"fixed",inset:0,zIndex:9000,background:"rgba(15,23,42,.55)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px",boxSizing:"border-box"}}
+    >
+      <div style={{background:"#ffffff",borderRadius:20,boxShadow:"0 32px 80px rgba(15,23,42,.22),0 0 0 1px rgba(99,102,241,.08)",width:"100%",maxWidth:640,maxHeight:"80vh",display:"flex",flexDirection:"column",overflow:"hidden",animation:"fadeUp .25s cubic-bezier(.22,1,.36,1) both"}}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px 18px",borderBottom:"1px solid #f1f5f9",flexShrink:0}}>
+          <div>
+            <h2 id="legal-modal-title" style={{fontSize:17,fontWeight:800,color:"#0f172a",margin:0,letterSpacing:"-.3px"}}>{content.title}</h2>
+            <p style={{fontSize:11,color:"#94a3b8",margin:"3px 0 0",fontWeight:400}}>{"Última atualização: "+content.lastUpdated}</p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Fechar"
+            style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,width:32,height:32,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}
+            onMouseEnter={function(e){e.currentTarget.style.background="#f1f5f9";e.currentTarget.style.borderColor="#cbd5e1";}}
+            onMouseLeave={function(e){e.currentTarget.style.background="#f8fafc";e.currentTarget.style.borderColor="#e2e8f0";}}
+          >
+            <Icon name="close" size={15} color="#64748b"/>
+          </button>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{overflowY:"auto",padding:"20px 24px 28px",flex:1}} tabIndex={0}>
+          {content.sections.map(function(sec, i){
+            return (
+              <div key={i} style={{marginBottom:i < content.sections.length - 1 ? 20 : 0}}>
+                <h3 style={{fontSize:12,fontWeight:700,color:"#334155",margin:"0 0 6px",textTransform:"uppercase",letterSpacing:.5}}>{sec.heading}</h3>
+                <p style={{fontSize:13,color:"#475569",lineHeight:1.75,margin:0}}>{sec.body}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"14px 24px",borderTop:"1px solid #f1f5f9",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:"#fbfcfd"}}>
+          <p style={{fontSize:11,color:"#94a3b8",margin:0}}>{"© "+new Date().getFullYear()+" +Pipe. Todos os direitos reservados."}</p>
+          <button
+            onClick={onClose}
+            style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.25)",transition:"opacity .15s"}}
+            onMouseEnter={function(e){e.currentTarget.style.opacity=".9";}}
+            onMouseLeave={function(e){e.currentTarget.style.opacity="1";}}
+          >{"Entendi"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   var _st_nav = useState("home"); var nav = _st_nav[0]; var setNav = _st_nav[1];
   var _st_accounts = useState([]); var accounts = _st_accounts[0]; var setAccounts = _st_accounts[1];
@@ -5416,6 +5571,7 @@ export default function App() {
   var _st_sidebarExpanded = useState(true); var sidebarExpanded = _st_sidebarExpanded[0]; var setSidebarExpanded = _st_sidebarExpanded[1];
   var _st_seqCount = useState(0); var seqCount = _st_seqCount[0]; var setSeqCount = _st_seqCount[1];
   var _st_openSeq = useState(null); var openSeq = _st_openSeq[0]; var setOpenSeq = _st_openSeq[1];
+  var _st_legalModal = useState(null); var legalModal = _st_legalModal[0]; var setLegalModal = _st_legalModal[1];
   var _st_usage = useState(null); var usage = _st_usage[0]; var setUsage = _st_usage[1];
   var _st_mappingId = useState(null); var mappingId = _st_mappingId[0]; var setMappingId = _st_mappingId[1];
   var _st_seqRequest = useState(null); var seqRequest = _st_seqRequest[0]; var setSeqRequest = _st_seqRequest[1];
@@ -5833,6 +5989,15 @@ export default function App() {
                 {accounts.length+" conta"+(accounts.length!==1?"s":"")+" salva"+(accounts.length!==1?"s":"")}
               </div>
             )}
+            {/* ── Legal footer ── */}
+            <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:4}}>
+              <span style={{fontSize:9,color:"#4a5568",letterSpacing:.2}}>{"© "+new Date().getFullYear()+" +Pipe"}</span>
+              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                <button onClick={function(){setLegalModal("terms");}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:9,color:"#64748b",fontFamily:"inherit",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:2,transition:"color .15s"}} onMouseEnter={function(e){e.currentTarget.style.color="#a5b4fc";}} onMouseLeave={function(e){e.currentTarget.style.color="#64748b";}}>{"Termos"}</button>
+                <span style={{color:"#2d3748",fontSize:8,lineHeight:1}}>{"·"}</span>
+                <button onClick={function(){setLegalModal("privacy");}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:9,color:"#64748b",fontFamily:"inherit",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:2,transition:"color .15s"}} onMouseEnter={function(e){e.currentTarget.style.color="#a5b4fc";}} onMouseLeave={function(e){e.currentTarget.style.color="#64748b";}}>{"Privacidade"}</button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -5872,6 +6037,7 @@ export default function App() {
         </div>
       </div>
       {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onReEnrich={function(acc){doEnrichAccount(acc);}}/>}
+      {legalModal && <LegalModal type={legalModal} onClose={function(){setLegalModal(null);}}/>}
       {openSeq && <SequenceModal seq={openSeq} onClose={function(){setOpenSeq(null);}}/>}
       {toast && (
         <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:480,display:"flex",alignItems:"flex-start",gap:10,wordBreak:"break-word",lineHeight:1.5}}>
