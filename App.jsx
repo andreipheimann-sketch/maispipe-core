@@ -5051,26 +5051,39 @@ function ProspectView(props) {
       .then(function(resp){
         if (props.onSaveRaw) {
           props.onSaveRaw(emp.nome, resp.results, true, null, "", function(acc){
-            setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
+            // DO NOT set enriched yet — mapping not complete.
+            // Keep isEnriching=true until /api/gemini finishes.
             var nomeKeyP = emp.nome.toLowerCase();
             if (_mappingInProgress.has(nomeKeyP)) return;
-            var hasDoresP = acc && acc.aiMapped && acc.data && acc.data.dores && (acc.data.dores.principais||[]).length > 0;
-            var hasSpinP  = acc && acc.data && acc.data.estrategia && (acc.data.estrategia.perguntas_spin||[]).length > 0;
-            if (hasDoresP && hasSpinP) return;
             _mappingInProgress.add(nomeKeyP);
-            // Trigger full AI mapping after account saved
             var icpLocal = getStoredIcp();
             var produtosLocal = getStoredProducts();
             var rawCtx = (acc && acc.data && acc.data.empresa && acc.data.empresa.rawContext) || "";
             var setorLocal = (acc && acc.data && acc.data.empresa && acc.data.empresa.setor) || "tecnologia";
-            fetch("/api/gemini", {
+
+            // ── Step A: resumo ────────────────────────────────────────────────
+            var resumoFetch = fetch("/api/gemini", {
+              method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({ mode:"resumo", empresa:emp.nome, setor:setorLocal, rawContext:rawCtx, dna:getStoredDna() })
+            }).then(function(r){ return r.ok?r.json():{resumo:""}; }).catch(function(){ return {resumo:""}; });
+
+            // ── Step B: mapeamento ────────────────────────────────────────────
+            var mapeamentoFetch = fetch("/api/gemini", {
               method:"POST", headers:{"Content-Type":"application/json"},
               body: JSON.stringify({ mode:"mapeamento", empresa:emp.nome, setor:setorLocal, rawContext:rawCtx, icp:icpLocal, produtos:produtosLocal, companySite:getCompanySite(), assinatura:getCompanySite()?("Consultor | "+getCompanySite()):"Consultor", dna:getStoredDna() })
-            })
-            .then(function(r2){ return r2.ok?r2.json():null; })
-            .then(function(mapped){
+            }).then(function(r2){ return r2.ok?r2.json():null; }).catch(function(){ return null; });
+
+            // ── Wait for BOTH before showing "Ver conta mapeada" ─────────────
+            Promise.all([resumoFetch, mapeamentoFetch]).then(function(results){
               _mappingInProgress.delete(nomeKeyP);
-              if (!mapped||mapped.error) return;
+              var resumoData  = results[0] || {};
+              var mapped      = results[1];
+              if (!mapped || mapped.error) {
+                // Mapping failed — still show the account with basic data
+                setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
+                setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
+                return;
+              }
               var est = mapped.estrategia || mapped["estratégia"] || {};
               var spinFlatP = est.perguntas_spin || [];
               if (!spinFlatP.length && mapped.perguntas_spin) {
@@ -5083,18 +5096,29 @@ function ProspectView(props) {
                 ];
               }
               var objecoesFlatP = est.objecoes || est["objeções"] || mapped.objecoes || [];
+              var resumoFinal = resumoData.resumo || mapped.resumo || (acc.data&&acc.data.empresa&&acc.data.empresa.resumo) || "";
               storageList("acc:").then(function(ks){
+                var done = 0; var total = ks.length;
                 ks.forEach(function(k){
                   storageGet(k).then(function(stored){
-                    if (!stored||stored.nome.toLowerCase()!==emp.nome.toLowerCase()) return;
+                    done++;
+                    if (!stored||stored.nome.toLowerCase()!==emp.nome.toLowerCase()) {
+                      if (done===total) {
+                        setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
+                        setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
+                      }
+                      return;
+                    }
                     var updated=Object.assign({},stored,{
                       aiMapped: !!(mapped.dores && (mapped.dores.principais||[]).length > 0),
                       data:Object.assign({},stored.data,{
-                        fit:mapped.fit||stored.data.fit, dores:mapped.dores||stored.data.dores,
-                        triggers:mapped.triggers||stored.data.triggers, stakeholders:mapped.stakeholders||stored.data.stakeholders,
+                        fit:mapped.fit||stored.data.fit,
+                        dores:mapped.dores||stored.data.dores,
+                        triggers:mapped.triggers||stored.data.triggers,
+                        stakeholders:mapped.stakeholders||stored.data.stakeholders,
                         empresa: Object.assign({}, (stored.data.empresa||{}), {
-                          resumo: mapped.resumo || (stored.data.empresa && stored.data.empresa.resumo) || "",
-                          resumoAI: !!mapped.resumo,
+                          resumo: resumoFinal,
+                          resumoAI: !!resumoFinal,
                         }),
                         estrategia:Object.assign({},(stored.data.estrategia||{}),{
                           emails:est.emails||[], inmails:est.inmails||[],
@@ -5104,19 +5128,31 @@ function ProspectView(props) {
                           tier:(stored.data.estrategia&&stored.data.estrategia.tier)||"Tier 2",
                         }),
                         proximos_passos:mapped.proximos_passos||stored.data.proximos_passos,
-                    })});
-                    storageSet(k,updated);
-                    if(props.onUpdateAccount) props.onUpdateAccount(updated);
+                      })
+                    });
+                    storageSet(k, updated);
+                    if (props.onUpdateAccount) props.onUpdateAccount(updated);
+                    // NOW set enriched with complete data — button appears only here
+                    setEnriched(function(e){ var n=Object.assign({},e); n[key]=updated; return n; });
+                    setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
                   });
                 });
+                if (total===0) {
+                  setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
+                  setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
+                }
               });
-            }).catch(function(){ _mappingInProgress.delete(nomeKeyP); });
+            }).catch(function(){
+              _mappingInProgress.delete(nomeKeyP);
+              setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
+              setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
+            });
           }, null);
         }
       })
       .catch(function(){})
       .finally(function(){
-        setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
+        // NOTE: do NOT clear enriching here — it's cleared after mapping completes above
       });
   }
 
@@ -5289,24 +5325,14 @@ function ProspectView(props) {
                     ) : jaEnriq ? (
                       <button onClick={function(){
                         if(props.onNav) props.onNav("accounts");
-                        // Fetch latest version from storage — avoids stale pre-mapping snapshot
-                        storageList("acc:").then(function(keys){
-                          var found = null;
-                          var pending = keys.length;
-                          if (!pending) { if(props.onOpenAccount) props.onOpenAccount(enriched[emp.nome]); return; }
-                          keys.forEach(function(k){
-                            storageGet(k).then(function(stored){
-                              if (stored && stored.nome && stored.nome.toLowerCase()===emp.nome.toLowerCase()) found=stored;
-                              pending--;
-                              if (pending===0 && props.onOpenAccount) props.onOpenAccount(found || enriched[emp.nome]);
-                            });
-                          });
-                        });
+                        // enriched[emp.nome] now contains the fully mapped account
+                        var complete = enriched[emp.nome];
+                        if (complete && props.onOpenAccount) props.onOpenAccount(complete);
                       }} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>{"Ver conta mapeada →"}</button>
                     ) : (
                       <button onClick={function(){enriquecerEmpresa(emp);}} disabled={isEnriching} style={{flex:1,background:isEnriching?"#f1f5f9":"linear-gradient(135deg,#6366f1,#4f46e5)",color:isEnriching?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:isEnriching?"default":"pointer",fontFamily:"inherit",boxShadow:isEnriching?"none":"0 4px 12px rgba(99,102,241,.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .2s"}}>
                         {isEnriching
-                          ? <><div style={{width:10,height:10,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite"}}/> {"Mapeando..."}</>
+                          ? <><div style={{width:10,height:10,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite"}}/><span>{"Mapeando com IA..."}</span></>
                           : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>{"Enriquecer — 1 crédito"}</>
                         }
                       </button>
