@@ -5555,7 +5555,289 @@ function LegalModal(props) {
   );
 }
 
+// ── AUTH HELPERS ──────────────────────────────────────────────────────────────
+var AUTH_KEY = "mp_auth_user";
+var USERS_KEY = "mp_users";
+
+function authGetUser() {
+  try { var s = localStorage.getItem(AUTH_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+}
+function authSaveSession(user) {
+  try { localStorage.setItem(AUTH_KEY, JSON.stringify(user)); } catch(e) {}
+}
+function authClearSession() {
+  try { localStorage.removeItem(AUTH_KEY); } catch(e) {}
+}
+function authGetUsers() {
+  try { var s = localStorage.getItem(USERS_KEY); return s ? JSON.parse(s) : []; } catch(e) { return []; }
+}
+function authSaveUsers(users) {
+  try { localStorage.setItem(USERS_KEY, JSON.stringify(users)); } catch(e) {}
+}
+// Validators
+function isValidEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((v||"").trim());
+}
+function isValidWhatsApp(v) {
+  var digits = (v||"").replace(/\D/g,"");
+  // Brazilian mobile: 11 digits (with DDD) or 13 with country code (+55)
+  return digits.length === 11 || digits.length === 13 || (digits.length === 12 && digits.startsWith("55"));
+}
+function formatWhatsApp(v) {
+  var d = v.replace(/\D/g,"").slice(0,11);
+  if (d.length <= 2)  return d;
+  if (d.length <= 7)  return "("+d.slice(0,2)+") "+d.slice(2);
+  return "("+d.slice(0,2)+") "+d.slice(2,7)+"-"+d.slice(7);
+}
+
+// ── AUTH SCREEN ───────────────────────────────────────────────────────────────
+function AuthScreen(props) {
+  var _st_mode    = useState("login"); var mode = _st_mode[0]; var setMode = _st_mode[1];
+  var _st_nome    = useState(""); var nome = _st_nome[0]; var setNome = _st_nome[1];
+  var _st_email   = useState(""); var email = _st_email[0]; var setEmail = _st_email[1];
+  var _st_whatsapp= useState(""); var whatsapp = _st_whatsapp[0]; var setWhatsapp = _st_whatsapp[1];
+  var _st_pwd     = useState(""); var pwd = _st_pwd[0]; var setPwd = _st_pwd[1];
+  var _st_pwdC    = useState(""); var pwdC = _st_pwdC[0]; var setPwdC = _st_pwdC[1];
+  var _st_showPwd = useState(false); var showPwd = _st_showPwd[0]; var setShowPwd = _st_showPwd[1];
+  var _st_errors  = useState({}); var errors = _st_errors[0]; var setErrors = _st_errors[1];
+  var _st_loading = useState(false); var loading = _st_loading[0]; var setLoading = _st_loading[1];
+  var _st_toast   = useState(null); var toast = _st_toast[0]; var setToast = _st_toast[1];
+  var _st_touched = useState({}); var touched = _st_touched[0]; var setTouched = _st_touched[1];
+
+  function showToast(msg, color) {
+    setToast({ msg, color: color || "#ef4444" });
+    setTimeout(function(){ setToast(null); }, 4000);
+  }
+
+  // Reset all state when switching modes
+  function switchMode(m) {
+    setMode(m); setNome(""); setEmail(""); setWhatsapp(""); setPwd(""); setPwdC("");
+    setErrors({}); setTouched({}); setLoading(false);
+  }
+
+  // Real-time validation
+  function validate(field, value) {
+    var e = {};
+    if (mode === "register") {
+      if (field === "nome" || !field)    { if (!(value !== undefined ? value : nome).trim() || (value !== undefined ? value : nome).trim().split(/\s+/).length < 2) e.nome = "Informe nome e sobrenome."; }
+      if (field === "email" || !field)   { if (!isValidEmail(value !== undefined ? value : email)) e.email = "E-mail inválido."; }
+      if (field === "whatsapp" || !field){ if (!isValidWhatsApp(value !== undefined ? value : whatsapp)) e.whatsapp = "WhatsApp inválido. Ex: (11) 91234-5678"; }
+      if (field === "pwd" || !field)     { if ((value !== undefined ? value : pwd).length < 8) e.pwd = "Mínimo 8 caracteres."; }
+      if (field === "pwdC" || !field)    { var p = field === "pwdC" ? (pwd) : pwd; if ((value !== undefined ? value : pwdC) !== p) e.pwdC = "Senhas não conferem."; }
+    } else {
+      if (field === "email" || !field)   { if (!isValidEmail(value !== undefined ? value : email)) e.email = "E-mail inválido."; }
+      if (field === "pwd" || !field)     { if (!(value !== undefined ? value : pwd).trim()) e.pwd = "Informe sua senha."; }
+    }
+    return e;
+  }
+
+  function touch(field) { setTouched(function(t){ return Object.assign({},t,{[field]:true}); }); }
+  function onBlur(field, value) { touch(field); setErrors(function(e){ return Object.assign({},e,validate(field,value)); }); }
+
+  function handleRegister() {
+    var allErrors = validate();
+    setTouched({nome:true,email:true,whatsapp:true,pwd:true,pwdC:true});
+    if (Object.keys(allErrors).length) { setErrors(allErrors); return; }
+    setLoading(true);
+    setTimeout(function(){
+      var users = authGetUsers();
+      if (users.find(function(u){ return u.email.toLowerCase() === email.trim().toLowerCase(); })) {
+        setErrors({email:"E-mail já cadastrado."});
+        setTouched(function(t){ return Object.assign({},t,{email:true}); });
+        setLoading(false);
+        return;
+      }
+      var user = { id:"u_"+Date.now(), nome:nome.trim(), email:email.trim().toLowerCase(), whatsapp:whatsapp, pwdHash:btoa(pwd), createdAt:Date.now() };
+      users.push(user);
+      authSaveUsers(users);
+      authSaveSession(user);
+      setLoading(false);
+      props.onAuth(user);
+    }, 400);
+  }
+
+  function handleLogin() {
+    var allErrors = validate();
+    setTouched({email:true,pwd:true});
+    if (Object.keys(allErrors).length) { setErrors(allErrors); return; }
+    setLoading(true);
+    setTimeout(function(){
+      var users = authGetUsers();
+      var user = users.find(function(u){ return u.email.toLowerCase() === email.trim().toLowerCase(); });
+      if (!user) { setErrors({email:"Conta não encontrada."}); setTouched(function(t){return Object.assign({},t,{email:true});}); setLoading(false); return; }
+      if (user.pwdHash !== btoa(pwd)) { setErrors({pwd:"Senha incorreta."}); setTouched(function(t){return Object.assign({},t,{pwd:true});}); setLoading(false); return; }
+      authSaveSession(user);
+      setLoading(false);
+      props.onAuth(user);
+    }, 400);
+  }
+
+  function handleSubmit(e) { if (e && e.preventDefault) e.preventDefault(); if (mode === "register") handleRegister(); else handleLogin(); }
+
+  var isRegister = mode === "register";
+
+  // Field helpers
+  function Field(fp) {
+    var hasErr = touched[fp.name] && errors[fp.name];
+    return (
+      <div style={{marginBottom:16}}>
+        <label style={{display:"block",fontSize:11,fontWeight:700,color:"#334155",marginBottom:5,letterSpacing:.3}}>{fp.label}{fp.required && <span style={{color:"#ef4444",marginLeft:2}}>*</span>}</label>
+        <div style={{position:"relative"}}>
+          {fp.icon && (
+            <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center",zIndex:1}}>
+              <Icon name={fp.icon} size={15} color={hasErr?"#ef4444":"#94a3b8"}/>
+            </span>
+          )}
+          <input
+            id={"auth-"+fp.name}
+            type={fp.type || "text"}
+            value={fp.value}
+            autoComplete={fp.autoComplete}
+            placeholder={fp.placeholder}
+            disabled={loading}
+            onChange={function(e){
+              var v = fp.name === "whatsapp" ? formatWhatsApp(e.target.value) : e.target.value;
+              fp.onChange(v);
+              if (touched[fp.name]) setErrors(function(err){ return Object.assign({},err,validate(fp.name,v)); });
+            }}
+            onBlur={function(){ onBlur(fp.name, fp.value); }}
+            onFocus={function(e){ e.target.style.borderColor="#6366f1"; e.target.style.boxShadow="0 0 0 3px rgba(99,102,241,.12)"; }}
+            style={{
+              width:"100%", boxSizing:"border-box", fontFamily:"inherit",
+              background: loading ? "#f8fafc" : "#fff",
+              border: "1.5px solid " + (hasErr ? "#ef4444" : "#e2e8f0"),
+              borderRadius: 10,
+              padding: fp.icon ? "10px 40px 10px 36px" : "10px 40px 10px 14px",
+              fontSize: 13, color: "#0f172a", outline: "none",
+              transition: "border-color .15s, box-shadow .15s",
+              boxShadow: hasErr ? "0 0 0 3px rgba(239,68,68,.1)" : "none",
+            }}
+            onBlurCapture={function(e){ e.target.style.borderColor = hasErr ? "#ef4444" : "#e2e8f0"; e.target.style.boxShadow = hasErr ? "0 0 0 3px rgba(239,68,68,.1)" : "none"; }}
+          />
+          {fp.rightAction && fp.rightAction()}
+        </div>
+        {hasErr && (
+          <div style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}>
+            <Icon name="error" size={11} color="#ef4444"/>
+            <span style={{fontSize:11,color:"#ef4444",fontWeight:500}}>{errors[fp.name]}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px",boxSizing:"border-box",position:"relative",overflow:"hidden"}}>
+      {/* Ambient orbs */}
+      <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.15) 0%,transparent 70%)",top:"-20%",left:"-10%",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",width:400,height:400,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,.12) 0%,transparent 70%)",bottom:"-15%",right:"-5%",pointerEvents:"none"}}/>
+
+      {/* Card */}
+      <div style={{background:"#ffffff",borderRadius:24,boxShadow:"0 40px 80px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.06)",width:"100%",maxWidth:420,position:"relative",overflow:"hidden",animation:"fadeUp .4s cubic-bezier(.22,1,.36,1) both"}}>
+        {/* Top gradient bar */}
+        <div style={{height:4,background:"linear-gradient(90deg,#6366f1,#8b5cf6,#0ea5e9)",borderRadius:"24px 24px 0 0"}}/>
+
+        <div style={{padding:"28px 32px 32px"}}>
+          {/* Logo */}
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#6366f1,#4f46e5)",borderRadius:14,padding:"8px 16px",marginBottom:12}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              <span style={{fontSize:16,fontWeight:900,color:"#ffffff",letterSpacing:"-.3px"}}>{"+ Pipe"}</span>
+            </div>
+            <h1 style={{fontSize:20,fontWeight:800,color:"#0f172a",margin:0,letterSpacing:"-.4px"}}>
+              {isRegister ? "Crie sua conta" : "Bem-vindo de volta"}
+            </h1>
+            <p style={{fontSize:13,color:"#64748b",marginTop:4,marginBottom:0}}>
+              {isRegister ? "Comece grátis. Sem cartão de crédito." : "Acesse sua conta +Pipe"}
+            </p>
+          </div>
+
+          {/* Mode tabs */}
+          <div style={{display:"flex",background:"#f8fafc",borderRadius:12,padding:3,marginBottom:24,border:"1px solid #e2e8f0"}}>
+            {[{id:"login",label:"Entrar"},{id:"register",label:"Criar conta"}].map(function(t){
+              var active = mode === t.id;
+              return (
+                <button key={t.id} onClick={function(){ switchMode(t.id); }} style={{flex:1,padding:"8px 0",border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#4f46e5":"#64748b",fontWeight:active?700:500,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 4px rgba(15,23,42,.08)":"none",transition:"all .2s"}}>
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Form */}
+          <div>
+            {isRegister && (
+              <Field name="nome" label="Nome completo" icon="person" placeholder="Maria Silva" required
+                value={nome} onChange={setNome} autoComplete="name"/>
+            )}
+            <Field name="email" label="E-mail" icon="mail" type="email" placeholder="maria@empresa.com.br" required
+              value={email} onChange={setEmail} autoComplete={isRegister?"email":"username"}/>
+            {isRegister && (
+              <Field name="whatsapp" label="WhatsApp" icon="phone" type="tel" placeholder="(11) 91234-5678" required
+                value={whatsapp} onChange={setWhatsapp} autoComplete="tel"/>
+            )}
+            <Field name="pwd" label={isRegister?"Senha":"Senha"} icon="lock" type={showPwd?"text":"password"}
+              placeholder={isRegister?"Mínimo 8 caracteres":"Sua senha"} required
+              value={pwd} onChange={setPwd} autoComplete={isRegister?"new-password":"current-password"}
+              rightAction={function(){
+                return (
+                  <button type="button" onClick={function(){setShowPwd(function(s){return !s;});}}
+                    style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:2,display:"flex",alignItems:"center",color:"#94a3b8"}}>
+                    <Icon name={showPwd?"visibility_off":"visibility"} size={15}/>
+                  </button>
+                );
+              }}/>
+            {isRegister && (
+              <Field name="pwdC" label="Confirmar senha" icon="lock" type={showPwd?"text":"password"}
+                placeholder="Repita a senha" required
+                value={pwdC} onChange={setPwdC} autoComplete="new-password"/>
+            )}
+
+            {/* Submit */}
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              style={{width:"100%",background:loading?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:loading?"#94a3b8":"#fff",border:"none",borderRadius:12,padding:"12px 0",fontSize:14,fontWeight:700,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",marginTop:4,boxShadow:loading?"none":"0 8px 24px rgba(99,102,241,.35)",transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              {loading ? (
+                <><div style={{width:14,height:14,borderRadius:"50%",border:"2.5px solid rgba(148,163,184,.4)",borderTopColor:"#94a3b8",animation:"spin .7s linear infinite"}}/><span>{"Aguarde..."}</span></>
+              ) : (
+                isRegister ? "Criar conta grátis →" : "Entrar →"
+              )}
+            </button>
+
+            {/* Legal note on register */}
+            {isRegister && (
+              <p style={{fontSize:10.5,color:"#94a3b8",textAlign:"center",marginTop:12,marginBottom:0,lineHeight:1.6}}>
+                {"Ao criar sua conta, você concorda com nossos "}
+                <button onClick={function(){props.onLegal("terms");}} style={{background:"none",border:"none",padding:0,color:"#6366f1",cursor:"pointer",fontSize:10.5,fontFamily:"inherit",textDecoration:"underline"}}>{"Termos de Uso"}</button>
+                {" e "}
+                <button onClick={function(){props.onLegal("privacy");}} style={{background:"none",border:"none",padding:0,color:"#6366f1",cursor:"pointer",fontSize:10.5,fontFamily:"inherit",textDecoration:"underline"}}>{"Política de Privacidade"}</button>
+                {"."}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer strip */}
+        <div style={{background:"#f8fafc",borderTop:"1px solid #f1f5f9",padding:"12px 32px",textAlign:"center"}}>
+          <span style={{fontSize:11,color:"#94a3b8"}}>{"© "+new Date().getFullYear()+" +Pipe · Prospecção B2B Inteligente"}</span>
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",borderRadius:12,padding:"10px 20px",fontSize:13,fontWeight:600,boxShadow:"0 8px 24px rgba(0,0,0,.2)",zIndex:9999,whiteSpace:"nowrap",animation:"fadeUp .3s ease both"}}>
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
+  var _st_authUser  = useState(function(){ return authGetUser(); }); var authUser = _st_authUser[0]; var setAuthUser = _st_authUser[1];
+  var _st_legalAuth = useState(null); var legalAuth = _st_legalAuth[0]; var setLegalAuth = _st_legalAuth[1];
+
   var _st_nav = useState("home"); var nav = _st_nav[0]; var setNav = _st_nav[1];
   var _st_accounts = useState([]); var accounts = _st_accounts[0]; var setAccounts = _st_accounts[1];
   var _st_loading = useState(true); var loading = _st_loading[0]; var setLoading = _st_loading[1];
@@ -5921,13 +6203,20 @@ export default function App() {
     {id:"integracoes",  icon:"hub",                     label:"Integrações"},
   ];
   return (
+    <>
+    {!authUser ? (
+      <>
+        <AuthScreen onAuth={function(user){ setAuthUser(user); }} onLegal={function(type){ setLegalModal(type); }}/>
+        {legalModal && <LegalModal type={legalModal} onClose={function(){setLegalModal(null);}}/>}
+      </>
+    ) : (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#eef1f6",overflowX:"clip",maxWidth:"100vw"}}>
       <BetaBanner/>
     <div style={{display:"flex",flex:1,overflowX:"clip",minWidth:0,width:"100%"}}>
       <style>{css}</style>
       <div className="sidebar sidebar-desktop" style={{width:sidebarExpanded?224:64,background:"linear-gradient(180deg,#15192b 0%,#10131f 100%)",borderRight:"1px solid #1f2438",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"4px 0 24px rgba(15,23,42,.18)",position:"relative",overflow:"hidden",transition:"width .35s cubic-bezier(.4,0,.2,1)",zIndex:2}}>
         <div style={{height:3,background:"linear-gradient(90deg,#6366f1,#7c3aed,#a78bfa)",flexShrink:0}}/>
-        {sidebarExpanded ? (
+        {sidebarExpanded ? (<>
           <div style={{padding:"14px 14px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div style={{display:"flex",alignItems:"center",gap:9,overflow:"hidden",flex:1,minWidth:0}}>
                             <img src="data:image/png;base64,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" alt="+pipe" style={{width:36,height:36,borderRadius:10,objectFit:"contain",flexShrink:0}}/>
@@ -5940,7 +6229,20 @@ export default function App() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
           </div>
-        ) : (
+          {/* User strip — only in expanded sidebar */}
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 14px 10px",borderBottom:"1px solid rgba(255,255,255,.07)",flexShrink:0}}>
+            <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#6366f1,#4f46e5)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <span style={{fontSize:11,fontWeight:800,color:"#fff"}}>{(authUser.nome||"U")[0].toUpperCase()}</span>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(authUser.nome||"").split(" ")[0]}</div>
+              <div style={{fontSize:9,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.email}</div>
+            </div>
+            <button onClick={function(){authClearSession();setAuthUser(null);}} title="Sair da conta" style={{background:"none",border:"none",padding:"4px 5px",cursor:"pointer",borderRadius:7,display:"flex",alignItems:"center",transition:"background .15s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(239,68,68,.15)";}} onMouseLeave={function(e){e.currentTarget.style.background="none";}}>
+              <Icon name="logout" size={13} color="#64748b"/>
+            </button>
+          </div>
+        </>) : (
           <div style={{padding:"14px 0 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:8,flexShrink:0}}>
                       <img src="data:image/png;base64,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" alt="+pipe" style={{width:40,height:40,borderRadius:12,objectFit:"contain"}}/>
             <button onClick={function(){setSidebarExpanded(true);}} title="Expandir menu" style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#8b93a7",padding:0}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(255,255,255,.06)";e.currentTarget.style.color="#fff";}} onMouseLeave={function(e){e.currentTarget.style.background="transparent";e.currentTarget.style.color="rgba(255,255,255,.5)";}}>
@@ -6048,5 +6350,7 @@ export default function App() {
       <MobileNav nav={nav} setNav={setNav} setupDone={setupDone}/>
     </div>
     </div>
+    )}
+    </>
   );
 }
