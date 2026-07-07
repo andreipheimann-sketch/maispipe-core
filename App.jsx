@@ -5591,6 +5591,65 @@ function formatWhatsApp(v) {
 }
 
 // ── AUTH SCREEN ───────────────────────────────────────────────────────────────
+// ── AUTH FIELD — module-scope so identity is stable across AuthScreen renders ─
+// Root cause of cursor-jump: defining Field inside AuthScreen caused React to
+// unmount/remount the <input> on every keystroke. Module scope = stable reference.
+function AuthField(fp) {
+  var hasErr = fp.touched && fp.errors && fp.errors[fp.name];
+  return (
+    <div style={{marginBottom:16}}>
+      <label htmlFor={"auth-"+fp.name} style={{display:"block",fontSize:11,fontWeight:700,color:"#334155",marginBottom:5,letterSpacing:.3}}>
+        {fp.label}{fp.required && <span style={{color:"#ef4444",marginLeft:2}} aria-hidden="true">*</span>}
+      </label>
+      <div style={{position:"relative"}}>
+        {fp.icon && (
+          <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center",zIndex:1}} aria-hidden="true">
+            <Icon name={fp.icon} size={15} color={hasErr?"#ef4444":"#94a3b8"}/>
+          </span>
+        )}
+        <input
+          id={"auth-"+fp.name}
+          name={fp.name}
+          type={fp.type || "text"}
+          value={fp.value}
+          autoComplete={fp.autoComplete}
+          placeholder={fp.placeholder}
+          disabled={fp.disabled}
+          aria-invalid={hasErr ? "true" : "false"}
+          aria-describedby={hasErr ? ("auth-"+fp.name+"-err") : undefined}
+          onChange={fp.onChange}
+          onBlur={fp.onBlur}
+          onFocus={function(e){
+            e.target.style.borderColor="#6366f1";
+            e.target.style.boxShadow="0 0 0 3px rgba(99,102,241,.12)";
+          }}
+          onBlurCapture={function(e){
+            e.target.style.borderColor = hasErr ? "#ef4444" : "#e2e8f0";
+            e.target.style.boxShadow   = hasErr ? "0 0 0 3px rgba(239,68,68,.1)" : "none";
+          }}
+          style={{
+            width:"100%", boxSizing:"border-box", fontFamily:"inherit",
+            background: fp.disabled ? "#f8fafc" : "#fff",
+            border: "1.5px solid " + (hasErr ? "#ef4444" : "#e2e8f0"),
+            borderRadius: 10,
+            padding: fp.icon ? "10px 40px 10px 36px" : "10px 40px 10px 14px",
+            fontSize: 13, color: "#0f172a", outline: "none",
+            transition: "border-color .15s, box-shadow .15s",
+            boxShadow: hasErr ? "0 0 0 3px rgba(239,68,68,.1)" : "none",
+          }}
+        />
+        {fp.rightSlot}
+      </div>
+      {hasErr && (
+        <div id={"auth-"+fp.name+"-err"} role="alert" style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}>
+          <Icon name="error" size={11} color="#ef4444"/>
+          <span style={{fontSize:11,color:"#ef4444",fontWeight:500}}>{fp.errors[fp.name]}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AuthScreen(props) {
   var _st_mode    = useState("login"); var mode = _st_mode[0]; var setMode = _st_mode[1];
   var _st_nome    = useState(""); var nome = _st_nome[0]; var setNome = _st_nome[1];
@@ -5604,35 +5663,84 @@ function AuthScreen(props) {
   var _st_toast   = useState(null); var toast = _st_toast[0]; var setToast = _st_toast[1];
   var _st_touched = useState({}); var touched = _st_touched[0]; var setTouched = _st_touched[1];
 
+  // Keep refs to current field values so validate() closures don't go stale
+  var valuesRef = useRef({ nome, email, whatsapp, pwd, pwdC, mode });
+  valuesRef.current = { nome, email, whatsapp, pwd, pwdC, mode };
+
   function showToast(msg, color) {
     setToast({ msg, color: color || "#ef4444" });
     setTimeout(function(){ setToast(null); }, 4000);
   }
 
-  // Reset all state when switching modes
   function switchMode(m) {
     setMode(m); setNome(""); setEmail(""); setWhatsapp(""); setPwd(""); setPwdC("");
     setErrors({}); setTouched({}); setLoading(false);
   }
 
-  // Real-time validation
   function validate(field, value) {
+    var v = valuesRef.current;
     var e = {};
-    if (mode === "register") {
-      if (field === "nome" || !field)    { if (!(value !== undefined ? value : nome).trim() || (value !== undefined ? value : nome).trim().split(/\s+/).length < 2) e.nome = "Informe nome e sobrenome."; }
-      if (field === "email" || !field)   { if (!isValidEmail(value !== undefined ? value : email)) e.email = "E-mail inválido."; }
-      if (field === "whatsapp" || !field){ if (!isValidWhatsApp(value !== undefined ? value : whatsapp)) e.whatsapp = "WhatsApp inválido. Ex: (11) 91234-5678"; }
-      if (field === "pwd" || !field)     { if ((value !== undefined ? value : pwd).length < 8) e.pwd = "Mínimo 8 caracteres."; }
-      if (field === "pwdC" || !field)    { var p = field === "pwdC" ? (pwd) : pwd; if ((value !== undefined ? value : pwdC) !== p) e.pwdC = "Senhas não conferem."; }
+    var isReg = v.mode === "register";
+    var get = function(f) { return field === f && value !== undefined ? value : v[f]; };
+    if (isReg) {
+      var n = get("nome"); if (!n.trim() || n.trim().split(/\s+/).length < 2) e.nome = "Informe nome e sobrenome.";
+      var em = get("email"); if (!isValidEmail(em)) e.email = "E-mail inválido.";
+      var wa = get("whatsapp"); if (!isValidWhatsApp(wa)) e.whatsapp = "WhatsApp inválido. Ex: (11) 91234-5678";
+      var pw = get("pwd"); if (pw.length < 8) e.pwd = "Mínimo 8 caracteres.";
+      var pc = get("pwdC"); if (pc !== get("pwd")) e.pwdC = "Senhas não conferem.";
     } else {
-      if (field === "email" || !field)   { if (!isValidEmail(value !== undefined ? value : email)) e.email = "E-mail inválido."; }
-      if (field === "pwd" || !field)     { if (!(value !== undefined ? value : pwd).trim()) e.pwd = "Informe sua senha."; }
+      var em2 = get("email"); if (!isValidEmail(em2)) e.email = "E-mail inválido.";
+      var pw2 = get("pwd"); if (!pw2.trim()) e.pwd = "Informe sua senha.";
     }
+    // Only return errors relevant to the queried field (or all if field is undefined)
+    if (field) { var r = {}; if (e[field]) r[field] = e[field]; return r; }
     return e;
   }
 
-  function touch(field) { setTouched(function(t){ return Object.assign({},t,{[field]:true}); }); }
-  function onBlur(field, value) { touch(field); setErrors(function(e){ return Object.assign({},e,validate(field,value)); }); }
+  function handleBlur(field) {
+    return function() {
+      setTouched(function(t){ return Object.assign({},t,{[field]:true}); });
+      setErrors(function(prev){
+        var next = Object.assign({}, prev);
+        var fe = validate(field);
+        if (fe[field]) next[field] = fe[field]; else delete next[field];
+        return next;
+      });
+    };
+  }
+
+  // Stable onChange factories — created once, referenced by field name
+  // Using a ref map so they don't change identity on re-render
+  var handlersRef = useRef({});
+  handlersRef.current.nome     = function(e) {
+    setNome(e.target.value);
+    setErrors(function(prev){ if (!touched.nome) return prev; var fe=validate("nome",e.target.value); var n=Object.assign({},prev); if(fe.nome) n.nome=fe.nome; else delete n.nome; return n; });
+  };
+  handlersRef.current.email    = function(e) {
+    setEmail(e.target.value);
+    setErrors(function(prev){ if (!touched.email) return prev; var fe=validate("email",e.target.value); var n=Object.assign({},prev); if(fe.email) n.email=fe.email; else delete n.email; return n; });
+  };
+  handlersRef.current.whatsapp = function(e) {
+    var v = formatWhatsApp(e.target.value);
+    setWhatsapp(v);
+    setErrors(function(prev){ if (!touched.whatsapp) return prev; var fe=validate("whatsapp",v); var n=Object.assign({},prev); if(fe.whatsapp) n.whatsapp=fe.whatsapp; else delete n.whatsapp; return n; });
+  };
+  handlersRef.current.pwd      = function(e) {
+    setPwd(e.target.value);
+    setErrors(function(prev){ if (!touched.pwd) return prev; var fe=validate("pwd",e.target.value); var n=Object.assign({},prev); if(fe.pwd) n.pwd=fe.pwd; else delete n.pwd; return n; });
+  };
+  handlersRef.current.pwdC     = function(e) {
+    setPwdC(e.target.value);
+    setErrors(function(prev){ if (!touched.pwdC) return prev; var fe=validate("pwdC",e.target.value); var n=Object.assign({},prev); if(fe.pwdC) n.pwdC=fe.pwdC; else delete n.pwdC; return n; });
+  };
+
+  // Stable proxy: always calls the latest handler without changing identity
+  var stableHandlers = useRef({});
+  ["nome","email","whatsapp","pwd","pwdC"].forEach(function(k) {
+    if (!stableHandlers.current[k]) {
+      stableHandlers.current[k] = function(e) { handlersRef.current[k](e); };
+    }
+  });
 
   function handleRegister() {
     var allErrors = validate();
@@ -5641,19 +5749,14 @@ function AuthScreen(props) {
     setLoading(true);
     setTimeout(function(){
       var users = authGetUsers();
-      if (users.find(function(u){ return u.email.toLowerCase() === email.trim().toLowerCase(); })) {
-        setErrors({email:"E-mail já cadastrado."});
-        setTouched(function(t){ return Object.assign({},t,{email:true}); });
-        setLoading(false);
-        return;
+      var v = valuesRef.current;
+      if (users.find(function(u){ return u.email.toLowerCase() === v.email.trim().toLowerCase(); })) {
+        setErrors({email:"E-mail já cadastrado."}); setTouched(function(t){return Object.assign({},t,{email:true});}); setLoading(false); return;
       }
-      var user = { id:"u_"+Date.now(), nome:nome.trim(), email:email.trim().toLowerCase(), whatsapp:whatsapp, pwdHash:btoa(pwd), createdAt:Date.now() };
-      users.push(user);
-      authSaveUsers(users);
-      authSaveSession(user);
-      setLoading(false);
-      props.onAuth(user);
-    }, 400);
+      var user = { id:"u_"+Date.now(), nome:v.nome.trim(), email:v.email.trim().toLowerCase(), whatsapp:v.whatsapp, pwdHash:btoa(v.pwd), createdAt:Date.now() };
+      var updated = users.concat([user]); authSaveUsers(updated); authSaveSession(user);
+      setLoading(false); props.onAuth(user);
+    }, 350);
   }
 
   function handleLogin() {
@@ -5662,102 +5765,52 @@ function AuthScreen(props) {
     if (Object.keys(allErrors).length) { setErrors(allErrors); return; }
     setLoading(true);
     setTimeout(function(){
+      var v = valuesRef.current;
       var users = authGetUsers();
-      var user = users.find(function(u){ return u.email.toLowerCase() === email.trim().toLowerCase(); });
+      var user = users.find(function(u){ return u.email.toLowerCase() === v.email.trim().toLowerCase(); });
       if (!user) { setErrors({email:"Conta não encontrada."}); setTouched(function(t){return Object.assign({},t,{email:true});}); setLoading(false); return; }
-      if (user.pwdHash !== btoa(pwd)) { setErrors({pwd:"Senha incorreta."}); setTouched(function(t){return Object.assign({},t,{pwd:true});}); setLoading(false); return; }
-      authSaveSession(user);
-      setLoading(false);
-      props.onAuth(user);
-    }, 400);
+      if (user.pwdHash !== btoa(v.pwd)) { setErrors({pwd:"Senha incorreta."}); setTouched(function(t){return Object.assign({},t,{pwd:true});}); setLoading(false); return; }
+      authSaveSession(user); setLoading(false); props.onAuth(user);
+    }, 350);
   }
 
   function handleSubmit(e) { if (e && e.preventDefault) e.preventDefault(); if (mode === "register") handleRegister(); else handleLogin(); }
 
   var isRegister = mode === "register";
-
-  // Field helpers
-  function Field(fp) {
-    var hasErr = touched[fp.name] && errors[fp.name];
-    return (
-      <div style={{marginBottom:16}}>
-        <label style={{display:"block",fontSize:11,fontWeight:700,color:"#334155",marginBottom:5,letterSpacing:.3}}>{fp.label}{fp.required && <span style={{color:"#ef4444",marginLeft:2}}>*</span>}</label>
-        <div style={{position:"relative"}}>
-          {fp.icon && (
-            <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center",zIndex:1}}>
-              <Icon name={fp.icon} size={15} color={hasErr?"#ef4444":"#94a3b8"}/>
-            </span>
-          )}
-          <input
-            id={"auth-"+fp.name}
-            type={fp.type || "text"}
-            value={fp.value}
-            autoComplete={fp.autoComplete}
-            placeholder={fp.placeholder}
-            disabled={loading}
-            onChange={function(e){
-              var v = fp.name === "whatsapp" ? formatWhatsApp(e.target.value) : e.target.value;
-              fp.onChange(v);
-              if (touched[fp.name]) setErrors(function(err){ return Object.assign({},err,validate(fp.name,v)); });
-            }}
-            onBlur={function(){ onBlur(fp.name, fp.value); }}
-            onFocus={function(e){ e.target.style.borderColor="#6366f1"; e.target.style.boxShadow="0 0 0 3px rgba(99,102,241,.12)"; }}
-            style={{
-              width:"100%", boxSizing:"border-box", fontFamily:"inherit",
-              background: loading ? "#f8fafc" : "#fff",
-              border: "1.5px solid " + (hasErr ? "#ef4444" : "#e2e8f0"),
-              borderRadius: 10,
-              padding: fp.icon ? "10px 40px 10px 36px" : "10px 40px 10px 14px",
-              fontSize: 13, color: "#0f172a", outline: "none",
-              transition: "border-color .15s, box-shadow .15s",
-              boxShadow: hasErr ? "0 0 0 3px rgba(239,68,68,.1)" : "none",
-            }}
-            onBlurCapture={function(e){ e.target.style.borderColor = hasErr ? "#ef4444" : "#e2e8f0"; e.target.style.boxShadow = hasErr ? "0 0 0 3px rgba(239,68,68,.1)" : "none"; }}
-          />
-          {fp.rightAction && fp.rightAction()}
-        </div>
-        {hasErr && (
-          <div style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}>
-            <Icon name="error" size={11} color="#ef4444"/>
-            <span style={{fontSize:11,color:"#ef4444",fontWeight:500}}>{errors[fp.name]}</span>
-          </div>
-        )}
-      </div>
-    );
-  }
+  var sh = stableHandlers.current;
+  var pwdToggle = (
+    <button type="button" onClick={function(){setShowPwd(function(s){return !s;});}} aria-label={showPwd?"Ocultar senha":"Mostrar senha"}
+      style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",alignItems:"center",color:"#94a3b8"}}>
+      <Icon name={showPwd?"visibility_off":"visibility"} size={15}/>
+    </button>
+  );
 
   return (
-    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px",boxSizing:"border-box",position:"relative",overflow:"hidden"}}>
-      {/* Ambient orbs */}
-      <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.15) 0%,transparent 70%)",top:"-20%",left:"-10%",pointerEvents:"none"}}/>
-      <div style={{position:"absolute",width:400,height:400,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,.12) 0%,transparent 70%)",bottom:"-15%",right:"-5%",pointerEvents:"none"}}/>
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px",boxSizing:"border-box",position:"relative",overflow:"hidden"}} role="main">
+      <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.15) 0%,transparent 70%)",top:"-20%",left:"-10%",pointerEvents:"none"}} aria-hidden="true"/>
+      <div style={{position:"absolute",width:400,height:400,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,.12) 0%,transparent 70%)",bottom:"-15%",right:"-5%",pointerEvents:"none"}} aria-hidden="true"/>
 
-      {/* Card */}
-      <div style={{background:"#ffffff",borderRadius:24,boxShadow:"0 40px 80px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.06)",width:"100%",maxWidth:420,position:"relative",overflow:"hidden",animation:"fadeUp .4s cubic-bezier(.22,1,.36,1) both"}}>
-        {/* Top gradient bar */}
-        <div style={{height:4,background:"linear-gradient(90deg,#6366f1,#8b5cf6,#0ea5e9)",borderRadius:"24px 24px 0 0"}}/>
+      <div style={{background:"#ffffff",borderRadius:24,boxShadow:"0 40px 80px rgba(0,0,0,.35)",width:"100%",maxWidth:420,position:"relative",overflow:"hidden",animation:"fadeUp .4s cubic-bezier(.22,1,.36,1) both"}} role="dialog" aria-label={isRegister?"Criar conta":"Entrar"}>
+        <div style={{height:4,background:"linear-gradient(90deg,#6366f1,#8b5cf6,#0ea5e9)"}} aria-hidden="true"/>
 
         <div style={{padding:"28px 32px 32px"}}>
           {/* Logo */}
           <div style={{textAlign:"center",marginBottom:24}}>
             <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#6366f1,#4f46e5)",borderRadius:14,padding:"8px 16px",marginBottom:12}}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
               <span style={{fontSize:16,fontWeight:900,color:"#ffffff",letterSpacing:"-.3px"}}>{"+ Pipe"}</span>
             </div>
-            <h1 style={{fontSize:20,fontWeight:800,color:"#0f172a",margin:0,letterSpacing:"-.4px"}}>
-              {isRegister ? "Crie sua conta" : "Bem-vindo de volta"}
-            </h1>
-            <p style={{fontSize:13,color:"#64748b",marginTop:4,marginBottom:0}}>
-              {isRegister ? "Comece grátis. Sem cartão de crédito." : "Acesse sua conta +Pipe"}
-            </p>
+            <h1 style={{fontSize:20,fontWeight:800,color:"#0f172a",margin:0,letterSpacing:"-.4px"}}>{isRegister ? "Crie sua conta" : "Bem-vindo de volta"}</h1>
+            <p style={{fontSize:13,color:"#64748b",marginTop:4,marginBottom:0}}>{isRegister ? "Comece grátis. Sem cartão de crédito." : "Acesse sua conta +Pipe"}</p>
           </div>
 
           {/* Mode tabs */}
-          <div style={{display:"flex",background:"#f8fafc",borderRadius:12,padding:3,marginBottom:24,border:"1px solid #e2e8f0"}}>
+          <div style={{display:"flex",background:"#f8fafc",borderRadius:12,padding:3,marginBottom:24,border:"1px solid #e2e8f0"}} role="tablist">
             {[{id:"login",label:"Entrar"},{id:"register",label:"Criar conta"}].map(function(t){
               var active = mode === t.id;
               return (
-                <button key={t.id} onClick={function(){ switchMode(t.id); }} style={{flex:1,padding:"8px 0",border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#4f46e5":"#64748b",fontWeight:active?700:500,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 4px rgba(15,23,42,.08)":"none",transition:"all .2s"}}>
+                <button key={t.id} role="tab" aria-selected={active} onClick={function(){ switchMode(t.id); }}
+                  style={{flex:1,padding:"8px 0",border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#4f46e5":"#64748b",fontWeight:active?700:500,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 4px rgba(15,23,42,.08)":"none",transition:"all .2s"}}>
                   {t.label}
                 </button>
               );
@@ -5765,69 +5818,283 @@ function AuthScreen(props) {
           </div>
 
           {/* Form */}
-          <div>
-            {isRegister && (
-              <Field name="nome" label="Nome completo" icon="person" placeholder="Maria Silva" required
-                value={nome} onChange={setNome} autoComplete="name"/>
-            )}
-            <Field name="email" label="E-mail" icon="mail" type="email" placeholder="maria@empresa.com.br" required
-              value={email} onChange={setEmail} autoComplete={isRegister?"email":"username"}/>
-            {isRegister && (
-              <Field name="whatsapp" label="WhatsApp" icon="phone" type="tel" placeholder="(11) 91234-5678" required
-                value={whatsapp} onChange={setWhatsapp} autoComplete="tel"/>
-            )}
-            <Field name="pwd" label={isRegister?"Senha":"Senha"} icon="lock" type={showPwd?"text":"password"}
+          <form onSubmit={handleSubmit} noValidate>
+            {isRegister && <AuthField name="nome" label="Nome completo" icon="person" placeholder="Maria Silva" required
+              value={nome} onChange={sh.nome} onBlur={handleBlur("nome")} disabled={loading} touched={touched} errors={errors} autoComplete="name"/>}
+            <AuthField name="email" label="E-mail" icon="mail" type="email" placeholder="maria@empresa.com.br" required
+              value={email} onChange={sh.email} onBlur={handleBlur("email")} disabled={loading} touched={touched} errors={errors} autoComplete={isRegister?"email":"username"}/>
+            {isRegister && <AuthField name="whatsapp" label="WhatsApp" icon="phone" type="tel" placeholder="(11) 91234-5678" required
+              value={whatsapp} onChange={sh.whatsapp} onBlur={handleBlur("whatsapp")} disabled={loading} touched={touched} errors={errors} autoComplete="tel"/>}
+            <AuthField name="pwd" label="Senha" icon="lock" type={showPwd?"text":"password"}
               placeholder={isRegister?"Mínimo 8 caracteres":"Sua senha"} required
-              value={pwd} onChange={setPwd} autoComplete={isRegister?"new-password":"current-password"}
-              rightAction={function(){
-                return (
-                  <button type="button" onClick={function(){setShowPwd(function(s){return !s;});}}
-                    style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:2,display:"flex",alignItems:"center",color:"#94a3b8"}}>
-                    <Icon name={showPwd?"visibility_off":"visibility"} size={15}/>
-                  </button>
-                );
-              }}/>
-            {isRegister && (
-              <Field name="pwdC" label="Confirmar senha" icon="lock" type={showPwd?"text":"password"}
-                placeholder="Repita a senha" required
-                value={pwdC} onChange={setPwdC} autoComplete="new-password"/>
-            )}
+              value={pwd} onChange={sh.pwd} onBlur={handleBlur("pwd")} disabled={loading} touched={touched} errors={errors}
+              autoComplete={isRegister?"new-password":"current-password"} rightSlot={pwdToggle}/>
+            {isRegister && <AuthField name="pwdC" label="Confirmar senha" icon="lock" type={showPwd?"text":"password"}
+              placeholder="Repita a senha" required
+              value={pwdC} onChange={sh.pwdC} onBlur={handleBlur("pwdC")} disabled={loading} touched={touched} errors={errors} autoComplete="new-password"/>}
 
-            {/* Submit */}
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
+            <button type="submit" disabled={loading}
               style={{width:"100%",background:loading?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:loading?"#94a3b8":"#fff",border:"none",borderRadius:12,padding:"12px 0",fontSize:14,fontWeight:700,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",marginTop:4,boxShadow:loading?"none":"0 8px 24px rgba(99,102,241,.35)",transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              {loading ? (
-                <><div style={{width:14,height:14,borderRadius:"50%",border:"2.5px solid rgba(148,163,184,.4)",borderTopColor:"#94a3b8",animation:"spin .7s linear infinite"}}/><span>{"Aguarde..."}</span></>
-              ) : (
-                isRegister ? "Criar conta grátis →" : "Entrar →"
-              )}
+              {loading
+                ? <><div style={{width:14,height:14,borderRadius:"50%",border:"2.5px solid rgba(148,163,184,.4)",borderTopColor:"#94a3b8",animation:"spin .7s linear infinite"}}/><span>Aguarde...</span></>
+                : <span>{isRegister ? "Criar conta grátis →" : "Entrar →"}</span>
+              }
             </button>
 
-            {/* Legal note on register */}
             {isRegister && (
               <p style={{fontSize:10.5,color:"#94a3b8",textAlign:"center",marginTop:12,marginBottom:0,lineHeight:1.6}}>
                 {"Ao criar sua conta, você concorda com nossos "}
-                <button onClick={function(){props.onLegal("terms");}} style={{background:"none",border:"none",padding:0,color:"#6366f1",cursor:"pointer",fontSize:10.5,fontFamily:"inherit",textDecoration:"underline"}}>{"Termos de Uso"}</button>
+                <button type="button" onClick={function(){props.onLegal("terms");}} style={{background:"none",border:"none",padding:0,color:"#6366f1",cursor:"pointer",fontSize:10.5,fontFamily:"inherit",textDecoration:"underline"}}>Termos de Uso</button>
                 {" e "}
-                <button onClick={function(){props.onLegal("privacy");}} style={{background:"none",border:"none",padding:0,color:"#6366f1",cursor:"pointer",fontSize:10.5,fontFamily:"inherit",textDecoration:"underline"}}>{"Política de Privacidade"}</button>
-                {"."}
+                <button type="button" onClick={function(){props.onLegal("privacy");}} style={{background:"none",border:"none",padding:0,color:"#6366f1",cursor:"pointer",fontSize:10.5,fontFamily:"inherit",textDecoration:"underline"}}>Política de Privacidade</button>.
               </p>
             )}
-          </div>
+          </form>
         </div>
 
-        {/* Footer strip */}
         <div style={{background:"#f8fafc",borderTop:"1px solid #f1f5f9",padding:"12px 32px",textAlign:"center"}}>
           <span style={{fontSize:11,color:"#94a3b8"}}>{"© "+new Date().getFullYear()+" +Pipe · Prospecção B2B Inteligente"}</span>
         </div>
       </div>
 
-      {/* Toast */}
       {toast && (
-        <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",borderRadius:12,padding:"10px 20px",fontSize:13,fontWeight:600,boxShadow:"0 8px 24px rgba(0,0,0,.2)",zIndex:9999,whiteSpace:"nowrap",animation:"fadeUp .3s ease both"}}>
+        <div role="alert" aria-live="assertive" style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",borderRadius:12,padding:"10px 20px",fontSize:13,fontWeight:600,boxShadow:"0 8px 24px rgba(0,0,0,.2)",zIndex:9999,whiteSpace:"nowrap",animation:"fadeUp .3s ease both"}}>
           {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MY ACCOUNT MODAL ──────────────────────────────────────────────────────────
+function MyAccountModal(props) {
+  var user    = props.user;    // current session user
+  var onClose = props.onClose;
+  var onSave  = props.onSave;  // callback(updatedUser)
+
+  var _st_tab     = useState("profile"); var tab = _st_tab[0]; var setTab = _st_tab[1];
+  var _st_nome    = useState(user.nome    || ""); var nome    = _st_nome[0];    var setNome    = _st_nome[1];
+  var _st_email   = useState(user.email   || ""); var email   = _st_email[0];   var setEmail   = _st_email[1];
+  var _st_whatsapp= useState(user.whatsapp|| ""); var whatsapp= _st_whatsapp[0];var setWhatsapp= _st_whatsapp[1];
+  var _st_pwdOld  = useState(""); var pwdOld = _st_pwdOld[0]; var setPwdOld = _st_pwdOld[1];
+  var _st_pwdNew  = useState(""); var pwdNew = _st_pwdNew[0]; var setPwdNew = _st_pwdNew[1];
+  var _st_pwdC    = useState(""); var pwdC   = _st_pwdC[0];   var setPwdC   = _st_pwdC[1];
+  var _st_show    = useState(false); var show = _st_show[0]; var setShow = _st_show[1];
+  var _st_errors  = useState({}); var errors  = _st_errors[0];  var setErrors  = _st_errors[1];
+  var _st_touched = useState({}); var touched = _st_touched[0]; var setTouched = _st_touched[1];
+  var _st_saving  = useState(false); var saving  = _st_saving[0];  var setSaving  = _st_saving[1];
+  var _st_toast   = useState(null);  var toast   = _st_toast[0];   var setToast   = _st_toast[1];
+  var _st_dirty   = useState(false); var dirty   = _st_dirty[0];   var setDirty   = _st_dirty[1];
+
+  // Keep refs so handlers stay stable
+  var valRef = useRef({nome, email, whatsapp, pwdOld, pwdNew, pwdC});
+  valRef.current = {nome, email, whatsapp, pwdOld, pwdNew, pwdC};
+
+  useEffect(function(){
+    function onKey(e){ if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return function(){ document.removeEventListener("keydown", onKey); };
+  }, []);
+
+  function showMsg(msg, color) {
+    setToast({msg, color: color||"#059669"});
+    setTimeout(function(){ setToast(null); }, 3500);
+  }
+
+  function validateProfile() {
+    var v = valRef.current; var e = {};
+    var n = v.nome.trim(); if (!n || n.split(/\s+/).length < 2) e.nome = "Informe nome e sobrenome.";
+    if (!isValidEmail(v.email)) e.email = "E-mail inválido.";
+    if (v.whatsapp && !isValidWhatsApp(v.whatsapp)) e.whatsapp = "WhatsApp inválido.";
+    return e;
+  }
+  function validatePassword() {
+    var v = valRef.current; var e = {};
+    if (!v.pwdOld.trim()) e.pwdOld = "Informe a senha atual.";
+    if (v.pwdNew.length < 8) e.pwdNew = "Mínimo 8 caracteres.";
+    if (v.pwdNew !== v.pwdC) e.pwdC = "Senhas não conferem.";
+    return e;
+  }
+
+  function handleSaveProfile() {
+    var v = valRef.current;
+    setTouched({nome:true,email:true,whatsapp:true});
+    var e = validateProfile();
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setSaving(true);
+    setTimeout(function(){
+      // Check email uniqueness (excluding self)
+      var users = authGetUsers();
+      var conflict = users.find(function(u){ return u.email.toLowerCase() === v.email.trim().toLowerCase() && u.id !== user.id; });
+      if (conflict) { setErrors({email:"E-mail já usado por outra conta."}); setTouched(function(t){return Object.assign({},t,{email:true});}); setSaving(false); return; }
+      var updated = Object.assign({}, user, { nome:v.nome.trim(), email:v.email.trim().toLowerCase(), whatsapp:v.whatsapp });
+      var all = users.map(function(u){ return u.id===user.id ? updated : u; });
+      authSaveUsers(all); authSaveSession(updated);
+      setSaving(false); setDirty(false);
+      showMsg("Perfil atualizado com sucesso.");
+      onSave(updated);
+    }, 350);
+  }
+
+  function handleSavePassword() {
+    var v = valRef.current;
+    setTouched({pwdOld:true,pwdNew:true,pwdC:true});
+    var e = validatePassword();
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setSaving(true);
+    setTimeout(function(){
+      var users = authGetUsers();
+      var u = users.find(function(u){ return u.id === user.id; });
+      if (!u || u.pwdHash !== btoa(v.pwdOld)) {
+        setErrors({pwdOld:"Senha atual incorreta."}); setTouched(function(t){return Object.assign({},t,{pwdOld:true});}); setSaving(false); return;
+      }
+      var updated = Object.assign({}, u, { pwdHash: btoa(v.pwdNew) });
+      var all = users.map(function(uu){ return uu.id===user.id ? updated : uu; });
+      authSaveUsers(all); authSaveSession(updated);
+      setPwdOld(""); setPwdNew(""); setPwdC("");
+      setTouched({}); setErrors({});
+      setSaving(false);
+      showMsg("Senha alterada com sucesso.");
+      onSave(updated);
+    }, 350);
+  }
+
+  // Stable field handlers
+  var hr = useRef({});
+  hr.current.nome     = function(e){ setNome(e.target.value); setDirty(true); setErrors(function(p){ var n=Object.assign({},p); if(e.target.value.trim().split(/\s+/).length>=2) delete n.nome; return n; }); };
+  hr.current.email    = function(e){ setEmail(e.target.value); setDirty(true); setErrors(function(p){ var n=Object.assign({},p); if(isValidEmail(e.target.value)) delete n.email; return n; }); };
+  hr.current.whatsapp = function(e){ var v=formatWhatsApp(e.target.value); setWhatsapp(v); setDirty(true); };
+  hr.current.pwdOld   = function(e){ setPwdOld(e.target.value); setErrors(function(p){ var n=Object.assign({},p); if(e.target.value.trim()) delete n.pwdOld; return n; }); };
+  hr.current.pwdNew   = function(e){ setPwdNew(e.target.value); setErrors(function(p){ var n=Object.assign({},p); if(e.target.value.length>=8) delete n.pwdNew; return n; }); };
+  hr.current.pwdC     = function(e){ setPwdC(e.target.value); setErrors(function(p){ var n=Object.assign({},p); if(e.target.value===valRef.current.pwdNew) delete n.pwdC; return n; }); };
+
+  var sh = useRef({});
+  ["nome","email","whatsapp","pwdOld","pwdNew","pwdC"].forEach(function(k){
+    if (!sh.current[k]) sh.current[k] = function(e){ hr.current[k](e); };
+  });
+
+  var initials = (user.nome||"U").split(" ").map(function(p){return p[0];}).slice(0,2).join("").toUpperCase();
+  var memberSince = new Date(user.createdAt||Date.now()).toLocaleDateString("pt-BR",{month:"short",year:"numeric"});
+
+  var TABS = [{id:"profile",icon:"person",label:"Dados pessoais"},{id:"password",icon:"lock",label:"Alterar senha"}];
+
+  function Field(fp) {
+    var hasErr = fp.touched && fp.touched[fp.name] && errors[fp.name];
+    return (
+      <div style={{marginBottom:16}}>
+        <label htmlFor={"acc-"+fp.name} style={{display:"block",fontSize:11,fontWeight:700,color:"#334155",marginBottom:5,letterSpacing:.3}}>
+          {fp.label}{fp.required && <span style={{color:"#ef4444",marginLeft:2}} aria-hidden="true">*</span>}
+        </label>
+        <div style={{position:"relative"}}>
+          {fp.icon && <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center"}} aria-hidden="true"><Icon name={fp.icon} size={14} color={hasErr?"#ef4444":"#94a3b8"}/></span>}
+          <input id={"acc-"+fp.name} name={fp.name} type={fp.type||"text"} value={fp.value}
+            autoComplete={fp.autoComplete} placeholder={fp.placeholder} disabled={saving}
+            aria-invalid={hasErr?"true":"false"}
+            aria-describedby={hasErr?("acc-"+fp.name+"-err"):undefined}
+            onChange={fp.onChange} onBlur={fp.onBlur||function(){}}
+            onFocus={function(e){e.target.style.borderColor="#6366f1";e.target.style.boxShadow="0 0 0 3px rgba(99,102,241,.12)";}}
+            onBlurCapture={function(e){e.target.style.borderColor=hasErr?"#ef4444":"#e2e8f0";e.target.style.boxShadow=hasErr?"0 0 0 3px rgba(239,68,68,.1)":"none";}}
+            style={{width:"100%",boxSizing:"border-box",fontFamily:"inherit",background:saving?"#f8fafc":"#fff",border:"1.5px solid "+(hasErr?"#ef4444":"#e2e8f0"),borderRadius:10,padding:fp.icon?"10px 40px 10px 36px":"10px 14px",fontSize:13,color:"#0f172a",outline:"none",transition:"border-color .15s, box-shadow .15s",boxShadow:hasErr?"0 0 0 3px rgba(239,68,68,.1)":"none"}}/>
+          {fp.rightSlot}
+        </div>
+        {hasErr && <div id={"acc-"+fp.name+"-err"} role="alert" style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}><Icon name="error" size={11} color="#ef4444"/><span style={{fontSize:11,color:"#ef4444",fontWeight:500}}>{errors[fp.name]}</span></div>}
+      </div>
+    );
+  }
+
+  var pwdSlot = (
+    <button type="button" onClick={function(){setShow(function(s){return !s;});}} aria-label={show?"Ocultar":"Mostrar"}
+      style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",alignItems:"center",color:"#94a3b8"}}>
+      <Icon name={show?"visibility_off":"visibility"} size={14}/>
+    </button>
+  );
+
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="acct-modal-title"
+      onClick={function(e){if(e.target===e.currentTarget)onClose();}}
+      style={{position:"fixed",inset:0,zIndex:9100,background:"rgba(15,23,42,.55)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px",boxSizing:"border-box"}}>
+      <div style={{background:"#fff",borderRadius:20,boxShadow:"0 32px 80px rgba(15,23,42,.22)",width:"100%",maxWidth:520,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",animation:"fadeUp .25s cubic-bezier(.22,1,.36,1) both"}}>
+        {/* Header */}
+        <div style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",padding:"24px 24px 20px",flexShrink:0,position:"relative"}}>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            {/* Avatar */}
+            <div style={{width:52,height:52,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#4f46e5)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 8px 24px rgba(99,102,241,.4)"}}>
+              <span style={{fontSize:18,fontWeight:800,color:"#fff"}}>{initials}</span>
+            </div>
+            <div style={{minWidth:0}}>
+              <h2 id="acct-modal-title" style={{margin:0,fontSize:17,fontWeight:800,color:"#fff",letterSpacing:"-.3px"}}>{user.nome}</h2>
+              <p style={{margin:"2px 0 0",fontSize:11,color:"#64748b"}}>{user.email}</p>
+              <p style={{margin:"1px 0 0",fontSize:10,color:"#334155",fontWeight:500}}>{"Membro desde "+memberSince}</p>
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Fechar" style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.08)",border:"1px solid rgba(255,255,255,.12)",borderRadius:9,width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .15s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(255,255,255,.16)";}} onMouseLeave={function(e){e.currentTarget.style.background="rgba(255,255,255,.08)";}}>
+            <Icon name="close" size={14} color="#94a3b8"/>
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",gap:0,borderBottom:"1px solid #e6e9ef",flexShrink:0,padding:"0 24px",background:"#fafbfd"}}>
+          {TABS.map(function(t){
+            var active = tab===t.id;
+            return (
+              <button key={t.id} role="tab" aria-selected={active} onClick={function(){setTab(t.id);setErrors({});setTouched({});}}
+                style={{display:"flex",alignItems:"center",gap:6,padding:"12px 16px 10px",border:"none",borderBottom:"2.5px solid "+(active?"#6366f1":"transparent"),background:"transparent",color:active?"#4f46e5":"#64748b",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:active?700:500,transition:"all .15s",whiteSpace:"nowrap"}}>
+                <Icon name={t.icon} size={13} color={active?"#6366f1":"#94a3b8"}/>{t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Body */}
+        <div style={{overflowY:"auto",padding:"24px",flex:1}} tabIndex={0}>
+          {tab === "profile" ? (
+            <form onSubmit={function(e){e.preventDefault();handleSaveProfile();}} noValidate>
+              <Field name="nome" label="Nome completo" icon="person" placeholder="Maria Silva" required value={nome} onChange={sh.current.nome} touched={touched} autoComplete="name"/>
+              <Field name="email" label="E-mail" icon="mail" type="email" placeholder="maria@empresa.com.br" required value={email} onChange={sh.current.email} touched={touched} autoComplete="email"/>
+              <Field name="whatsapp" label="WhatsApp" icon="phone" type="tel" placeholder="(11) 91234-5678" value={whatsapp} onChange={sh.current.whatsapp} touched={touched} autoComplete="tel"/>
+
+              <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10,marginTop:8}}>
+                <button type="button" onClick={onClose} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:10,padding:"9px 18px",fontSize:13,color:"#64748b",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Cancelar</button>
+                <button type="submit" disabled={saving||!dirty}
+                  style={{background:saving||!dirty?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:saving||!dirty?"#94a3b8":"#fff",border:"none",borderRadius:10,padding:"9px 20px",fontSize:13,fontWeight:700,cursor:saving||!dirty?"not-allowed":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:7,boxShadow:saving||!dirty?"none":"0 6px 20px rgba(99,102,241,.3)",transition:"all .2s"}}>
+                  {saving ? <><div style={{width:12,height:12,borderRadius:"50%",border:"2px solid rgba(148,163,184,.4)",borderTopColor:"#94a3b8",animation:"spin .7s linear infinite"}}/><span>Salvando...</span></> : <><Icon name="save" size={13}/>Salvar alterações</>}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={function(e){e.preventDefault();handleSavePassword();}} noValidate>
+              <div style={{background:"#f8fafc",borderRadius:12,padding:"12px 14px",marginBottom:20,display:"flex",gap:10,alignItems:"flex-start",border:"1px solid #e2e8f0"}}>
+                <Icon name="info" size={15} color="#6366f1"/>
+                <p style={{margin:0,fontSize:12,color:"#475569",lineHeight:1.6}}>{"Use mínimo 8 caracteres. Recomendamos uma combinação de letras, números e símbolos."}</p>
+              </div>
+              <Field name="pwdOld" label="Senha atual" icon="lock" type={show?"text":"password"} placeholder="Sua senha atual" required value={pwdOld} onChange={sh.current.pwdOld} touched={touched} autoComplete="current-password" rightSlot={pwdSlot}/>
+              <div style={{height:1,background:"#f1f5f9",margin:"4px 0 16px"}}/>
+              <Field name="pwdNew" label="Nova senha" icon="lock_reset" type={show?"text":"password"} placeholder="Mínimo 8 caracteres" required value={pwdNew} onChange={sh.current.pwdNew} touched={touched} autoComplete="new-password"/>
+              <Field name="pwdC" label="Confirmar nova senha" icon="lock_reset" type={show?"text":"password"} placeholder="Repita a nova senha" required value={pwdC} onChange={sh.current.pwdC} touched={touched} autoComplete="new-password"/>
+              {/* Strength bar */}
+              {pwdNew.length > 0 && (function(){
+                var s = 0; if(pwdNew.length>=8)s++; if(/[A-Z]/.test(pwdNew))s++; if(/[0-9]/.test(pwdNew))s++; if(/[^A-Za-z0-9]/.test(pwdNew))s++;
+                var labels=["Fraca","Razoável","Boa","Forte"]; var colors=["#ef4444","#f59e0b","#3b82f6","#10b981"];
+                return <div style={{marginBottom:16}}>
+                  <div style={{display:"flex",gap:3,marginBottom:4}}>{[0,1,2,3].map(function(i){return <div key={i} style={{flex:1,height:3,borderRadius:2,background:i<s?colors[s-1]:"#e2e8f0",transition:"background .3s"}}/>})}</div>
+                  <span style={{fontSize:10,color:colors[s-1]||"#94a3b8",fontWeight:600}}>{s>0?labels[s-1]:""}</span>
+                </div>;
+              })()}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10,marginTop:8}}>
+                <button type="button" onClick={onClose} style={{background:"none",border:"1px solid #e2e8f0",borderRadius:10,padding:"9px 18px",fontSize:13,color:"#64748b",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Cancelar</button>
+                <button type="submit" disabled={saving}
+                  style={{background:saving?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:saving?"#94a3b8":"#fff",border:"none",borderRadius:10,padding:"9px 20px",fontSize:13,fontWeight:700,cursor:saving?"not-allowed":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:7,boxShadow:saving?"none":"0 6px 20px rgba(99,102,241,.3)",transition:"all .2s"}}>
+                  {saving ? <><div style={{width:12,height:12,borderRadius:"50%",border:"2px solid rgba(148,163,184,.4)",borderTopColor:"#94a3b8",animation:"spin .7s linear infinite"}}/><span>Salvando...</span></> : <><Icon name="lock_reset" size={13}/>Alterar senha</>}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {toast && (
+        <div role="alert" aria-live="polite" style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",borderRadius:12,padding:"10px 22px",fontSize:13,fontWeight:600,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:9200,animation:"fadeUp .3s ease both",display:"flex",alignItems:"center",gap:8}}>
+          <Icon name={toast.color==="#ef4444"?"error":"check_circle"} size={15} color="#fff"/>{toast.msg}
         </div>
       )}
     </div>
@@ -5837,6 +6104,7 @@ function AuthScreen(props) {
 export default function App() {
   var _st_authUser  = useState(function(){ return authGetUser(); }); var authUser = _st_authUser[0]; var setAuthUser = _st_authUser[1];
   var _st_legalAuth = useState(null); var legalAuth = _st_legalAuth[0]; var setLegalAuth = _st_legalAuth[1];
+  var _st_myAccModal= useState(false); var myAccModal = _st_myAccModal[0]; var setMyAccModal = _st_myAccModal[1];
 
   var _st_nav = useState("home"); var nav = _st_nav[0]; var setNav = _st_nav[1];
   var _st_accounts = useState([]); var accounts = _st_accounts[0]; var setAccounts = _st_accounts[1];
@@ -6229,16 +6497,25 @@ export default function App() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
           </div>
-          {/* User strip — only in expanded sidebar */}
+          {/* User strip — clickable to open Minha Conta */}
           <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 14px 10px",borderBottom:"1px solid rgba(255,255,255,.07)",flexShrink:0}}>
-            <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#6366f1,#4f46e5)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <span style={{fontSize:11,fontWeight:800,color:"#fff"}}>{(authUser.nome||"U")[0].toUpperCase()}</span>
-            </div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(authUser.nome||"").split(" ")[0]}</div>
-              <div style={{fontSize:9,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.email}</div>
-            </div>
-            <button onClick={function(){authClearSession();setAuthUser(null);}} title="Sair da conta" style={{background:"none",border:"none",padding:"4px 5px",cursor:"pointer",borderRadius:7,display:"flex",alignItems:"center",transition:"background .15s"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(239,68,68,.15)";}} onMouseLeave={function(e){e.currentTarget.style.background="none";}}>
+            <button onClick={function(){setMyAccModal(true);}} title="Minha conta"
+              style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,background:"none",border:"none",cursor:"pointer",padding:"4px 0",borderRadius:8,transition:"background .15s",textAlign:"left"}}
+              onMouseEnter={function(e){e.currentTarget.style.background="rgba(255,255,255,.05)";}}
+              onMouseLeave={function(e){e.currentTarget.style.background="none";}}>
+              <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#6366f1,#4f46e5)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <span style={{fontSize:11,fontWeight:800,color:"#fff"}}>{(authUser.nome||"U")[0].toUpperCase()}</span>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(authUser.nome||"").split(" ")[0]}</div>
+                <div style={{fontSize:9,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{authUser.email}</div>
+              </div>
+              <Icon name="manage_accounts" size={13} color="#475569"/>
+            </button>
+            <button onClick={function(){authClearSession();setAuthUser(null);}} title="Sair da conta"
+              style={{background:"none",border:"none",padding:"4px 5px",cursor:"pointer",borderRadius:7,display:"flex",alignItems:"center",transition:"background .15s",flexShrink:0}}
+              onMouseEnter={function(e){e.currentTarget.style.background="rgba(239,68,68,.15)";}}
+              onMouseLeave={function(e){e.currentTarget.style.background="none";}}>
               <Icon name="logout" size={13} color="#64748b"/>
             </button>
           </div>
@@ -6340,6 +6617,7 @@ export default function App() {
       </div>
       {openAcc && <AccountModal acc={openAcc} onClose={function(){setOpenAcc(null);}} onStatusChange={updateStatus} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onReEnrich={function(acc){doEnrichAccount(acc);}}/>}
       {legalModal && <LegalModal type={legalModal} onClose={function(){setLegalModal(null);}}/>}
+      {myAccModal && <MyAccountModal user={authUser} onClose={function(){setMyAccModal(false);}} onSave={function(u){setAuthUser(u);}}/>}
       {openSeq && <SequenceModal seq={openSeq} onClose={function(){setOpenSeq(null);}}/>}
       {toast && (
         <div style={{position:"fixed",bottom:28,right:28,background:toast.color,color:"#fff",borderRadius:14,padding:"14px 22px",fontSize:13,fontWeight:600,boxShadow:"0 12px 40px rgba(15,23,42,.10),0 0 0 1px rgba(255,255,255,.15)",animation:"toastIn .35s cubic-bezier(.22,1,.36,1)",zIndex:300,maxWidth:480,display:"flex",alignItems:"flex-start",gap:10,wordBreak:"break-word",lineHeight:1.5}}>
