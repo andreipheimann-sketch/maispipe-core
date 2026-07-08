@@ -5335,6 +5335,11 @@ function ProspectView(props) {
               var jaEnriq     = !!enriched[emp.nome];
               var isEnriching = !!enriching[emp.nome];
               var isSelected  = !!selected[emp.nome];
+              // Check if the already-mapped account actually has AI data
+              var mappedAcc   = jaMapeada ? props.accounts.find(function(a){ return (a.nome||"").toLowerCase().trim() === (emp.nome||"").toLowerCase().trim(); }) : null;
+              var mappedHasDores = mappedAcc && mappedAcc.data && mappedAcc.data.dores && (mappedAcc.data.dores.principais||[]).length > 0;
+              // Treat jaMapeada-without-dores same as not-yet-enriched
+              var needsEnrich = jaMapeada && !mappedHasDores && !jaEnriq && !isEnriching;
               return (
                 <div key={idx} onClick={function(){ if(!jaMapeada&&!jaEnriq&&!isEnriching) toggleSelect(emp.nome); }} style={{background:"#fff",border:"1.5px solid "+(isSelected?"#6366f1":jaEnriq?"rgba(99,102,241,.3)":"#e6e9ef"),borderRadius:16,padding:"18px",transition:"all .2s",boxShadow:isSelected?"0 0 0 3px rgba(99,102,241,.2)":jaEnriq?"0 4px 20px rgba(99,102,241,.1)":"none",cursor:(!jaMapeada&&!jaEnriq&&!isEnriching)?"pointer":"default",position:"relative"}}>
                   {/* Checkbox */}
@@ -5363,34 +5368,47 @@ function ProspectView(props) {
                   )}
                   {emp.site && <div style={{fontSize:10,color:"#94a3b8",marginBottom:12}}><a href={"https://"+emp.site.replace(/^https?:\/\//,"")} target="_blank" rel="noopener noreferrer" style={{color:"#6366f1",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}} onClick={function(e){e.stopPropagation();}}><Icon name="link" size={11} color="#6366f1"/>{emp.site}</a></div>}
                   <div style={{display:"flex",gap:8}} onClick={function(e){e.stopPropagation();}}>
-                    {jaMapeada ? (
-                      <button onClick={function(){
-                        // Read latest from storage — accounts state may be stale
-                        storageList("acc:").then(function(ks){
-                          var found = null; var pending = ks.length;
-                          if (!pending) { props.onNav("accounts"); return; }
-                          ks.forEach(function(k){
-                            storageGet(k).then(function(s){
-                              if (s && s.nome && s.nome.toLowerCase()===emp.nome.toLowerCase()) found=s;
-                              pending--;
-                              if (pending===0) { if(props.onNav) props.onNav("accounts"); if(found&&props.onOpenAccount) props.onOpenAccount(found); }
-                            });
-                          });
-                        });
-                      }} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>{"Ver conta →"}</button>
+                    {isEnriching ? (
+                      /* ── Actively enriching ── */
+                      <button disabled style={{flex:1,background:"#f1f5f9",color:"#94a3b8",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"default",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite"}}/>
+                        <span>{"Mapeando com IA..."}</span>
+                      </button>
                     ) : jaEnriq ? (
+                      /* ── Just enriched this session — enriched[] has full data ── */
                       <button onClick={function(){
-                        // enriched[emp.nome] = fully mapped account; also navigate to accounts
                         var complete = enriched[emp.nome];
                         if(props.onNav) props.onNav("accounts");
                         if(complete && props.onOpenAccount) props.onOpenAccount(complete);
-                      }} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>{"Ver conta mapeada →"}</button>
+                      }} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
+                        {"Ver conta mapeada →"}
+                      </button>
+                    ) : jaMapeada && mappedHasDores ? (
+                      /* ── Previously mapped WITH AI data — open directly from storage ── */
+                      <button onClick={function(){
+                        storageList("acc:").then(function(ks){
+                          var found=null; var pending=ks.length;
+                          if(!pending){if(props.onNav)props.onNav("accounts");return;}
+                          ks.forEach(function(k){
+                            storageGet(k).then(function(s){
+                              if(s&&(s.nome||"").toLowerCase()===emp.nome.toLowerCase()) found=s;
+                              pending--;
+                              if(pending===0){
+                                if(props.onNav)props.onNav("accounts");
+                                if(found&&props.onOpenAccount)props.onOpenAccount(found);
+                              }
+                            });
+                          });
+                        });
+                      }} style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
+                        {"Ver conta →"}
+                      </button>
                     ) : (
-                      <button onClick={function(){enriquecerEmpresa(emp);}} disabled={isEnriching} style={{flex:1,background:isEnriching?"#f1f5f9":"linear-gradient(135deg,#6366f1,#4f46e5)",color:isEnriching?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:isEnriching?"default":"pointer",fontFamily:"inherit",boxShadow:isEnriching?"none":"0 4px 12px rgba(99,102,241,.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .2s"}}>
-                        {isEnriching
-                          ? <><div style={{width:10,height:10,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite"}}/><span>{"Mapeando com IA..."}</span></>
-                          : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>{"Enriquecer — 1 crédito"}</>
-                        }
+                      /* ── Not enriched OR mapped without AI data — show Enriquecer ── */
+                      <button onClick={function(){enriquecerEmpresa(emp);}}
+                        style={{flex:1,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        {needsEnrich ? "Enriquecer com IA" : "Enriquecer — 1 crédito"}
                       </button>
                     )}
                     {emp.site && !jaMapeada && !jaEnriq && !isEnriching && (
