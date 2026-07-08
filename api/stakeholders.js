@@ -157,10 +157,19 @@ export default async function handler(req, res) {
         const roleRe = /(ceo|cfo|coo|cto|cio|ciso|cmo|vp|vice|diretor|director|head|gerente|manager|chief|lider|líder|founder|sócio|presidente|superintendente)/i;
 
         function cleanRole(raw) {
-          // Remove "at/na/no/da/de/@ + rest" — everything after the role context clue
+          // Common business area words that start with caps but are NOT company names
+          var bizAreas = /^(Vendas|Tecnologia|Finanças|Financeiro|Marketing|Operações|Operacional|Comercial|Produção|Logística|Juridico|Jurídico|Recursos|Humanos|Estratégia|Negócios|Sustentabilidade|Inovação|Qualidade|Compras|Suprimentos|TI|RH|BI|ESG)(\s|$)/;
           return raw
-            .replace(/\s+(at|na|no|da|de|do|em|pela|pelo|para|@)\s+.*/gi, "")
-            .replace(/\s+(brasil|brazil|latam|america latina|latin america)\s*$/gi, "")
+            // Strip "at/na/no/em/pela/pelo/para/@ + rest"
+            .replace(/\s+(at|na|no|em|pela|pelo|para|@)\s+.*/gi, "")
+            // Strip "da/de/do + Capitalized proper noun" (company) — but skip business area words
+            .replace(/\s+(?:da|de|do)\s+([A-ZÁÉÍÓÚ][A-Za-záéíóôõúàâêîûãõ\s&.]{2,})$/g, function(match, after) {
+              return bizAreas.test(after) ? match : ""; // keep if it's a business area
+            })
+            // Strip trailing Brazilian state/regional demonyms
+            .replace(/\s+(catarinense|paulista|carioca|gaucho|gaúcho|mineiro|baiano|pernambucano|paranaense|capixaba|fluminense|amazonense|maranhense|cearense|potiguar|alagoano|sergipano|piauiense|tocantinense|paraense|amapaense|rondoniense|mato-grossense|goiano|brasiliense|sul-mato-grossense)\s*$/gi, "")
+            // Strip trailing country/region labels
+            .replace(/\s+(brasil|brazil|latam|america latina|latin america|global)\s*$/gi, "")
             .trim();
         }
 
