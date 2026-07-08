@@ -1213,6 +1213,18 @@ function StakeholdersFetchBtn(props) {
   var _st_count   = useState(0);     var count   = _st_count[0];   var setCount   = _st_count[1];
   var _st_err     = useState("");    var err     = _st_err[0];     var setErr     = _st_err[1];
 
+  var alreadyHasContacts = acc.enriched && acc.enriched.contacts && acc.enriched.contacts.length > 0;
+
+  // Auto-trigger on mount if no contacts yet
+  useEffect(function(){
+    if (!alreadyHasContacts && !loading && !done) {
+      fetch_stk();
+    } else if (alreadyHasContacts) {
+      setCount(acc.enriched.contacts.length);
+      setDone(true);
+    }
+  }, [acc.id]);
+
   function fetch_stk() {
     setLoading(true); setErr(""); setDone(false);
     // Use acc.site if available, otherwise enriched domain, otherwise empty
@@ -5074,6 +5086,48 @@ function ProspectView(props) {
         setEnriched(function(e){ var n=Object.assign({},e); n[key]=updatedAcc; return n; });
         setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
       }
+
+      // ── Auto-fetch LinkedIn contacts in parallel — non-blocking ─────────────
+      fetch("/api/stakeholders", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ company:emp.nome, domain:domain, dna:dna })
+      })
+      .then(function(rs){ return rs.ok ? rs.json() : null; })
+      .then(function(stakhData){
+        if (!stakhData || !stakhData.contacts || !stakhData.contacts.length) return;
+        // Save flat contacts
+        storageList("contact:").then(function(ckeys){
+          Promise.all(ckeys.map(storageGet)).then(function(existing){
+            var existingSet = {};
+            existing.filter(Boolean).forEach(function(ec){
+              existingSet[((ec.nome||"")+"|"+(ec.empresa||"")).toLowerCase()] = true;
+            });
+            stakhData.contacts.forEach(function(s){
+              var nomeReal = s.nome || s.name || "";
+              if (!nomeReal) return;
+              var empresaNome = s.empresa || emp.nome || "";
+              var dedupKey = (nomeReal+"|"+empresaNome).toLowerCase();
+              if (existingSet[dedupKey]) return;
+              existingSet[dedupKey] = true;
+              var cid = "contact:" + Date.now() + "-" + Math.random().toString(36).slice(2,8);
+              storageSet(cid, { id:cid, nome:nomeReal, cargo:s.cargo||s.title||"", empresa:empresaNome, email:s.email||"", emailValidated:!!s.email, linkedin:s.linkedin||"", savedAt:Date.now() });
+            });
+            if (props.onContactsRefresh) props.onContactsRefresh();
+          });
+        });
+        // Persist enriched contacts into the account record
+        storageList("acc:").then(function(ks2){
+          ks2.forEach(function(k2){
+            storageGet(k2).then(function(stored2){
+              if (!stored2 || stored2.nome.toLowerCase() !== nomeKeyP) return;
+              storageSet(k2, Object.assign({}, stored2, {
+                enriched: { contacts:stakhData.contacts, sources:stakhData.sources||[], domain:domain }
+              }));
+            });
+          });
+        });
+      })
+      .catch(function(){}); // stakeholders failure is non-fatal
 
       fetch("/api/gemini", {
         method:"POST", headers:{"Content-Type":"application/json"},
