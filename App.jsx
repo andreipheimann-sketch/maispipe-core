@@ -1351,6 +1351,7 @@ function AccountModal(props) {
       return i === idx ? Object.assign({}, c, { favorite: !c.favorite }) : c;
     });
     setEnrichedContacts(updated);
+    var changedContact = updated[idx];
     storageGet(acc.id).then(function(stored) {
       if (!stored) return;
       var newStored = Object.assign({}, stored, {
@@ -1358,6 +1359,21 @@ function AccountModal(props) {
       });
       storageSet(acc.id, newStored);
       if (props.onUpdateAccount) props.onUpdateAccount(newStored);
+
+      // Also sync favorite to the flat contact: record in Contacts view
+      storageList("contact:").then(function(keys){
+        keys.forEach(function(k){
+          storageGet(k).then(function(c){
+            if (!c) return;
+            var nameMatch    = c.nome && changedContact.nome && c.nome.toLowerCase() === changedContact.nome.toLowerCase();
+            var companyMatch = !c.empresa || !acc.nome || c.empresa.toLowerCase() === acc.nome.toLowerCase();
+            if (nameMatch && companyMatch) {
+              storageSet(k, Object.assign({}, c, { favorite: changedContact.favorite }));
+            }
+          });
+        });
+      });
+
       if (props.onContactsRefresh) props.onContactsRefresh();
     });
   }
@@ -5042,118 +5058,136 @@ function ProspectView(props) {
     var key = emp.nome;
     setEnriching(function(e){ var n=Object.assign({},e); n[key]=true; return n; });
     var domain = emp.site ? emp.site.replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0] : "";
+
     fetch("/api/search", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
+      method:"POST", headers:{"Content-Type":"application/json"},
       body:JSON.stringify({ company:emp.nome, domain:domain, context:"" }),
     })
-      .then(function(r){ return r.json(); })
-      .then(function(resp){
-        if (props.onSaveRaw) {
-          props.onSaveRaw(emp.nome, resp.results, true, null, "", function(acc){
-            // DO NOT set enriched yet — mapping not complete.
-            // Keep isEnriching=true until /api/gemini finishes.
-            var nomeKeyP = emp.nome.toLowerCase();
-            if (_mappingInProgress.has(nomeKeyP)) return;
-            _mappingInProgress.add(nomeKeyP);
-            var icpLocal = getStoredIcp();
-            var produtosLocal = getStoredProducts();
-            var rawCtx = (acc && acc.data && acc.data.empresa && acc.data.empresa.rawContext) || "";
-            var setorLocal = (acc && acc.data && acc.data.empresa && acc.data.empresa.setor) || "tecnologia";
+    .then(function(r){ return r.json(); })
+    .then(function(resp){
+      if (!props.onSaveRaw) return;
+      props.onSaveRaw(emp.nome, resp.results, true, null, "", function(acc){
+        var nomeKeyP = emp.nome.toLowerCase();
+        if (_mappingInProgress.has(nomeKeyP)) return;
+        _mappingInProgress.add(nomeKeyP);
 
-            // ── Step A: resumo ────────────────────────────────────────────────
-            var resumoFetch = fetch("/api/gemini", {
-              method:"POST", headers:{"Content-Type":"application/json"},
-              body: JSON.stringify({ mode:"resumo", empresa:emp.nome, setor:setorLocal, rawContext:rawCtx, dna:getStoredDna() })
-            }).then(function(r){ return r.ok?r.json():{resumo:""}; }).catch(function(){ return {resumo:""}; });
+        var icpLocal     = getStoredIcp();
+        var produtosLocal= getStoredProducts();
+        var dna          = getStoredDna();
+        var rawCtx       = (acc && acc.data && acc.data.empresa && acc.data.empresa.rawContext) || "";
+        var setorLocal   = (acc && acc.data && acc.data.empresa && acc.data.empresa.setor) || emp.setor || "tecnologia";
 
-            // ── Step B: mapeamento ────────────────────────────────────────────
-            var mapeamentoFetch = fetch("/api/gemini", {
-              method:"POST", headers:{"Content-Type":"application/json"},
-              body: JSON.stringify({ mode:"mapeamento", empresa:emp.nome, setor:setorLocal, rawContext:rawCtx, icp:icpLocal, produtos:produtosLocal, companySite:getCompanySite(), assinatura:getCompanySite()?("Consultor | "+getCompanySite()):"Consultor", dna:getStoredDna() })
-            }).then(function(r2){ return r2.ok?r2.json():null; }).catch(function(){ return null; });
-
-            // ── Wait for BOTH before showing "Ver conta mapeada" ─────────────
-            Promise.all([resumoFetch, mapeamentoFetch]).then(function(results){
-              _mappingInProgress.delete(nomeKeyP);
-              var resumoData  = results[0] || {};
-              var mapped      = results[1];
-              if (!mapped || mapped.error) {
-                // Mapping failed — still show the account with basic data
-                setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
-                setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
-                return;
-              }
-              var est = mapped.estrategia || mapped["estratégia"] || {};
-              var spinFlatP = est.perguntas_spin || [];
-              if (!spinFlatP.length && mapped.perguntas_spin) {
-                var ps2 = mapped.perguntas_spin;
-                spinFlatP = [
-                  ...(ps2.situacao   ||[]).map(function(q){return "SITUAÇÃO: "+q;}),
-                  ...(ps2.problema   ||[]).map(function(q){return "PROBLEMA: "+q;}),
-                  ...(ps2.implicacao ||[]).map(function(q){return "IMPLICAÇÃO: "+q;}),
-                  ...(ps2.necessidade||[]).map(function(q){return "NECESSIDADE: "+q;}),
-                ];
-              }
-              var objecoesFlatP = est.objecoes || est["objeções"] || mapped.objecoes || [];
-              var resumoFinal = resumoData.resumo || mapped.resumo || (acc.data&&acc.data.empresa&&acc.data.empresa.resumo) || "";
-              storageList("acc:").then(function(ks){
-                var done = 0; var total = ks.length;
-                ks.forEach(function(k){
-                  storageGet(k).then(function(stored){
-                    done++;
-                    if (!stored||stored.nome.toLowerCase()!==emp.nome.toLowerCase()) {
-                      if (done===total) {
-                        setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
-                        setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
-                      }
-                      return;
-                    }
-                    var updated=Object.assign({},stored,{
-                      aiMapped: !!(mapped.dores && (mapped.dores.principais||[]).length > 0),
-                      data:Object.assign({},stored.data,{
-                        fit:mapped.fit||stored.data.fit,
-                        dores:mapped.dores||stored.data.dores,
-                        triggers:mapped.triggers||stored.data.triggers,
-                        stakeholders:mapped.stakeholders||stored.data.stakeholders,
-                        empresa: Object.assign({}, (stored.data.empresa||{}), {
-                          resumo: resumoFinal,
-                          resumoAI: !!resumoFinal,
-                        }),
-                        estrategia:Object.assign({},(stored.data.estrategia||{}),{
-                          emails:est.emails||[], inmails:est.inmails||[],
-                          whatsapps:est.whatsapps||[], cold_calls:est.cold_calls||[],
-                          perguntas_spin:spinFlatP.length?spinFlatP:(est.perguntas_spin||[]),
-                          "objeções":objecoesFlatP, objecoes:objecoesFlatP,
-                          tier:(stored.data.estrategia&&stored.data.estrategia.tier)||"Tier 2",
-                        }),
-                        proximos_passos:mapped.proximos_passos||stored.data.proximos_passos,
-                      })
-                    });
-                    storageSet(k, updated);
-                    if (props.onUpdateAccount) props.onUpdateAccount(updated);
-                    // NOW set enriched with complete data — button appears only here
-                    setEnriched(function(e){ var n=Object.assign({},e); n[key]=updated; return n; });
-                    setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
-                  });
-                });
-                if (total===0) {
-                  setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
-                  setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
-                }
-              });
-            }).catch(function(){
-              _mappingInProgress.delete(nomeKeyP);
-              setEnriched(function(e){ var n=Object.assign({},e); n[key]=acc; return n; });
-              setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
-            });
-          }, null);
+        function finish(updatedAcc) {
+          setEnriched(function(e){ var n=Object.assign({},e); n[key]=updatedAcc; return n; });
+          setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
         }
-      })
-      .catch(function(){})
-      .finally(function(){
-        // NOTE: do NOT clear enriching here — it's cleared after mapping completes above
-      });
+
+        // Single mapeamento call — returns resumo + dores + triggers + SPIN + objeções
+        fetch("/api/gemini", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({
+            mode:"mapeamento", empresa:emp.nome, setor:setorLocal,
+            rawContext:rawCtx, icp:icpLocal, produtos:produtosLocal,
+            companySite:getCompanySite(),
+            assinatura:getCompanySite()?("Consultor | "+getCompanySite()):"Consultor",
+            dna:dna
+          })
+        })
+        .then(function(r2){ return r2.ok ? r2.json() : null; })
+        .then(function(mapped){
+          _mappingInProgress.delete(nomeKeyP);
+          if (!mapped || mapped.error) {
+            console.warn("[doEnrich] mapeamento falhou:", mapped&&mapped.error);
+            finish(acc);
+            return;
+          }
+
+          var est = mapped.estrategia || mapped["estratégia"] || {};
+
+          // Flatten SPIN if structured
+          var spinFlat = est.perguntas_spin || [];
+          if (!spinFlat.length && mapped.perguntas_spin) {
+            var ps = mapped.perguntas_spin;
+            spinFlat = [
+              ...(ps.situacao   ||[]).map(function(q){return "SITUAÇÃO: "+q;}),
+              ...(ps.problema   ||[]).map(function(q){return "PROBLEMA: "+q;}),
+              ...(ps.implicacao ||[]).map(function(q){return "IMPLICAÇÃO: "+q;}),
+              ...(ps.necessidade||[]).map(function(q){return "NECESSIDADE: "+q;}),
+            ];
+          }
+          var objecoes = est.objecoes || est["objeções"] || mapped.objecoes || [];
+
+          // If resumo from mapeamento is still English or empty, fetch resumo separately
+          var resumoFromMap = mapped.resumo || "";
+          var needsResumo   = !resumoFromMap || /[a-z]{4,}/.test(resumoFromMap.slice(0,40).replace(/[^a-z ]/gi,"")) && !/[àáâãéêíóôõú]/i.test(resumoFromMap.slice(0,100));
+
+          var resumoPromise = needsResumo
+            ? fetch("/api/gemini", {
+                method:"POST", headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({ mode:"resumo", empresa:emp.nome, setor:setorLocal, rawContext:rawCtx, dna:dna })
+              }).then(function(r3){ return r3.ok?r3.json():{resumo:resumoFromMap}; }).catch(function(){ return {resumo:resumoFromMap}; })
+            : Promise.resolve({resumo:resumoFromMap});
+
+          resumoPromise.then(function(resumoData){
+            var resumoFinal = resumoData.resumo || resumoFromMap || "";
+
+            // Write complete account to storage
+            storageList("acc:").then(function(ks){
+              var matched = false;
+              var pending = ks.length;
+              if (!pending) { finish(acc); return; }
+
+              ks.forEach(function(k){
+                storageGet(k).then(function(stored){
+                  pending--;
+                  if (!stored || stored.nome.toLowerCase() !== nomeKeyP) {
+                    if (!pending && !matched) finish(acc);
+                    return;
+                  }
+                  matched = true;
+                  var updated = Object.assign({}, stored, {
+                    aiMapped: !!(mapped.dores && (mapped.dores.principais||[]).length > 0),
+                    data: Object.assign({}, stored.data, {
+                      fit:          mapped.fit          || stored.data.fit,
+                      dores:        mapped.dores         || stored.data.dores,
+                      triggers:     mapped.triggers      || stored.data.triggers,
+                      stakeholders: mapped.stakeholders  || stored.data.stakeholders,
+                      empresa: Object.assign({}, stored.data.empresa||{}, {
+                        resumo:    resumoFinal,
+                        resumoAI:  !!resumoFinal,
+                      }),
+                      estrategia: Object.assign({}, stored.data.estrategia||{}, {
+                        emails:         est.emails      || [],
+                        inmails:        est.inmails     || [],
+                        whatsapps:      est.whatsapps   || [],
+                        cold_calls:     est.cold_calls  || [],
+                        perguntas_spin: spinFlat.length ? spinFlat : (est.perguntas_spin||[]),
+                        "objeções":     objecoes,
+                        objecoes:       objecoes,
+                        tier: (stored.data.estrategia&&stored.data.estrategia.tier) || "Tier 2",
+                      }),
+                      proximos_passos: mapped.proximos_passos || stored.data.proximos_passos,
+                    }),
+                  });
+                  storageSet(k, updated);
+                  if (props.onUpdateAccount) props.onUpdateAccount(updated);
+                  finish(updated); // button appears with complete data
+                });
+              });
+            });
+          });
+        })
+        .catch(function(err){
+          console.error("[doEnrich] erro:", err);
+          _mappingInProgress.delete(nomeKeyP);
+          finish(acc);
+        });
+      }, null);
+    })
+    .catch(function(err){ console.error("[doEnrich] search erro:", err); })
+    .finally(function(){
+      // enriching cleared inside finish() — don't clear here
+    });
   }
 
   var _st_selected = useState({}); var selected = _st_selected[0]; var setSelected = _st_selected[1];
