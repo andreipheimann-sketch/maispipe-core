@@ -1,4 +1,4 @@
-// BUILD: 1783625569
+// BUILD: 1783626013
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -1213,6 +1213,19 @@ function StakeholdersFetchBtn(props) {
   var _st_done    = useState(false); var done    = _st_done[0];    var setDone    = _st_done[1];
   var _st_count   = useState(0);     var count   = _st_count[0];   var setCount   = _st_count[1];
   var _st_err     = useState("");    var err     = _st_err[0];     var setErr     = _st_err[1];
+
+  var alreadyHasContacts = acc.enriched && acc.enriched.contacts && acc.enriched.contacts.length > 0;
+
+  // Auto-trigger on mount if no contacts yet — no manual click needed after mapping
+  useEffect(function(){
+    if (!alreadyHasContacts && !loading && !done) {
+      fetch_stk();
+    } else if (alreadyHasContacts) {
+      setCount(acc.enriched.contacts.length);
+      setDone(true);
+      if (props.onDone) props.onDone({contacts:acc.enriched.contacts, sources:(acc.enriched.sources||[])});
+    }
+  }, [acc.id]);
 
   function fetch_stk() {
     setLoading(true); setErr(""); setDone(false);
@@ -4571,7 +4584,11 @@ function SemiCircleChart(props) {
     </svg>
   );
 }
-function exportRelatoriosPDF(accounts, filters) {
+function exportRelatoriosPDF(accounts, seqs, contacts, filters) {
+  filters = filters || {};
+  seqs = seqs || [];
+  contacts = contacts || [];
+
   var filtered = accounts.filter(function(a) {
     if (filters.fit && a.fit !== filters.fit) return false;
     if (filters.tier && a.tier !== filters.tier) return false;
@@ -4580,22 +4597,225 @@ function exportRelatoriosPDF(accounts, filters) {
     if (filters.to)   { var d2 = new Date(filters.to); d2.setHours(23,59,59); if (new Date(a.savedAt) > d2) return false; }
     return true;
   });
+  var total = filtered.length;
+  function pct(n,d){ return d ? Math.round(n/d*100) : 0; }
+
+  // ── Pipeline ──────────────────────────────────────────────────────────────
   var byStatus = {};
   STATUS_ORDER.forEach(function(s){byStatus[s]=filtered.filter(function(a){return a.status===s;}).length;});
-  var html = "<html><head><title>Relatórios Mais Pipe</title><style>body{font-family:Verdana,sans-serif;padding:32px;color:#0f172a;font-size:12px}h1{color:#059669;font-size:18px}h2{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#6366f1;margin:20px 0 8px;border-bottom:2px solid #e2e8f0;padding-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#f8fafc;padding:8px 12px;text-align:left;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.8px}td{padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:11px}.fit-alto{color:#065f46;background:#dcfce7;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700}.fit-medio{color:#92400e;background:#fef3c7;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700}.fit-baixo{color:#991b1b;background:#fee2e2;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700}.footer{margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:10px;color:#94a3b8}</style></head><body>";
-  html += "<h1>Relatório de Prospecção , Mais Pipe Beta</h1>";
-  html += "<p style='color:#64748b;font-size:11px'>Gerado em "+new Date().toLocaleDateString("pt-BR")+" - "+filtered.length+" contas</p>";
-  html += "<h2>Funil de Status</h2><table><tr>";
+  var nContacted=byStatus.contacted||0, nMeeting=byStatus.meeting||0, nWon=byStatus.won||0, nLost=byStatus.lost||0, nProspecting=byStatus.prospecting||0;
+
+  // ── Fit / Tier ────────────────────────────────────────────────────────────
+  var nFitAlto=filtered.filter(function(a){return a.fit==="ALTO";}).length;
+  var nFitMedio=filtered.filter(function(a){return a.fit==="MEDIO";}).length;
+  var nFitBaixo=filtered.filter(function(a){return a.fit==="BAIXO";}).length;
+  var nTier1=filtered.filter(function(a){return a.tier==="Tier 1";}).length;
+  var nTier2=filtered.filter(function(a){return a.tier==="Tier 2";}).length;
+  var nTier3=filtered.filter(function(a){return a.tier==="Tier 3";}).length;
+
+  // Fit × Tier matrix
+  var fits=["ALTO","MEDIO","BAIXO"]; var tiers=["Tier 1","Tier 2","Tier 3"];
+  var matrix = fits.map(function(f){ return tiers.map(function(t){ return filtered.filter(function(a){return a.fit===f&&a.tier===t;}).length; }); });
+
+  // ── Setores ───────────────────────────────────────────────────────────────
+  var setorMap={};
+  filtered.forEach(function(a){ var s=a.setor||"Outros"; setorMap[s]=(setorMap[s]||0)+1; });
+  var bySetor=Object.keys(setorMap).map(function(k){return{s:k,n:setorMap[k]};}).sort(function(a,b){return b.n-a.n;});
+
+  // ── Monthly trend (6 months) ─────────────────────────────────────────────
+  var now=Date.now(); var mNames=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  var months=[];
+  for(var m=5;m>=0;m--){
+    var d=new Date(now); d.setDate(1); d.setMonth(d.getMonth()-m);
+    var y=d.getFullYear(), mo=d.getMonth();
+    var ms=new Date(y,mo,1).getTime(), me=new Date(y,mo+1,1).getTime();
+    months.push({lb:mNames[mo], n:filtered.filter(function(a){return a.savedAt>=ms&&a.savedAt<me;}).length});
+  }
+
+  // ── AI Coverage ───────────────────────────────────────────────────────────
+  var nAiMapped=filtered.filter(function(a){return a.aiMapped;}).length;
+  var nHasDores=filtered.filter(function(a){return a.data&&a.data.dores&&(a.data.dores.principais||[]).length>0;}).length;
+  var nHasTriggers=filtered.filter(function(a){return a.data&&(a.data.triggers||[]).length>0;}).length;
+  var nHasSpin=filtered.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.perguntas_spin||[]).length>0;}).length;
+  var nHasObj=filtered.filter(function(a){return a.data&&a.data.estrategia&&((a.data.estrategia.objeções||a.data.estrategia.objecoes||[]).length>0);}).length;
+  var nHasEmails=filtered.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.emails||[]).length>0;}).length;
+  var nHasStk=filtered.filter(function(a){return a.data&&(a.data.stakeholders||[]).length>0;}).length;
+  var nHasNextAE=filtered.filter(function(a){return a.data&&a.data.proximos_passos&&(a.data.proximos_passos.ae||[]).length>0;}).length;
+
+  // ── Sequences ─────────────────────────────────────────────────────────────
+  var nSeqs=seqs.length;
+  var nSeqAI=seqs.filter(function(s){return s.engine==="ai";}).length;
+  var nSeqTemplate=nSeqs-nSeqAI;
+  var touchMap={};
+  seqs.forEach(function(s){(s.touches||[]).forEach(function(t){touchMap[t.type]=(touchMap[t.type]||0)+1;});});
+  var profileMap={};
+  seqs.forEach(function(s){var l=(s.profile&&s.profile.label)||"Custom";profileMap[l]=(profileMap[l]||0)+1;});
+  var topProfiles=Object.keys(profileMap).map(function(k){return{k:k,n:profileMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,6);
+
+  // ── Contacts ──────────────────────────────────────────────────────────────
+  var nContacts=contacts.length;
+  var nWithEmail=contacts.filter(function(c){return c.email&&c.email.length>2;}).length;
+  var nFav=contacts.filter(function(c){return c.favorite;}).length;
+  var nLinkedin=contacts.filter(function(c){return c.linkedin&&c.linkedin.length>5;}).length;
+  var companyMap={};
+  contacts.forEach(function(c){var e=c.empresa||"?"; companyMap[e]=(companyMap[e]||0)+1;});
+  var topCompanies=Object.keys(companyMap).map(function(k){return{k:k,n:companyMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
+  var cargoMap={};
+  contacts.forEach(function(c){ var cg=(c.cargo||"").trim(); if(!cg)return; cargoMap[cg]=(cargoMap[cg]||0)+1; });
+  var topCargos=Object.keys(cargoMap).map(function(k){return{k:k,n:cargoMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
+
+  // ── HTML builders ─────────────────────────────────────────────────────────
+  function kpiCell(label,value,sub){
+    return "<div class='kpi'><div class='kpi-val'>"+value+"</div><div class='kpi-lb'>"+label+"</div><div class='kpi-sub'>"+sub+"</div></div>";
+  }
+  function barRow(label,n,den){
+    var p = pct(n, den||1);
+    return "<div class='barrow'><span class='barlabel'>"+label+"</span><div class='bartrack'><div class='barfill' style='width:"+p+"%'></div></div><span class='barval'>"+n+"</span></div>";
+  }
+
+  var html = "<html><head><title>Relatórios +Pipe</title><style>"+
+    "body{font-family:Verdana,Arial,sans-serif;padding:32px;color:#0f172a;font-size:12px}"+
+    "h1{color:#4f46e5;font-size:20px;margin-bottom:4px}"+
+    "h2{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#6366f1;margin:26px 0 10px;border-bottom:2px solid #e2e8f0;padding-bottom:5px;page-break-after:avoid}"+
+    "table{width:100%;border-collapse:collapse;margin-top:6px}"+
+    "th{background:#f8fafc;padding:7px 10px;text-align:left;font-size:9.5px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.6px}"+
+    "td{padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:10.5px}"+
+    ".fit-alto{color:#2d3a8c;background:#e8ecfd;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700}"+
+    ".fit-medio{color:#92400e;background:#fef3c7;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700}"+
+    ".fit-baixo{color:#991b1b;background:#fee2e2;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700}"+
+    ".footer{margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:9.5px;color:#94a3b8}"+
+    ".kpigrid{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}"+
+    ".kpi{border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;min-width:120px;flex:1 1 130px}"+
+    ".kpi-val{font-size:20px;font-weight:800;color:#0f172a}"+
+    ".kpi-lb{font-size:9.5px;font-weight:700;color:#334155;margin-top:2px}"+
+    ".kpi-sub{font-size:8.5px;color:#94a3b8}"+
+    ".barrow{display:flex;align-items:center;gap:8px;margin-bottom:6px}"+
+    ".barlabel{font-size:9.5px;color:#475569;min-width:120px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"+
+    ".bartrack{flex:1;background:#f1f5f9;border-radius:4px;height:8px;overflow:hidden}"+
+    ".barfill{height:100%;background:#6366f1;border-radius:4px}"+
+    ".barval{font-size:9.5px;font-weight:700;color:#0f172a;min-width:22px;text-align:right}"+
+    ".twocol{display:flex;gap:24px}"+
+    ".twocol > div{flex:1}"+
+    ".matrix{display:grid;grid-template-columns:90px repeat(3,1fr);gap:4px;margin-top:8px}"+
+    ".mcell{background:#eef1fd;border-radius:6px;padding:10px 0;text-align:center;font-size:13px;font-weight:800;color:#312e81}"+
+    ".mlabel{font-size:9.5px;font-weight:700;color:#475569;display:flex;align-items:center}"+
+    "</style></head><body>";
+
+  html += "<h1>Relatório de Prospecção — +Pipe</h1>";
+  html += "<p style='color:#64748b;font-size:10.5px'>Gerado em "+new Date().toLocaleDateString("pt-BR")+" às "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+" · "+total+" contas · "+nSeqs+" sequências · "+nContacts+" contatos</p>";
+
+  // 1. KPIs
+  html += "<h2>KPIs Gerais</h2><div class='kpigrid'>";
+  html += kpiCell("Total Mapeado", total, "empresas");
+  html += kpiCell("Em Prospecção", nProspecting, pct(nProspecting,total)+"% do total");
+  html += kpiCell("Contatadas", nContacted, pct(nContacted,total)+"% do total");
+  html += kpiCell("Reuniões", nMeeting, pct(nMeeting,total)+"% do total");
+  html += kpiCell("Ganhas", nWon, pct(nWon,total)+"% win rate");
+  html += kpiCell("Perdidas", nLost, pct(nLost,total)+"% do total");
+  html += kpiCell("Fit Alto", nFitAlto, pct(nFitAlto,total)+"% do total");
+  html += kpiCell("Tier 1", nTier1, pct(nTier1,total)+"% do total");
+  html += kpiCell("AI Mapeadas", nAiMapped, pct(nAiMapped,total)+"% cobertura");
+  html += kpiCell("Sequências", nSeqs, nSeqAI+" via IA");
+  html += kpiCell("Contatos", nContacts, "mapeados");
+  html += kpiCell("E-mails", nWithEmail, pct(nWithEmail,nContacts||1)+"% encontrados");
+  html += kpiCell("Favoritos", nFav, "contatos favoritos");
+  html += kpiCell("LinkedIn", nLinkedin, pct(nLinkedin,nContacts||1)+"% com perfil");
+  html += "</div>";
+
+  // 2. Pipeline funnel
+  html += "<h2>Funil de Conversão</h2><table><tr>";
   STATUS_ORDER.forEach(function(s){html+="<th>"+STATUS_CONFIG[s].label+"</th>";});
   html+="</tr><tr>";
-  STATUS_ORDER.forEach(function(s){html+="<td><strong>"+byStatus[s]+"</strong></td>";});
+  STATUS_ORDER.forEach(function(s){html+="<td><strong>"+byStatus[s]+"</strong> ("+pct(byStatus[s],total)+"%)</td>";});
   html+="</tr></table>";
-  html += "<h2>Lista de Contas ("+filtered.length+")</h2><table><tr><th>Empresa</th><th>Setor</th><th>Fit</th><th>Tier</th><th>Status</th><th>Salvo em</th></tr>";
+
+  // 3. Fit & Tier
+  html += "<h2>Fit &amp; Tier</h2><div class='twocol'><div>";
+  html += barRow("Fit Alto", nFitAlto, total)+barRow("Fit Médio", nFitMedio, total)+barRow("Fit Baixo", nFitBaixo, total);
+  html += "</div><div>";
+  html += barRow("Tier 1", nTier1, total)+barRow("Tier 2", nTier2, total)+barRow("Tier 3", nTier3, total);
+  html += "</div></div>";
+
+  // 4. Matrix Fit x Tier
+  html += "<h2>Matriz Fit × Tier</h2><div class='matrix'><div></div>";
+  tiers.forEach(function(t){ html += "<div class='mlabel' style='justify-content:center'>"+t+"</div>"; });
+  fits.forEach(function(f,fi){
+    html += "<div class='mlabel'>"+(f==="ALTO"?"Fit Alto":f==="MEDIO"?"Fit Médio":"Fit Baixo")+"</div>";
+    tiers.forEach(function(t,ti){ html += "<div class='mcell'>"+matrix[fi][ti]+"</div>"; });
+  });
+  html += "</div>";
+
+  // 5. Setores
+  if (bySetor.length) {
+    html += "<h2>Top Setores</h2>";
+    bySetor.forEach(function(s){ html += barRow(s.s, s.n, bySetor[0].n); });
+  }
+
+  // 6. Monthly trend
+  html += "<h2>Tendência Mensal (últimos 6 meses)</h2><table><tr>";
+  months.forEach(function(mo){html+="<th>"+mo.lb+"</th>";});
+  html+="</tr><tr>";
+  months.forEach(function(mo){html+="<td><strong>"+mo.n+"</strong></td>";});
+  html+="</tr></table>";
+
+  // 7. AI Coverage
+  html += "<h2>Cobertura de IA</h2><div class='kpigrid'>";
+  html += kpiCell("AI Mapeadas", nAiMapped, pct(nAiMapped,total)+"% de "+total);
+  html += kpiCell("Com Dores", nHasDores, pct(nHasDores,total)+"% de "+total);
+  html += kpiCell("Com Triggers", nHasTriggers, pct(nHasTriggers,total)+"% de "+total);
+  html += kpiCell("Com SPIN", nHasSpin, pct(nHasSpin,total)+"% de "+total);
+  html += kpiCell("Com Objeções", nHasObj, pct(nHasObj,total)+"% de "+total);
+  html += kpiCell("Com E-mails", nHasEmails, pct(nHasEmails,total)+"% de "+total);
+  html += kpiCell("Stakeholders", nHasStk, pct(nHasStk,total)+"% de "+total);
+  html += kpiCell("Próx. Passos AE", nHasNextAE, pct(nHasNextAE,total)+"% de "+total);
+  html += "</div>";
+
+  // 8. Sequences
+  if (nSeqs) {
+    html += "<h2>Motor de Sequências</h2><div class='twocol'><div>";
+    html += barRow("Gerado por IA", nSeqAI, nSeqs)+barRow("Template local", nSeqTemplate, nSeqs);
+    html += "</div><div>";
+    var totTouch=Object.values(touchMap).reduce(function(s,v){return s+v;},0)||1;
+    [{type:"email",lb:"E-mail"},{type:"linkedin",lb:"LinkedIn"},{type:"call",lb:"Cold Call"},{type:"whatsapp",lb:"WhatsApp"},{type:"follow",lb:"Follow-up"},{type:"breakup",lb:"Breakup"}].forEach(function(ch){
+      html += barRow(ch.lb, touchMap[ch.type]||0, totTouch);
+    });
+    html += "</div></div>";
+
+    if (topProfiles.length) {
+      html += "<h2>Top Perfis Usados</h2>";
+      topProfiles.forEach(function(p){ html += barRow(p.k, p.n, nSeqs); });
+    }
+  }
+
+  // 9. Contacts
+  if (nContacts) {
+    html += "<h2>Contatos</h2><div class='kpigrid'>";
+    html += kpiCell("Total", nContacts, "contatos mapeados");
+    html += kpiCell("Com E-mail", nWithEmail, pct(nWithEmail,nContacts)+"% hit rate");
+    html += kpiCell("Com LinkedIn", nLinkedin, pct(nLinkedin,nContacts)+"% do total");
+    html += kpiCell("Favoritos", nFav, "marcados");
+    html += "</div>";
+
+    if (topCompanies.length) {
+      html += "<h2>Contas com Mais Contatos</h2>";
+      topCompanies.forEach(function(c){ html += barRow(c.k, c.n, topCompanies[0].n); });
+    }
+    if (topCargos.length) {
+      html += "<h2>Top Cargos Encontrados</h2>";
+      topCargos.forEach(function(c){ html += barRow(c.k, c.n, topCargos[0].n); });
+    }
+  }
+
+  // 10. Full account list
+  html += "<h2>Lista Completa de Contas ("+total+")</h2><table><tr><th>Empresa</th><th>Setor</th><th>Fit</th><th>Tier</th><th>Status</th><th>Salvo em</th></tr>";
   filtered.forEach(function(a) {
     var fitClass = a.fit==="ALTO"?"fit-alto":a.fit==="MEDIO"?"fit-medio":"fit-baixo";
     html += "<tr><td><strong>"+a.nome+"</strong></td><td>"+a.setor+"</td><td><span class='"+fitClass+"'>"+a.fit+"</span></td><td>"+a.tier+"</td><td>"+(STATUS_CONFIG[a.status]&&STATUS_CONFIG[a.status].label||a.status)+"</td><td>"+fmtDate(a.savedAt)+"</td></tr>";
   });
-  html += "</table><div class='footer'>"+"Mais Pipe Beta - "+new Date().toLocaleDateString("pt-BR")+"</div></body></html>";
+  html += "</table>";
+
+  html += "<div class='footer'>+Pipe Beta — Relatório gerado em "+new Date().toLocaleDateString("pt-BR")+"</div></body></html>";
+
   var w = window.open("","_blank");
   w.document.write(html);
   w.document.close();
@@ -4859,7 +5079,7 @@ function InsightsView(props) {
               </div>
             )}
           </div>
-          <button onClick={function(){setPicker(false);exportRelatoriosPDF(accounts,{});}} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>
+          <button onClick={function(){setPicker(false);exportRelatoriosPDF(accounts,seqs,contacts,{});}} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(99,102,241,.3)"}}>
             <Icon name="download" size={14}/>Exportar PDF
           </button>
         </div>
@@ -5302,6 +5522,52 @@ function ProspectView(props) {
         setEnriched(function(e){ var n=Object.assign({},e); n[key]=updatedAcc; return n; });
         setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
       }
+
+      // ── Auto-fetch LinkedIn contacts in parallel — no manual click needed after mapping ──
+      fetch("/api/stakeholders", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ company:emp.nome, domain:domain, dna:dna })
+      })
+      .then(function(rs){ return rs.ok ? rs.json() : null; })
+      .then(function(stakhData){
+        if (!stakhData || !stakhData.contacts || !stakhData.contacts.length) return;
+        // Save flat contacts (dedup by nome+empresa)
+        storageList("contact:").then(function(ckeys){
+          Promise.all(ckeys.map(storageGet)).then(function(existing){
+            var existingSet = {};
+            existing.filter(Boolean).forEach(function(ec){
+              existingSet[((ec.nome||"")+"|"+(ec.empresa||"")).toLowerCase()] = true;
+            });
+            stakhData.contacts.forEach(function(s){
+              var nomeReal = s.nome || s.name || "";
+              if (!nomeReal) return;
+              var dedupKey = (nomeReal+"|"+emp.nome).toLowerCase();
+              if (existingSet[dedupKey]) return;
+              existingSet[dedupKey] = true;
+              var cid = "contact:" + Date.now() + "-" + Math.random().toString(36).slice(2,8);
+              storageSet(cid, { id:cid, nome:nomeReal, cargo:s.cargo||s.title||"", empresa:emp.nome, email:s.email||"", emailValidated:!!s.email, linkedin:s.linkedin||"", savedAt:Date.now() });
+            });
+            if (props.onContactsRefresh) props.onContactsRefresh();
+          });
+        });
+        // Persist enriched contacts into the account record
+        storageList("acc:").then(function(ks2){
+          ks2.forEach(function(k2){
+            storageGet(k2).then(function(stored2){
+              if (!stored2 || stored2.nome.toLowerCase() !== nomeKeyP) return;
+              var merged = mergeStakeholders((stored2.data&&stored2.data.stakeholders)||[], stakhData.contacts);
+              storageSet(k2, Object.assign({}, stored2, {
+                data: Object.assign({}, stored2.data, {stakeholders: merged}),
+                enriched: { contacts:stakhData.contacts, sources:stakhData.sources||[], domain:domain }
+              }));
+              if (props.onUpdateAccount) {
+                storageGet(k2).then(function(freshest){ if (freshest) props.onUpdateAccount(freshest); });
+              }
+            });
+          });
+        });
+      })
+      .catch(function(){}); // stakeholders failure is non-fatal, mapping continues independently
 
       fetch("/api/gemini", {
         method:"POST", headers:{"Content-Type":"application/json"},
