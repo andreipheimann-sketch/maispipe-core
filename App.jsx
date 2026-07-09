@@ -1,4 +1,4 @@
-// BUILD: 1783623784
+// BUILD: 1783625274
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -6431,6 +6431,21 @@ function MyAccountModal(props) {
           <Icon name={toast.color==="#ef4444"?"error":"check_circle"} size={15} color="#fff"/>{toast.msg}
         </div>
       )}
+    </div>
+  );
+}
+
+function BetaBanner() {
+  var _st_dismissed = useState(function(){ try { return localStorage.getItem("pipe_beta_dismissed")==="1"; } catch(e){ return false; } });
+  var dismissed = _st_dismissed[0]; var setDismissed = _st_dismissed[1];
+  if (dismissed) return null;
+  return (
+    <div style={{background:"linear-gradient(90deg,#6366f1,#4f46e5)",color:"#fff",padding:"6px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:11,fontWeight:600,flexShrink:0,position:"relative"}}>
+      <Icon name="science" size={13} color="#fff"/>
+      <span>{"Você está usando a versão Beta do +Pipe — feedbacks são muito bem-vindos."}</span>
+      <button onClick={function(){ try{localStorage.setItem("pipe_beta_dismissed","1");}catch(e){} setDismissed(true); }} aria-label="Fechar aviso" style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:2}}>
+        <Icon name="close" size={13} color="rgba(255,255,255,.8)"/>
+      </button>
     </div>
   );
 }
