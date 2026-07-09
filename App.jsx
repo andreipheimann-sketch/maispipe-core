@@ -1,4 +1,4 @@
-// BUILD: 1783620572
+// BUILD: 1783623784
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -4660,86 +4660,114 @@ function InsightsView(props) {
 
   var _st_seqs     = useState([]); var seqs     = _st_seqs[0];     var setSeqs     = _st_seqs[1];
   var _st_contacts = useState([]); var contacts = _st_contacts[0]; var setContacts = _st_contacts[1];
-  var _st_sel      = useState({kpi:true,pipeline:true,fit:true,setor:true,velocity:true,ai:true,seq:true,cont:true});
+  var _st_sel = useState({kpi:true,pipeline:true,fitTier:true,matrix:true,setor:true,velocity:true,monthly:true,ai:true,seqEngine:true,profiles:true,contacts:true,cargos:true});
   var sel = _st_sel[0]; var setSel = _st_sel[1];
-  var _st_picker   = useState(false); var picker = _st_picker[0]; var setPicker = _st_picker[1];
+  var _st_picker = useState(false); var picker = _st_picker[0]; var setPicker = _st_picker[1];
 
-  useEffect(function() {
-    storageList("seq:").then(function(ks){
-      Promise.all(ks.map(storageGet)).then(function(items){ setSeqs(items.filter(Boolean)); });
-    });
-    storageList("contact:").then(function(ks){
-      Promise.all(ks.map(storageGet)).then(function(items){ setContacts(items.filter(Boolean)); });
-    });
+  useEffect(function(){
+    storageList("seq:").then(function(ks){ Promise.all(ks.map(storageGet)).then(function(items){ setSeqs(items.filter(Boolean)); }); });
+    storageList("contact:").then(function(ks){ Promise.all(ks.map(storageGet)).then(function(items){ setContacts(items.filter(Boolean)); }); });
   }, [props.contactsRefreshKey, total]);
 
   function pct(n,d){ return d ? Math.round(n/d*100) : 0; }
-
   var now = Date.now();
+
+  // ── Pipeline ──────────────────────────────────────────────────────────────
   var byStatus = {};
-  STATUS_ORDER.forEach(function(s){ byStatus[s] = accounts.filter(function(a){return a.status===s;}).length; });
-  var nContacted = (byStatus.contacted||0)+(byStatus.meeting||0)+(byStatus.proposal||0)+(byStatus.won||0);
-  var nMeeting   = (byStatus.meeting||0)+(byStatus.proposal||0)+(byStatus.won||0);
-  var nProposal  = (byStatus.proposal||0)+(byStatus.won||0);
-  var nWon = byStatus.won||0, nLost = byStatus.lost||0;
+  STATUS_ORDER.forEach(function(s){ byStatus[s]=accounts.filter(function(a){return a.status===s;}).length; });
+  var nContacted=byStatus.contacted||0, nMeeting=byStatus.meeting||0, nWon=byStatus.won||0, nLost=byStatus.lost||0;
+  var nProspecting=byStatus.prospecting||0;
+  var pastContacted=nContacted+nMeeting+nWon+nLost- nLost; // contacted or further, excluding raw prospecting
 
-  var nFitAlto  = accounts.filter(function(a){return a.fit==="ALTO";}).length;
-  var nFitMedio = accounts.filter(function(a){return a.fit==="MEDIO";}).length;
-  var nFitBaixo = accounts.filter(function(a){return a.fit==="BAIXO";}).length;
-  var nTier1 = accounts.filter(function(a){return a.tier==="Tier 1";}).length;
-  var nTier2 = accounts.filter(function(a){return a.tier==="Tier 2";}).length;
-  var nTier3 = accounts.filter(function(a){return a.tier==="Tier 3";}).length;
+  // ── Fit / Tier ────────────────────────────────────────────────────────────
+  var nFitAlto=accounts.filter(function(a){return a.fit==="ALTO";}).length;
+  var nFitMedio=accounts.filter(function(a){return a.fit==="MEDIO";}).length;
+  var nFitBaixo=accounts.filter(function(a){return a.fit==="BAIXO";}).length;
+  var nTier1=accounts.filter(function(a){return a.tier==="Tier 1";}).length;
+  var nTier2=accounts.filter(function(a){return a.tier==="Tier 2";}).length;
+  var nTier3=accounts.filter(function(a){return a.tier==="Tier 3";}).length;
 
-  var setorMap = {};
-  accounts.forEach(function(a){ var s=(a.setor||"Outros").split("/")[0].trim(); setorMap[s]=(setorMap[s]||0)+1; });
-  var bySetor = Object.keys(setorMap).map(function(k){return{s:k,n:setorMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
-  var maxSetor = (bySetor[0]&&bySetor[0].n)||1;
+  // Fit × Tier matrix
+  var fits=["ALTO","MEDIO","BAIXO"]; var tiers=["Tier 1","Tier 2","Tier 3"];
+  var matrix = fits.map(function(f){ return tiers.map(function(t){ return accounts.filter(function(a){return a.fit===f&&a.tier===t;}).length; }); });
+  var matrixMax = Math.max.apply(null, matrix.flat().concat([1]));
 
-  var weeks = [];
-  for (var w=7;w>=0;w--) {
-    var ws=now-(w+1)*7*24*3600*1000, we=now-w*7*24*3600*1000;
-    weeks.push({lb:w===0?"Esta sem":"S-"+w, n:accounts.filter(function(a){return a.savedAt>=ws&&a.savedAt<we;}).length});
+  // ── Setores ───────────────────────────────────────────────────────────────
+  var setorMap={};
+  accounts.forEach(function(a){ var s=a.setor||"Outros"; setorMap[s]=(setorMap[s]||0)+1; });
+  var bySetor=Object.keys(setorMap).map(function(k){return{s:k,n:setorMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
+  var maxSetor=(bySetor[0]&&bySetor[0].n)||1;
+
+  // ── Weekly / Monthly ──────────────────────────────────────────────────────
+  var weeks=[];
+  for(var w=7;w>=0;w--){ var ws=now-(w+1)*7*24*3600*1000, we=now-w*7*24*3600*1000;
+    weeks.push({lb:w===0?"Esta sem":"S-"+w, n:accounts.filter(function(a){return a.savedAt>=ws&&a.savedAt<we;}).length}); }
+  var maxWeek=Math.max.apply(null,weeks.map(function(x){return x.n;}))||1;
+
+  var months=[]; var mNames=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  for(var m=5;m>=0;m--){
+    var d=new Date(now); d.setDate(1); d.setMonth(d.getMonth()-m);
+    var y=d.getFullYear(), mo=d.getMonth();
+    var ms=new Date(y,mo,1).getTime(), me=new Date(y,mo+1,1).getTime();
+    months.push({lb:mNames[mo], n:accounts.filter(function(a){return a.savedAt>=ms&&a.savedAt<me;}).length});
   }
-  var maxWeek = Math.max.apply(null,weeks.map(function(x){return x.n;}))||1;
+  var maxMonth=Math.max.apply(null,months.map(function(x){return x.n;}))||1;
 
-  var nAiMapped  = accounts.filter(function(a){return a.aiMapped;}).length;
-  var nHasDores  = accounts.filter(function(a){return a.data&&a.data.dores&&(a.data.dores.principais||[]).length>0;}).length;
-  var nHasSpin   = accounts.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.perguntas_spin||[]).length>0;}).length;
-  var nHasEmails = accounts.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.emails||[]).length>0;}).length;
-  var nHasStk    = accounts.filter(function(a){return a.data&&a.data.stakeholders&&a.data.stakeholders.length>0;}).length;
-  var nSeqs      = seqs.length;
-  var nContacts  = contacts.length;
-  var nWithEmail = contacts.filter(function(c){return c.email&&c.email.length>2;}).length;
-  var nFav       = contacts.filter(function(c){return c.favorite;}).length;
+  // ── AI Coverage ───────────────────────────────────────────────────────────
+  var nAiMapped=accounts.filter(function(a){return a.aiMapped;}).length;
+  var nHasDores=accounts.filter(function(a){return a.data&&a.data.dores&&(a.data.dores.principais||[]).length>0;}).length;
+  var nHasTriggers=accounts.filter(function(a){return a.data&&(a.data.triggers||[]).length>0;}).length;
+  var nHasSpin=accounts.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.perguntas_spin||[]).length>0;}).length;
+  var nHasObj=accounts.filter(function(a){return a.data&&a.data.estrategia&&((a.data.estrategia.objeções||a.data.estrategia.objecoes||[]).length>0);}).length;
+  var nHasEmails=accounts.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.emails||[]).length>0;}).length;
+  var nHasStk=accounts.filter(function(a){return a.data&&(a.data.stakeholders||[]).length>0;}).length;
+  var nHasNextAE=accounts.filter(function(a){return a.data&&a.data.proximos_passos&&(a.data.proximos_passos.ae||[]).length>0;}).length;
+  var nHasNextBDR=accounts.filter(function(a){return a.data&&a.data.proximos_passos&&(a.data.proximos_passos.bdr||[]).length>0;}).length;
 
-  var touchMap = {};
+  // ── Sequences ─────────────────────────────────────────────────────────────
+  var nSeqs=seqs.length;
+  var nSeqAI=seqs.filter(function(s){return s.engine==="ai";}).length;
+  var nSeqTemplate=seqs.filter(function(s){return s.engine!=="ai";}).length;
+  var touchMap={};
   seqs.forEach(function(s){(s.touches||[]).forEach(function(t){touchMap[t.type]=(touchMap[t.type]||0)+1;});});
-  var profileMap = {};
+  var dayMap={};
+  seqs.forEach(function(s){(s.touches||[]).forEach(function(t){var k="D"+t.day; dayMap[k]=(dayMap[k]||0)+1;});});
+  var dayEntries=Object.keys(dayMap).map(function(k){return{k:k,n:dayMap[k],num:parseInt(k.slice(1))};}).sort(function(a,b){return a.num-b.num;});
+  var profileMap={};
   seqs.forEach(function(s){var l=(s.profile&&s.profile.label)||"Custom";profileMap[l]=(profileMap[l]||0)+1;});
-  var topProfiles = Object.keys(profileMap).map(function(k){return{k:k,n:profileMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,5);
-  var companyMap = {};
-  contacts.forEach(function(c){var e=c.empresa||"?";companyMap[e]=(companyMap[e]||0)+1;});
-  var topCompanies = Object.keys(companyMap).map(function(k){return{k:k,n:companyMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,5);
+  var topProfiles=Object.keys(profileMap).map(function(k){return{k:k,n:profileMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,6);
 
-  function kpiCard(label,value,sub,accent,ico) {
+  // ── Contacts ──────────────────────────────────────────────────────────────
+  var nContacts=contacts.length;
+  var nWithEmail=contacts.filter(function(c){return c.email&&c.email.length>2;}).length;
+  var nFav=contacts.filter(function(c){return c.favorite;}).length;
+  var nLinkedin=contacts.filter(function(c){return c.linkedin&&c.linkedin.length>5;}).length;
+  var companyMap={};
+  contacts.forEach(function(c){var e=c.empresa||"?"; companyMap[e]=(companyMap[e]||0)+1;});
+  var topCompanies=Object.keys(companyMap).map(function(k){return{k:k,n:companyMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,6);
+  var cargoMap={};
+  contacts.forEach(function(c){ var cg=(c.cargo||"").trim(); if(!cg)return; cargoMap[cg]=(cargoMap[cg]||0)+1; });
+  var topCargos=Object.keys(cargoMap).map(function(k){return{k:k,n:cargoMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,6);
+
+  // ── Inline render helpers (plain functions, not JSX components) ─────────
+  function kpiCard(label,value,sub,accent,ico){
     return (
       <div style={{background:"#fff",borderRadius:14,padding:"16px",border:"1px solid #e6e9ef",position:"relative",overflow:"hidden",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
         <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:accent}}/>
         <div style={{width:28,height:28,borderRadius:8,background:accent+"20",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:8}}>
           <Icon name={ico} size={14} color={accent}/>
         </div>
-        <div style={{fontSize:28,fontWeight:900,color:"#0f172a",letterSpacing:"-.6px",lineHeight:1}}>{value}</div>
+        <div style={{fontSize:26,fontWeight:900,color:"#0f172a",letterSpacing:"-.5px",lineHeight:1}}>{value}</div>
         <div style={{fontSize:11,fontWeight:700,color:"#334155",marginTop:3}}>{label}</div>
         <div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>{sub}</div>
       </div>
     );
   }
-
-  function mBar(label,n,den,color) {
+  function mBar(label,n,den,color){
     var p=pct(n,den||1);
     return (
       <div key={label} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
-        <span style={{fontSize:11,color:"#475569",minWidth:100,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
+        <span style={{fontSize:11,color:"#475569",minWidth:110,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
         <div style={{flex:1,background:"#f1f5f9",borderRadius:4,height:7,overflow:"hidden"}}>
           <div style={{width:p+"%",height:"100%",background:color,borderRadius:4,transition:"width .7s ease"}}/>
         </div>
@@ -4747,8 +4775,7 @@ function InsightsView(props) {
       </div>
     );
   }
-
-  function sHdr(ico,title,sub) {
+  function sHdr(ico,title,sub){
     return (
       <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:16}}>
         <Icon name={ico} size={15} color="#6366f1"/>
@@ -4757,8 +4784,7 @@ function InsightsView(props) {
       </div>
     );
   }
-
-  function dnut(segs,cLbl,cSub,sz) {
+  function dnut(segs,cLbl,cSub,sz){
     sz=sz||100; var cx=sz/2,cy=sz/2,r=sz/2-5,ir=r*0.58;
     var tot=segs.reduce(function(s,x){return s+x.v;},0)||1;
     var paths=[],angle=-Math.PI/2;
@@ -4782,15 +4808,19 @@ function InsightsView(props) {
     </div>
   );
 
-  var SECS = [
+  var SECS=[
     {id:"kpi",label:"KPIs Gerais",icon:"speed"},
     {id:"pipeline",label:"Funil de Conversão",icon:"filter_alt"},
-    {id:"fit",label:"Fit & Tier",icon:"target"},
+    {id:"fitTier",label:"Fit & Tier",icon:"target"},
+    {id:"matrix",label:"Matriz Fit × Tier",icon:"grid_view"},
     {id:"setor",label:"Top Setores",icon:"business"},
     {id:"velocity",label:"Atividade Semanal",icon:"trending_up"},
+    {id:"monthly",label:"Tendência Mensal",icon:"calendar_view_month"},
     {id:"ai",label:"Cobertura de IA",icon:"auto_awesome"},
-    {id:"seq",label:"Sequências",icon:"forward_to_inbox"},
-    {id:"cont",label:"Contatos",icon:"contacts"},
+    {id:"seqEngine",label:"Motor de Sequências",icon:"bolt"},
+    {id:"profiles",label:"Perfis & Cadência",icon:"people"},
+    {id:"contacts",label:"Contatos",icon:"contacts"},
+    {id:"cargos",label:"Top Cargos",icon:"badge"},
   ];
 
   return (
@@ -4800,7 +4830,10 @@ function InsightsView(props) {
       {/* HEADER */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24,flexWrap:"wrap",gap:12}}>
         <div>
-          <div style={{fontSize:26,fontWeight:800,color:"#0f172a",letterSpacing:"-.5px"}}>Relatórios</div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{fontSize:26,fontWeight:800,color:"#0f172a",letterSpacing:"-.5px"}}>Relatórios</div>
+            <span style={{fontSize:9,fontWeight:700,color:"#6366f1",background:"rgba(99,102,241,.1)",padding:"2px 8px",borderRadius:20,letterSpacing:.3}}>{"PREMIUM v3"}</span>
+          </div>
           <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{total+" contas · "+nSeqs+" sequências · "+nContacts+" contatos"}</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -4809,12 +4842,12 @@ function InsightsView(props) {
               <Icon name="dashboard" size={13}/>{Object.keys(sel).filter(function(k){return sel[k];}).length+" seções"}
             </button>
             {picker&&(
-              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:"#fff",border:"1px solid #e6e9ef",borderRadius:14,boxShadow:"0 16px 48px rgba(15,23,42,.15)",zIndex:300,minWidth:230,padding:"6px 0"}}>
+              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:"#fff",border:"1px solid #e6e9ef",borderRadius:14,boxShadow:"0 16px 48px rgba(15,23,42,.15)",zIndex:300,minWidth:240,padding:"6px 0",maxHeight:360,overflowY:"auto"}}>
                 <div style={{padding:"8px 14px 4px",fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8}}>Seções visíveis</div>
                 {SECS.map(function(s){
                   var on=!!sel[s.id];
                   return (
-                    <div key={s.id} onClick={function(){setSel(function(prev){var n=Object.assign({},prev);if(n[s.id])delete n[s.id];else n[s.id]=true;return n;});}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:"pointer",background:on?"rgba(99,102,241,.06)":"transparent"}}>
+                    <div key={s.id} onClick={function(){setSel(function(prev){var n=Object.assign({},prev); if(n[s.id])delete n[s.id]; else n[s.id]=true; return n;});}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:"pointer",background:on?"rgba(99,102,241,.06)":"transparent"}}>
                       <div style={{width:15,height:15,borderRadius:4,border:"2px solid "+(on?"#6366f1":"#d1d5db"),background:on?"#6366f1":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         {on&&<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
                       </div>
@@ -4832,45 +4865,48 @@ function InsightsView(props) {
         </div>
       </div>
 
-      {/* 1. KPI */}
+      {/* 1. KPI GRID */}
       {sel.kpi&&(
-        <div className="rpt" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:12,marginBottom:24}}>
+        <div className="rpt" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:12,marginBottom:24}}>
           {kpiCard("Total Mapeado",total,"empresas","#6366f1","folder_open")}
-          {kpiCard("Fit Alto",nFitAlto,pct(nFitAlto,total)+"% do total","#10b981","target")}
-          {kpiCard("AI Mapeadas",nAiMapped,pct(nAiMapped,total)+"% cobertura","#8b5cf6","auto_awesome")}
-          {kpiCard("Sequências",nSeqs,"geradas","#0ea5e9","forward_to_inbox")}
-          {kpiCard("Contatadas",nContacted,pct(nContacted,total)+"% do total","#f59e0b","mail")}
-          {kpiCard("Reuniões",nMeeting,pct(nMeeting,total)+"% do total","#06b6d4","calendar_month")}
-          {kpiCard("Propostas",nProposal,pct(nProposal,total)+"% do total","#a855f7","description")}
+          {kpiCard("Em Prospecção",nProspecting,pct(nProspecting,total)+"% do total","#94a3b8","hourglass_empty")}
+          {kpiCard("Contatadas",nContacted,pct(nContacted,total)+"% do total","#0ea5e9","mail")}
+          {kpiCard("Reuniões",nMeeting,pct(nMeeting,total)+"% do total","#8b5cf6","calendar_month")}
           {kpiCard("Ganhas",nWon,pct(nWon,total)+"% win rate","#22c55e","emoji_events")}
+          {kpiCard("Perdidas",nLost,pct(nLost,total)+"% do total","#ef4444","cancel")}
+          {kpiCard("Fit Alto",nFitAlto,pct(nFitAlto,total)+"% do total","#6366f1","target")}
+          {kpiCard("Tier 1",nTier1,pct(nTier1,total)+"% do total","#2d3a8c","workspace_premium")}
+          {kpiCard("AI Mapeadas",nAiMapped,pct(nAiMapped,total)+"% cobertura","#8b5cf6","auto_awesome")}
+          {kpiCard("Sequências",nSeqs,nSeqAI+" via IA","#0ea5e9","forward_to_inbox")}
           {kpiCard("Contatos",nContacts,"mapeados","#64748b","contacts")}
           {kpiCard("E-mails",nWithEmail,pct(nWithEmail,nContacts||1)+"% encontrados","#0284c7","mail_outline")}
           {kpiCard("Favoritos",nFav,"contatos favoritos","#f59e0b","star")}
-          {kpiCard("Perdidas",nLost,pct(nLost,total)+"% do total","#ef4444","cancel")}
+          {kpiCard("LinkedIn",nLinkedin,pct(nLinkedin,nContacts||1)+"% com perfil","#0a66c2","link")}
+          {kpiCard("Com Dores Mapeadas",nHasDores,pct(nHasDores,total)+"% do total","#a855f7","health_and_safety")}
+          {kpiCard("Com Próx. Passos",nHasNextAE,pct(nHasNextAE,total)+"% do total","#06b6d4","checklist")}
         </div>
       )}
 
-      {/* 2. PIPELINE */}
+      {/* 2. PIPELINE FUNNEL */}
       {sel.pipeline&&(
         <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
           {sHdr("filter_alt","Funil de Conversão",total+" contas")}
           {[
-            {lb:"Mapeado",  n:total,      c:"#6366f1",prev:total},
-            {lb:"Contatado",n:nContacted, c:"#0ea5e9",prev:total},
-            {lb:"Reunião",  n:nMeeting,   c:"#8b5cf6",prev:nContacted},
-            {lb:"Proposta", n:nProposal,  c:"#f59e0b",prev:nMeeting},
-            {lb:"Ganho",    n:nWon,       c:"#22c55e",prev:nProposal},
-            {lb:"Perdido",  n:nLost,      c:"#ef4444",prev:nContacted},
-          ].map(function(st,i){
+            {lb:"Mapeado",n:total,c:"#6366f1",prev:total},
+            {lb:"Contatado",n:nContacted+nMeeting+nWon,c:"#0ea5e9",prev:total},
+            {lb:"Reunião",n:nMeeting+nWon,c:"#8b5cf6",prev:nContacted+nMeeting+nWon||1},
+            {lb:"Ganho",n:nWon,c:"#22c55e",prev:nMeeting+nWon||1},
+            {lb:"Perdido",n:nLost,c:"#ef4444",prev:total},
+          ].map(function(st,i,arr){
             var bw=total?Math.max(2,Math.round(st.n/total*100)):0;
             return (
-              <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:i<5?10:0}}>
-                <span style={{fontSize:11,fontWeight:600,color:"#475569",minWidth:68}}>{st.lb}</span>
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:i<arr.length-1?10:0}}>
+                <span style={{fontSize:11,fontWeight:600,color:"#475569",minWidth:72}}>{st.lb}</span>
                 <div style={{flex:1,background:"#f8fafc",borderRadius:6,height:30,overflow:"hidden",position:"relative"}}>
                   <div style={{position:"absolute",inset:0,width:bw+"%",background:st.c,borderRadius:6,opacity:.82,transition:"width .8s cubic-bezier(.22,1,.36,1)"}}/>
                   <span style={{position:"absolute",left:10,top:0,bottom:0,display:"flex",alignItems:"center",fontSize:11,fontWeight:700,color:bw>18?"#fff":"#334155",zIndex:1}}>{st.n}</span>
                 </div>
-                <span style={{fontSize:12,fontWeight:700,color:st.c,minWidth:36,textAlign:"right"}}>{pct(st.n,st.prev||1)+"%"}</span>
+                <span style={{fontSize:12,fontWeight:700,color:st.c,minWidth:36,textAlign:"right"}}>{pct(st.n,st.prev)+"%"}</span>
               </div>
             );
           })}
@@ -4878,7 +4914,7 @@ function InsightsView(props) {
       )}
 
       {/* 3. FIT & TIER */}
-      {sel.fit&&(
+      {sel.fitTier&&(
         <div className="rpt" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
           <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
             {sHdr("target","Distribuição de Fit")}
@@ -4894,18 +4930,39 @@ function InsightsView(props) {
           <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
             {sHdr("workspace_premium","Distribuição por Tier")}
             <div style={{display:"flex",alignItems:"center",gap:18}}>
-              {dnut([{v:nTier1,c:"#6366f1"},{v:nTier2,c:"#a855f7"},{v:nTier3,c:"#c084fc"}],String(total),"contas",100)}
+              {dnut([{v:nTier1,c:"#2d3a8c"},{v:nTier2,c:"#92400e"},{v:nTier3,c:"#475569"}],String(total),"contas",100)}
               <div style={{flex:1}}>
-                {mBar("Tier 1",nTier1,total,"#6366f1")}
-                {mBar("Tier 2",nTier2,total,"#a855f7")}
-                {mBar("Tier 3",nTier3,total,"#c084fc")}
+                {mBar("Tier 1",nTier1,total,"#2d3a8c")}
+                {mBar("Tier 2",nTier2,total,"#92400e")}
+                {mBar("Tier 3",nTier3,total,"#475569")}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 4. SETORES */}
+      {/* 4. MATRIZ FIT × TIER */}
+      {sel.matrix&&(
+        <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+          {sHdr("grid_view","Matriz Fit × Tier","cruzamento de qualidade")}
+          <div style={{display:"grid",gridTemplateColumns:"90px repeat(3,1fr)",gap:6}}>
+            <div/>
+            {tiers.map(function(t){return <div key={t} style={{textAlign:"center",fontSize:10,fontWeight:700,color:"#475569",padding:"4px 0"}}>{t}</div>;})}
+            {fits.map(function(f,fi){
+              var rowCells=[<div key={f+"-lb"} style={{fontSize:10,fontWeight:700,color:"#475569",display:"flex",alignItems:"center"}}>{f==="ALTO"?"Fit Alto":f==="MEDIO"?"Fit Médio":"Fit Baixo"}</div>];
+              tiers.forEach(function(t,ti){
+                var v=matrix[fi][ti];
+                var intensity=v/matrixMax;
+                var bg="rgba(99,102,241,"+(0.08+intensity*0.72).toFixed(2)+")";
+                rowCells.push(<div key={f+"-"+t} style={{background:bg,borderRadius:8,padding:"12px 0",textAlign:"center",fontSize:16,fontWeight:800,color:intensity>0.5?"#fff":"#1e1b4b",transition:"background .5s"}}>{v}</div>);
+              });
+              return rowCells;
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 5. TOP SETORES */}
       {sel.setor&&bySetor.length>0&&(
         <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
           {sHdr("business","Top Setores",bySetor.length+" segmentos")}
@@ -4918,7 +4975,7 @@ function InsightsView(props) {
         </div>
       )}
 
-      {/* 5. VELOCITY */}
+      {/* 6. VELOCITY (weekly) */}
       {sel.velocity&&(
         <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
           {sHdr("trending_up","Atividade Semanal","últimas 8 semanas")}
@@ -4929,9 +4986,9 @@ function InsightsView(props) {
             var ap=lp+" L "+pts[pts.length-1].x+" "+(H-20)+" L "+pts[0].x+" "+(H-20)+" Z";
             return (
               <svg width="100%" viewBox={"0 0 "+(W+10)+" "+H} style={{overflow:"visible"}}>
-                <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity="0.16"/><stop offset="100%" stopColor="#6366f1" stopOpacity="0.01"/></linearGradient></defs>
-                {[0,.33,.66,1].map(function(t,i){var y=(H-20-(t*(H-50))).toFixed(1);return <line key={i} x1={PL} y1={y} x2={W} y2={y} stroke="#f1f5f9" strokeWidth="1"/>;} )}
-                <path d={ap} fill="url(#ag)"/>
+                <defs><linearGradient id="ag1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity="0.16"/><stop offset="100%" stopColor="#6366f1" stopOpacity="0.01"/></linearGradient></defs>
+                {[0,.33,.66,1].map(function(t,i){var y=(H-20-(t*(H-50))).toFixed(1); return <line key={i} x1={PL} y1={y} x2={W} y2={y} stroke="#f1f5f9" strokeWidth="1"/>;})}
+                <path d={ap} fill="url(#ag1)"/>
                 <path d={lp} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 {pts.map(function(p,i){return (
                   <g key={i}>
@@ -4946,7 +5003,27 @@ function InsightsView(props) {
         </div>
       )}
 
-      {/* 6. AI */}
+      {/* 7. MONTHLY TREND */}
+      {sel.monthly&&(
+        <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+          {sHdr("calendar_view_month","Tendência Mensal","últimos 6 meses")}
+          <div style={{display:"flex",alignItems:"flex-end",gap:14,height:120,padding:"0 6px"}}>
+            {months.map(function(mo,i){
+              var h=Math.max(4,Math.round((mo.n/maxMonth)*96));
+              var hues=[238,225,210,262,290,320];
+              return (
+                <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:11,fontWeight:700,color:"#0f172a"}}>{mo.n}</span>
+                  <div style={{width:"100%",maxWidth:34,height:h,background:"hsl("+hues[i]+",62%,58%)",borderRadius:"6px 6px 2px 2px",transition:"height .6s cubic-bezier(.22,1,.36,1)"}}/>
+                  <span style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>{mo.lb}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 8. AI COVERAGE */}
       {sel.ai&&(
         <div className="rpt" style={{background:"linear-gradient(135deg,#faf5ff,#eff6ff)",borderRadius:16,border:"1px solid rgba(99,102,241,.14)",padding:"22px 24px",marginBottom:24}}>
           {sHdr("auto_awesome","Cobertura de IA",pct(nAiMapped,total)+"% mapeadas com IA")}
@@ -4954,17 +5031,19 @@ function InsightsView(props) {
             {[
               {lb:"AI Mapeadas",n:nAiMapped,c:"#6366f1",ico:"auto_awesome"},
               {lb:"Com Dores",n:nHasDores,c:"#8b5cf6",ico:"health_and_safety"},
+              {lb:"Com Triggers",n:nHasTriggers,c:"#d946ef",ico:"bolt"},
               {lb:"Com SPIN",n:nHasSpin,c:"#06b6d4",ico:"quiz"},
+              {lb:"Com Objeções",n:nHasObj,c:"#f59e0b",ico:"gavel"},
               {lb:"Com E-mails",n:nHasEmails,c:"#0ea5e9",ico:"mail"},
               {lb:"Stakeholders",n:nHasStk,c:"#a855f7",ico:"group"},
-              {lb:"Sequências",n:Math.min(nSeqs,total),c:"#22c55e",ico:"send"},
-            ].map(function(m,i){
-              var p=pct(m.n,total||1);
+              {lb:"Próx. Passos AE",n:nHasNextAE,c:"#22c55e",ico:"checklist"},
+            ].map(function(mt,i){
+              var p=pct(mt.n,total||1);
               return (
                 <div key={i} style={{background:"#fff",borderRadius:12,padding:"14px",border:"1px solid rgba(99,102,241,.1)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><Icon name={m.ico} size={13} color={m.c}/><span style={{fontSize:10,fontWeight:700,color:"#475569"}}>{m.lb}</span></div>
-                  <div style={{fontSize:24,fontWeight:900,color:m.c,marginBottom:6,letterSpacing:"-.4px"}}>{m.n}</div>
-                  <div style={{background:"#f1f5f9",borderRadius:3,height:4}}><div style={{width:p+"%",height:"100%",background:m.c,borderRadius:3,transition:"width .7s ease"}}/></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><Icon name={mt.ico} size={13} color={mt.c}/><span style={{fontSize:10,fontWeight:700,color:"#475569"}}>{mt.lb}</span></div>
+                  <div style={{fontSize:22,fontWeight:900,color:mt.c,marginBottom:6,letterSpacing:"-.4px"}}>{mt.n}</div>
+                  <div style={{background:"#f1f5f9",borderRadius:3,height:4}}><div style={{width:p+"%",height:"100%",background:mt.c,borderRadius:3,transition:"width .7s ease"}}/></div>
                   <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>{p+"% de "+total}</div>
                 </div>
               );
@@ -4973,49 +5052,88 @@ function InsightsView(props) {
         </div>
       )}
 
-      {/* 7. SEQUÊNCIAS */}
-      {sel.seq&&nSeqs>0&&(
+      {/* 9. MOTOR DE SEQUÊNCIAS */}
+      {sel.seqEngine&&nSeqs>0&&(
         <div className="rpt" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
           <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            {sHdr("forward_to_inbox","Canais Usados",nSeqs+" sequências")}
+            {sHdr("bolt","Motor de Geração",nSeqs+" sequências")}
+            <div style={{display:"flex",alignItems:"center",gap:18}}>
+              {dnut([{v:nSeqAI,c:"#8b5cf6"},{v:nSeqTemplate,c:"#94a3b8"}],String(nSeqs),"sequências",100)}
+              <div style={{flex:1}}>
+                {mBar("Gerado por IA",nSeqAI,nSeqs,"#8b5cf6")}
+                {mBar("Template local",nSeqTemplate,nSeqs,"#94a3b8")}
+              </div>
+            </div>
+          </div>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("forward_to_inbox","Canais Usados")}
             {(function(){
               var tot2=Object.values(touchMap).reduce(function(s,v){return s+v;},0)||1;
               return [
                 {type:"email",lb:"E-mail",c:"#0ea5e9"},
                 {type:"linkedin",lb:"LinkedIn",c:"#0a66c2"},
-                {type:"call",lb:"Cold Call",c:"#f59e0b"},
-                {type:"whatsapp",lb:"WhatsApp",c:"#22c55e"},
-                {type:"breakup",lb:"Breakup",c:"#94a3b8"},
+                {type:"call",lb:"Cold Call",c:"#92400e"},
+                {type:"whatsapp",lb:"WhatsApp",c:"#16a34a"},
+                {type:"follow",lb:"Follow-up",c:"#7c3aed"},
+                {type:"breakup",lb:"Breakup",c:"#52617a"},
               ].map(function(ch){return mBar(ch.lb,touchMap[ch.type]||0,tot2,ch.c);});
             })()}
-          </div>
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            {sHdr("people","Top Perfis Usados")}
-            {topProfiles.length
-              ? topProfiles.map(function(p,i){var cols=["#6366f1","#8b5cf6","#0ea5e9","#22c55e","#f59e0b"];return mBar(p.k,p.n,nSeqs,cols[i%5]);})
-              : <div style={{fontSize:12,color:"#94a3b8",padding:"10px 0"}}>Nenhum perfil ainda.</div>}
           </div>
         </div>
       )}
 
-      {/* 8. CONTATOS */}
-      {sel.cont&&nContacts>0&&(
+      {/* 10. PERFIS & CADÊNCIA */}
+      {sel.profiles&&nSeqs>0&&(
+        <div className="rpt" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("people","Top Perfis Usados")}
+            {topProfiles.length
+              ? topProfiles.map(function(p,i){var cols=["#6366f1","#8b5cf6","#0ea5e9","#22c55e","#f59e0b","#ec4899"];return mBar(p.k,p.n,nSeqs,cols[i%6]);})
+              : <div style={{fontSize:12,color:"#94a3b8",padding:"10px 0"}}>Nenhum perfil ainda.</div>}
+          </div>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("event_repeat","Dias de Cadência Mais Usados")}
+            {dayEntries.length
+              ? dayEntries.map(function(d,i){var cols=["#6366f1","#0ea5e9","#8b5cf6","#f59e0b","#22c55e","#ec4899","#94a3b8"];var maxD=Math.max.apply(null,dayEntries.map(function(x){return x.n;}))||1;return mBar(d.k,d.n,maxD,cols[i%7]);})
+              : <div style={{fontSize:12,color:"#94a3b8",padding:"10px 0"}}>Nenhuma sequência ainda.</div>}
+          </div>
+        </div>
+      )}
+
+      {/* 11. CONTATOS */}
+      {sel.contacts&&nContacts>0&&(
         <div className="rpt" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
           <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
             {sHdr("mail_outline","Hit Rate de E-mail")}
             <div style={{display:"flex",alignItems:"center",gap:18}}>
               {dnut([{v:nWithEmail,c:"#22c55e"},{v:nContacts-nWithEmail,c:"#f1f5f9"}],pct(nWithEmail,nContacts||1)+"%","hit rate",100)}
               <div>
-                <div style={{fontSize:24,fontWeight:900,color:"#0f172a"}}>{nWithEmail}</div>
+                <div style={{fontSize:22,fontWeight:900,color:"#0f172a"}}>{nWithEmail}</div>
                 <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>e-mails encontrados</div>
                 <div style={{fontSize:11,color:"#94a3b8"}}>{(nContacts-nWithEmail)+" sem e-mail"}</div>
                 <div style={{fontSize:11,color:"#f59e0b",marginTop:4}}>{nFav+" favoritos"}</div>
+                <div style={{fontSize:11,color:"#0a66c2",marginTop:2}}>{nLinkedin+" com LinkedIn"}</div>
               </div>
             </div>
           </div>
           <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
             {sHdr("contacts","Contas com Mais Contatos")}
-            {topCompanies.map(function(c,i){var cols=["#6366f1","#8b5cf6","#0ea5e9","#22c55e","#f59e0b"];return mBar(c.k,c.n,topCompanies[0].n||1,cols[i%5]);})}
+            {topCompanies.length
+              ? topCompanies.map(function(c,i){var cols=["#6366f1","#8b5cf6","#0ea5e9","#22c55e","#f59e0b","#ec4899"];return mBar(c.k,c.n,topCompanies[0].n||1,cols[i%6]);})
+              : <div style={{fontSize:12,color:"#94a3b8",padding:"10px 0"}}>Nenhum contato ainda.</div>}
+          </div>
+        </div>
+      )}
+
+      {/* 12. TOP CARGOS */}
+      {sel.cargos&&topCargos.length>0&&(
+        <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+          {sHdr("badge","Top Cargos Encontrados",topCargos.length+" cargos únicos")}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 32px"}}>
+            {topCargos.map(function(c,i){
+              var hues=[238,210,262,190,290,170];
+              return mBar(c.k,c.n,topCargos[0].n||1,"hsl("+hues[i%6]+",60%,54%)");
+            })}
           </div>
         </div>
       )}
