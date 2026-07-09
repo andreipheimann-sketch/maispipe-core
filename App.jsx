@@ -1,3 +1,4 @@
+// BUILD: 1783603399
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -6082,7 +6083,7 @@ function AuthScreen(props) {
         </div>
 
         <div style={{background:"#f8fafc",borderTop:"1px solid #f1f5f9",padding:"12px 32px",textAlign:"center"}}>
-          <span style={{fontSize:11,color:"#94a3b8"}}>{"© "+new Date().getFullYear()+" +Pipe · Prospecção B2B Inteligente"}</span>
+          <span style={{fontSize:11,color:"#94a3b8"}}>{"© "+new Date().getFullYear()+" +Pipe · Prospecção B2B Inteligente v2"}</span>
         </div>
       </div>
 
