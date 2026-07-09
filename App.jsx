@@ -1,4 +1,4 @@
-// BUILD: 1783625274
+// BUILD: 1783625569
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -6435,21 +6435,6 @@ function MyAccountModal(props) {
   );
 }
 
-function BetaBanner() {
-  var _st_dismissed = useState(function(){ try { return localStorage.getItem("pipe_beta_dismissed")==="1"; } catch(e){ return false; } });
-  var dismissed = _st_dismissed[0]; var setDismissed = _st_dismissed[1];
-  if (dismissed) return null;
-  return (
-    <div style={{background:"linear-gradient(90deg,#6366f1,#4f46e5)",color:"#fff",padding:"6px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontSize:11,fontWeight:600,flexShrink:0,position:"relative"}}>
-      <Icon name="science" size={13} color="#fff"/>
-      <span>{"Você está usando a versão Beta do +Pipe — feedbacks são muito bem-vindos."}</span>
-      <button onClick={function(){ try{localStorage.setItem("pipe_beta_dismissed","1");}catch(e){} setDismissed(true); }} aria-label="Fechar aviso" style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:2}}>
-        <Icon name="close" size={13} color="rgba(255,255,255,.8)"/>
-      </button>
-    </div>
-  );
-}
-
 export default function App() {
   var _st_authUser  = useState(function(){ return authGetUser(); }); var authUser = _st_authUser[0]; var setAuthUser = _st_authUser[1];
   var _st_legalAuth = useState(null); var legalAuth = _st_legalAuth[0]; var setLegalAuth = _st_legalAuth[1];
@@ -6828,7 +6813,7 @@ export default function App() {
       </>
     ) : (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#eef1f6",overflowX:"clip",maxWidth:"100vw"}}>
-      <BetaBanner/>
+      <FeedbackWidget/>
     <div style={{display:"flex",flex:1,overflowX:"clip",minWidth:0,width:"100%"}}>
       <style>{css}</style>
       <div className="sidebar sidebar-desktop" style={{width:sidebarExpanded?224:64,background:"linear-gradient(180deg,#15192b 0%,#10131f 100%)",borderRight:"1px solid #1f2438",display:"flex",flexDirection:"column",flexShrink:0,boxShadow:"4px 0 24px rgba(15,23,42,.18)",position:"relative",overflowX:"hidden",overflowY:"hidden",transition:"width .35s cubic-bezier(.4,0,.2,1)",zIndex:2}}>
