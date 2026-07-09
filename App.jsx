@@ -1,4 +1,4 @@
-// BUILD: 1783603399
+// BUILD: 1783620572
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -4658,104 +4658,123 @@ function InsightsView(props) {
   var accounts = props.accounts || [];
   var total    = accounts.length;
 
-  // ── Load sequences and contacts from storage ──────────────────────────────
   var _st_seqs     = useState([]); var seqs     = _st_seqs[0];     var setSeqs     = _st_seqs[1];
   var _st_contacts = useState([]); var contacts = _st_contacts[0]; var setContacts = _st_contacts[1];
+  var _st_sel      = useState({kpi:true,pipeline:true,fit:true,setor:true,velocity:true,ai:true,seq:true,cont:true});
+  var sel = _st_sel[0]; var setSel = _st_sel[1];
+  var _st_picker   = useState(false); var picker = _st_picker[0]; var setPicker = _st_picker[1];
 
   useEffect(function() {
-    storageList("seq:").then(function(ks){ Promise.all(ks.map(storageGet)).then(function(items){ setSeqs(items.filter(Boolean)); }); });
-    storageList("contact:").then(function(ks){ Promise.all(ks.map(storageGet)).then(function(items){ setContacts(items.filter(Boolean)); }); });
+    storageList("seq:").then(function(ks){
+      Promise.all(ks.map(storageGet)).then(function(items){ setSeqs(items.filter(Boolean)); });
+    });
+    storageList("contact:").then(function(ks){
+      Promise.all(ks.map(storageGet)).then(function(items){ setContacts(items.filter(Boolean)); });
+    });
   }, [props.contactsRefreshKey, total]);
 
-  // ── Metric picker ─────────────────────────────────────────────────────────
-  var _st_sel  = useState({kpi:true,pipeline:true,fit:true,setor:true,velocity:true,ai:true,seq:true,contacts:true});
-  var sel = _st_sel[0]; var setSel = _st_sel[1];
-  var _st_picker = useState(false); var picker = _st_picker[0]; var setPicker = _st_picker[1];
+  function pct(n,d){ return d ? Math.round(n/d*100) : 0; }
 
-  var SECTIONS = [
-    {id:"kpi",      label:"KPIs Gerais",         icon:"speed"},
-    {id:"pipeline", label:"Funil de Conversão",  icon:"filter_alt"},
-    {id:"fit",      label:"Fit & Tier",           icon:"target"},
-    {id:"setor",    label:"Top Setores",          icon:"business"},
-    {id:"velocity", label:"Atividade Semanal",    icon:"trending_up"},
-    {id:"ai",       label:"Cobertura de IA",      icon:"auto_awesome"},
-    {id:"seq",      label:"Sequências",           icon:"forward_to_inbox"},
-    {id:"contacts", label:"Contatos",             icon:"contacts"},
-  ];
-
-  // ── Compute all metrics ───────────────────────────────────────────────────
   var now = Date.now();
-
-  // Pipeline / funnel
   var byStatus = {};
   STATUS_ORDER.forEach(function(s){ byStatus[s] = accounts.filter(function(a){return a.status===s;}).length; });
-  var contacted = (byStatus.contacted||0)+(byStatus.meeting||0)+(byStatus.proposal||0)+(byStatus.won||0);
-  var meeting   = (byStatus.meeting  ||0)+(byStatus.proposal||0)+(byStatus.won||0);
-  var proposal  = (byStatus.proposal ||0)+(byStatus.won||0);
-  var won       = byStatus.won || 0;
-  var lost      = byStatus.lost || 0;
+  var nContacted = (byStatus.contacted||0)+(byStatus.meeting||0)+(byStatus.proposal||0)+(byStatus.won||0);
+  var nMeeting   = (byStatus.meeting||0)+(byStatus.proposal||0)+(byStatus.won||0);
+  var nProposal  = (byStatus.proposal||0)+(byStatus.won||0);
+  var nWon = byStatus.won||0, nLost = byStatus.lost||0;
 
-  // Fit
-  var byFit = {ALTO:0,MEDIO:0,BAIXO:0};
-  accounts.forEach(function(a){ if(byFit[a.fit]!==undefined) byFit[a.fit]++; });
+  var nFitAlto  = accounts.filter(function(a){return a.fit==="ALTO";}).length;
+  var nFitMedio = accounts.filter(function(a){return a.fit==="MEDIO";}).length;
+  var nFitBaixo = accounts.filter(function(a){return a.fit==="BAIXO";}).length;
+  var nTier1 = accounts.filter(function(a){return a.tier==="Tier 1";}).length;
+  var nTier2 = accounts.filter(function(a){return a.tier==="Tier 2";}).length;
+  var nTier3 = accounts.filter(function(a){return a.tier==="Tier 3";}).length;
 
-  // Tier
-  var byTier = {"Tier 1":0,"Tier 2":0,"Tier 3":0};
-  accounts.forEach(function(a){ if(byTier[a.tier]!==undefined) byTier[a.tier]++; });
-
-  // Setor (top 8)
   var setorMap = {};
   accounts.forEach(function(a){ var s=(a.setor||"Outros").split("/")[0].trim(); setorMap[s]=(setorMap[s]||0)+1; });
-  var bySetor = Object.keys(setorMap).map(function(s){return{setor:s,count:setorMap[s]};}).sort(function(a,b){return b.count-a.count;}).slice(0,8);
-  var maxSetor = (bySetor[0]&&bySetor[0].count)||1;
+  var bySetor = Object.keys(setorMap).map(function(k){return{s:k,n:setorMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
+  var maxSetor = (bySetor[0]&&bySetor[0].n)||1;
 
-  // Weekly velocity (last 8 weeks)
   var weeks = [];
   for (var w=7;w>=0;w--) {
     var ws=now-(w+1)*7*24*3600*1000, we=now-w*7*24*3600*1000;
-    weeks.push({label:w===0?"Esta sem":"Sem -"+w, mapped:accounts.filter(function(a){return a.savedAt>=ws&&a.savedAt<we;}).length});
+    weeks.push({lb:w===0?"Esta sem":"S-"+w, n:accounts.filter(function(a){return a.savedAt>=ws&&a.savedAt<we;}).length});
   }
-  var maxWeek = Math.max.apply(null,weeks.map(function(w){return w.mapped;}))||1;
+  var maxWeek = Math.max.apply(null,weeks.map(function(x){return x.n;}))||1;
 
-  // AI coverage
-  var aiMapped    = accounts.filter(function(a){return a.aiMapped;}).length;
-  var hasDores    = accounts.filter(function(a){return a.data&&a.data.dores&&(a.data.dores.principais||[]).length>0;}).length;
-  var hasSpin     = accounts.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.perguntas_spin||[]).length>0;}).length;
-  var hasEmails   = accounts.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.emails||[]).length>0;}).length;
-  var hasStakeholders = accounts.filter(function(a){return a.data&&a.data.stakeholders&&a.data.stakeholders.length>0;}).length;
+  var nAiMapped  = accounts.filter(function(a){return a.aiMapped;}).length;
+  var nHasDores  = accounts.filter(function(a){return a.data&&a.data.dores&&(a.data.dores.principais||[]).length>0;}).length;
+  var nHasSpin   = accounts.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.perguntas_spin||[]).length>0;}).length;
+  var nHasEmails = accounts.filter(function(a){return a.data&&a.data.estrategia&&(a.data.estrategia.emails||[]).length>0;}).length;
+  var nHasStk    = accounts.filter(function(a){return a.data&&a.data.stakeholders&&a.data.stakeholders.length>0;}).length;
+  var nSeqs      = seqs.length;
+  var nContacts  = contacts.length;
+  var nWithEmail = contacts.filter(function(c){return c.email&&c.email.length>2;}).length;
+  var nFav       = contacts.filter(function(c){return c.favorite;}).length;
 
-  // Sequences
-  var totalSeqs   = seqs.length;
-  var touchMap    = {};
+  var touchMap = {};
   seqs.forEach(function(s){(s.touches||[]).forEach(function(t){touchMap[t.type]=(touchMap[t.type]||0)+1;});});
-  var profileMap  = {};
+  var profileMap = {};
   seqs.forEach(function(s){var l=(s.profile&&s.profile.label)||"Custom";profileMap[l]=(profileMap[l]||0)+1;});
-  var topProfiles = Object.keys(profileMap).map(function(k){return{label:k,count:profileMap[k]};}).sort(function(a,b){return b.count-a.count;}).slice(0,5);
+  var topProfiles = Object.keys(profileMap).map(function(k){return{k:k,n:profileMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,5);
+  var companyMap = {};
+  contacts.forEach(function(c){var e=c.empresa||"?";companyMap[e]=(companyMap[e]||0)+1;});
+  var topCompanies = Object.keys(companyMap).map(function(k){return{k:k,n:companyMap[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,5);
 
-  // Contacts
-  var totalContacts = contacts.length;
-  var withEmail     = contacts.filter(function(c){return c.email&&c.email.length>2;}).length;
-  var favorites     = contacts.filter(function(c){return c.favorite;}).length;
-  var byCompanyC    = {};
-  contacts.forEach(function(c){var e=c.empresa||"?";byCompanyC[e]=(byCompanyC[e]||0)+1;});
-  var topCompanyC   = Object.keys(byCompanyC).map(function(k){return{k:k,v:byCompanyC[k]};}).sort(function(a,b){return b.v-a.v;}).slice(0,5);
+  function kpiCard(label,value,sub,accent,ico) {
+    return (
+      <div style={{background:"#fff",borderRadius:14,padding:"16px",border:"1px solid #e6e9ef",position:"relative",overflow:"hidden",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:accent}}/>
+        <div style={{width:28,height:28,borderRadius:8,background:accent+"20",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:8}}>
+          <Icon name={ico} size={14} color={accent}/>
+        </div>
+        <div style={{fontSize:28,fontWeight:900,color:"#0f172a",letterSpacing:"-.6px",lineHeight:1}}>{value}</div>
+        <div style={{fontSize:11,fontWeight:700,color:"#334155",marginTop:3}}>{label}</div>
+        <div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>{sub}</div>
+      </div>
+    );
+  }
 
-  // KPIs
-  var winRate  = total ? Math.round(won/total*100) : 0;
-  var emailHit = totalContacts ? Math.round(withEmail/totalContacts*100) : 0;
-  var aiCov    = total ? Math.round(aiMapped/total*100) : 0;
+  function mBar(label,n,den,color) {
+    var p=pct(n,den||1);
+    return (
+      <div key={label} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
+        <span style={{fontSize:11,color:"#475569",minWidth:100,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
+        <div style={{flex:1,background:"#f1f5f9",borderRadius:4,height:7,overflow:"hidden"}}>
+          <div style={{width:p+"%",height:"100%",background:color,borderRadius:4,transition:"width .7s ease"}}/>
+        </div>
+        <span style={{fontSize:11,fontWeight:700,color:"#0f172a",minWidth:22,textAlign:"right"}}>{n}</span>
+      </div>
+    );
+  }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  function pct(n,d){ return d?Math.round(n/d*100):0; }
+  function sHdr(ico,title,sub) {
+    return (
+      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:16}}>
+        <Icon name={ico} size={15} color="#6366f1"/>
+        <span style={{fontSize:14,fontWeight:800,color:"#0f172a",letterSpacing:"-.2px"}}>{title}</span>
+        {sub&&<span style={{fontSize:11,color:"#94a3b8"}}>{sub}</span>}
+      </div>
+    );
+  }
 
+  function dnut(segs,cLbl,cSub,sz) {
+    sz=sz||100; var cx=sz/2,cy=sz/2,r=sz/2-5,ir=r*0.58;
+    var tot=segs.reduce(function(s,x){return s+x.v;},0)||1;
+    var paths=[],angle=-Math.PI/2;
+    segs.forEach(function(sg,i){
+      if(!sg.v)return;
+      var a=(sg.v/tot)*Math.PI*2,e=angle+a,lg=a>Math.PI?1:0;
+      paths.push(<path key={i} d={"M "+(cx+r*Math.cos(angle)).toFixed(1)+" "+(cy+r*Math.sin(angle)).toFixed(1)+" A "+r+" "+r+" 0 "+lg+" 1 "+(cx+r*Math.cos(e)).toFixed(1)+" "+(cy+r*Math.sin(e)).toFixed(1)+" L "+(cx+ir*Math.cos(e)).toFixed(1)+" "+(cy+ir*Math.sin(e)).toFixed(1)+" A "+ir+" "+ir+" 0 "+lg+" 0 "+(cx+ir*Math.cos(angle)).toFixed(1)+" "+(cy+ir*Math.sin(angle)).toFixed(1)+" Z"} fill={sg.c} opacity="0.9"/>);
+      angle=e;
+    });
+    return (<svg width={sz} height={sz} viewBox={"0 0 "+sz+" "+sz}>{paths}{cLbl&&<text x={cx} y={cy-3} textAnchor="middle" fontSize="16" fontWeight="800" fill="#0f172a">{cLbl}</text>}{cSub&&<text x={cx} y={cy+13} textAnchor="middle" fontSize="9" fill="#94a3b8">{cSub}</text>}</svg>);
+  }
 
-
-
-
-  if (total === 0) return (
+  if (total===0) return (
     <div>
-      <div style={{fontSize:28,fontWeight:800,color:"#0f172a",marginBottom:4,letterSpacing:"-0.6px"}}>Relatórios</div>
-      <div style={{textAlign:"center",padding:"80px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef"}}>
+      <div style={{fontSize:26,fontWeight:800,color:"#0f172a",marginBottom:4}}>Relatórios</div>
+      <div style={{textAlign:"center",padding:"80px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef",marginTop:20}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Icon name="monitoring" size={48} color="#d1d5db"/></div>
         <div style={{fontSize:15,fontWeight:700,color:"#334155",marginBottom:6}}>Nenhum dado ainda</div>
         <div style={{fontSize:12,color:"#64748b"}}>Mapeie sua primeira empresa para começar a ver insights.</div>
@@ -4763,38 +4782,46 @@ function InsightsView(props) {
     </div>
   );
 
-  return (
-    <div>
-      <style>{`
-        @keyframes barGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-        .rpt-anim{animation:fadeUp .4s ease both}
-      `}</style>
+  var SECS = [
+    {id:"kpi",label:"KPIs Gerais",icon:"speed"},
+    {id:"pipeline",label:"Funil de Conversão",icon:"filter_alt"},
+    {id:"fit",label:"Fit & Tier",icon:"target"},
+    {id:"setor",label:"Top Setores",icon:"business"},
+    {id:"velocity",label:"Atividade Semanal",icon:"trending_up"},
+    {id:"ai",label:"Cobertura de IA",icon:"auto_awesome"},
+    {id:"seq",label:"Sequências",icon:"forward_to_inbox"},
+    {id:"cont",label:"Contatos",icon:"contacts"},
+  ];
 
-      {/* ── HEADER ── */}
+  return (
+    <div onClick={function(){if(picker)setPicker(false);}}>
+      <style>{".rpt{animation:fadeUp .35s ease both}"}</style>
+
+      {/* HEADER */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24,flexWrap:"wrap",gap:12}}>
         <div>
           <div style={{fontSize:26,fontWeight:800,color:"#0f172a",letterSpacing:"-.5px"}}>Relatórios</div>
-          <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{total+" contas · "+totalSeqs+" sequências · "+totalContacts+" contatos"}</div>
+          <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{total+" contas · "+nSeqs+" sequências · "+nContacts+" contatos"}</div>
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          {/* Section picker */}
-          <div style={{position:"relative"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{position:"relative"}} onClick={function(e){e.stopPropagation();}}>
             <button onClick={function(){setPicker(!picker);}} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:600,color:"#475569",cursor:"pointer",fontFamily:"inherit"}}>
-              <Icon name="dashboard" size={13}/>{Object.values(sel).filter(Boolean).length+" seções"}
+              <Icon name="dashboard" size={13}/>{Object.keys(sel).filter(function(k){return sel[k];}).length+" seções"}
             </button>
             {picker&&(
-              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:"#fff",border:"1px solid #e6e9ef",borderRadius:14,boxShadow:"0 16px 48px rgba(15,23,42,.14)",zIndex:200,minWidth:240,padding:"6px 0"}}>
+              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:"#fff",border:"1px solid #e6e9ef",borderRadius:14,boxShadow:"0 16px 48px rgba(15,23,42,.15)",zIndex:300,minWidth:230,padding:"6px 0"}}>
                 <div style={{padding:"8px 14px 4px",fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8}}>Seções visíveis</div>
-                {SECTIONS.map(function(s){
+                {SECS.map(function(s){
                   var on=!!sel[s.id];
-                  return <div key={s.id} onClick={function(){setSel(function(prev){var n=Object.assign({},prev);if(n[s.id])delete n[s.id];else n[s.id]=true;return n;});}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:"pointer",background:on?"#f0f3ff":"transparent"}}>
-                    <div style={{width:15,height:15,borderRadius:4,border:"2px solid "+(on?"#6366f1":"#d1d5db"),background:on?"#6366f1":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      {on&&<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                  return (
+                    <div key={s.id} onClick={function(){setSel(function(prev){var n=Object.assign({},prev);if(n[s.id])delete n[s.id];else n[s.id]=true;return n;});}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:"pointer",background:on?"rgba(99,102,241,.06)":"transparent"}}>
+                      <div style={{width:15,height:15,borderRadius:4,border:"2px solid "+(on?"#6366f1":"#d1d5db"),background:on?"#6366f1":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {on&&<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                      </div>
+                      <Icon name={s.icon} size={12} color={on?"#6366f1":"#94a3b8"}/>
+                      <span style={{fontSize:12,fontWeight:on?600:400,color:on?"#1e293b":"#64748b"}}>{s.label}</span>
                     </div>
-                    <Icon name={s.icon} size={12} color={on?"#6366f1":"#94a3b8"}/>
-                    <span style={{fontSize:12,fontWeight:on?600:400,color:on?"#1e293b":"#475569"}}>{s.label}</span>
-                  </div>;
+                  );
                 })}
               </div>
             )}
@@ -4805,179 +4832,140 @@ function InsightsView(props) {
         </div>
       </div>
 
-      {/* ── 1. KPIs ── */}
+      {/* 1. KPI */}
       {sel.kpi&&(
-        <div className="rpt-anim" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12,marginBottom:24}}>
+        <div className="rpt" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:12,marginBottom:24}}>
+          {kpiCard("Total Mapeado",total,"empresas","#6366f1","folder_open")}
+          {kpiCard("Fit Alto",nFitAlto,pct(nFitAlto,total)+"% do total","#10b981","target")}
+          {kpiCard("AI Mapeadas",nAiMapped,pct(nAiMapped,total)+"% cobertura","#8b5cf6","auto_awesome")}
+          {kpiCard("Sequências",nSeqs,"geradas","#0ea5e9","forward_to_inbox")}
+          {kpiCard("Contatadas",nContacted,pct(nContacted,total)+"% do total","#f59e0b","mail")}
+          {kpiCard("Reuniões",nMeeting,pct(nMeeting,total)+"% do total","#06b6d4","calendar_month")}
+          {kpiCard("Propostas",nProposal,pct(nProposal,total)+"% do total","#a855f7","description")}
+          {kpiCard("Ganhas",nWon,pct(nWon,total)+"% win rate","#22c55e","emoji_events")}
+          {kpiCard("Contatos",nContacts,"mapeados","#64748b","contacts")}
+          {kpiCard("E-mails",nWithEmail,pct(nWithEmail,nContacts||1)+"% encontrados","#0284c7","mail_outline")}
+          {kpiCard("Favoritos",nFav,"contatos favoritos","#f59e0b","star")}
+          {kpiCard("Perdidas",nLost,pct(nLost,total)+"% do total","#ef4444","cancel")}
+        </div>
+      )}
+
+      {/* 2. PIPELINE */}
+      {sel.pipeline&&(
+        <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+          {sHdr("filter_alt","Funil de Conversão",total+" contas")}
           {[
-            {label:"Total Mapeado",   value:total,           sub:"empresas",       accent:"#6366f1", icon:"folder_open"},
-            {label:"Fit Alto",        value:byFit.ALTO,      sub:"prospects prime",accent:"#10b981", icon:"target"},
-            {label:"AI Mapeadas",     value:aiMapped,        sub:aiCov+"% cobertura",accent:"#8b5cf6",icon:"auto_awesome"},
-            {label:"Sequências",      value:totalSeqs,       sub:"geradas",        accent:"#0ea5e9", icon:"forward_to_inbox"},
-            {label:"Contatadas",      value:contacted,       sub:pct(contacted,total)+"% do total",accent:"#f59e0b",icon:"mail"},
-            {label:"Reuniões",        value:meeting,         sub:pct(meeting,total)+"% do total",  accent:"#06b6d4",icon:"calendar_month"},
-            {label:"Propostas",       value:proposal,        sub:pct(proposal,total)+"% do total", accent:"#a855f7",icon:"description"},
-            {label:"Ganhas",          value:won,             sub:winRate+"% win rate",accent:"#22c55e",icon:"emoji_events"},
-            {label:"Contatos",        value:totalContacts,   sub:"mapeados",       accent:"#64748b", icon:"contacts"},
-            {label:"E-mails",         value:withEmail,       sub:emailHit+"% encontrados",accent:"#0284c7",icon:"mail_outline"},
-            {label:"Favoritos",       value:favorites,       sub:"contatos",       accent:"#f59e0b", icon:"star"},
-            {label:"Perdidas",        value:lost,            sub:"contas",         accent:"#ef4444", icon:"cancel"},
-          ].map(function(k,i){
+            {lb:"Mapeado",  n:total,      c:"#6366f1",prev:total},
+            {lb:"Contatado",n:nContacted, c:"#0ea5e9",prev:total},
+            {lb:"Reunião",  n:nMeeting,   c:"#8b5cf6",prev:nContacted},
+            {lb:"Proposta", n:nProposal,  c:"#f59e0b",prev:nMeeting},
+            {lb:"Ganho",    n:nWon,       c:"#22c55e",prev:nProposal},
+            {lb:"Perdido",  n:nLost,      c:"#ef4444",prev:nContacted},
+          ].map(function(st,i){
+            var bw=total?Math.max(2,Math.round(st.n/total*100)):0;
             return (
-              <div key={i} style={{background:"#fff",borderRadius:14,padding:"16px",border:"1px solid #e6e9ef",position:"relative",overflow:"hidden",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-                <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:k.accent,borderRadius:"14px 14px 0 0"}}/>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:4}}>
-                  <div style={{width:30,height:30,borderRadius:9,background:k.accent+"18",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <Icon name={k.icon} size={14} color={k.accent}/>
-                  </div>
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:i<5?10:0}}>
+                <span style={{fontSize:11,fontWeight:600,color:"#475569",minWidth:68}}>{st.lb}</span>
+                <div style={{flex:1,background:"#f8fafc",borderRadius:6,height:30,overflow:"hidden",position:"relative"}}>
+                  <div style={{position:"absolute",inset:0,width:bw+"%",background:st.c,borderRadius:6,opacity:.82,transition:"width .8s cubic-bezier(.22,1,.36,1)"}}/>
+                  <span style={{position:"absolute",left:10,top:0,bottom:0,display:"flex",alignItems:"center",fontSize:11,fontWeight:700,color:bw>18?"#fff":"#334155",zIndex:1}}>{st.n}</span>
                 </div>
-                <div style={{fontSize:26,fontWeight:900,color:"#0f172a",letterSpacing:"-.5px",lineHeight:1}}>{k.value}</div>
-                <div style={{fontSize:10,fontWeight:700,color:"#0f172a",marginTop:2}}>{k.label}</div>
-                <div style={{fontSize:9,color:"#94a3b8",marginTop:1}}>{k.sub}</div>
+                <span style={{fontSize:12,fontWeight:700,color:st.c,minWidth:36,textAlign:"right"}}>{pct(st.n,st.prev||1)+"%"}</span>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* ── 2. PIPELINE FUNNEL ── */}
-      {sel.pipeline&&(
-        <div className="rpt-anim" style={{marginBottom:24}}>
-          <SectionHeader icon="filter_alt" title="Funil de Conversão" sub={total+" contas"}/>
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px 24px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            {[
-              {label:"Mapeado",   count:total,     color:"#6366f1",pctPrev:100},
-              {label:"Contatado", count:contacted, color:"#0ea5e9",pctPrev:pct(contacted,total)},
-              {label:"Reunião",   count:meeting,   color:"#8b5cf6",pctPrev:pct(meeting,contacted||1)},
-              {label:"Proposta",  count:proposal,  color:"#f59e0b",pctPrev:pct(proposal,meeting||1)},
-              {label:"Ganho",     count:won,        color:"#22c55e",pctPrev:pct(won,proposal||1)},
-              {label:"Perdido",   count:lost,       color:"#ef4444",pctPrev:pct(lost,contacted||1)},
-            ].map(function(step,i){
-              var barW = total ? Math.max(3,Math.round(step.count/total*100)) : 0;
-              return (
-                <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:i<5?10:0}}>
-                  <span style={{fontSize:11,color:"#475569",fontWeight:600,minWidth:72}}>{step.label}</span>
-                  <div style={{flex:1,background:"#f8fafc",borderRadius:6,height:28,overflow:"hidden",position:"relative"}}>
-                    <div style={{position:"absolute",inset:0,width:barW+"%",background:step.color,borderRadius:6,opacity:.85,transition:"width .8s cubic-bezier(.22,1,.36,1)"}}/>
-                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",paddingLeft:10}}>
-                      <span style={{fontSize:11,fontWeight:700,color:barW>20?"#fff":"#0f172a",zIndex:1}}>{step.count}</span>
-                    </div>
-                  </div>
-                  <span style={{fontSize:11,fontWeight:700,color:step.color,minWidth:38,textAlign:"right"}}>{step.pctPrev}%</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── 3. FIT & TIER side by side ── */}
+      {/* 3. FIT & TIER */}
       {sel.fit&&(
-        <div className="rpt-anim" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
-          {/* Fit */}
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            <SectionHeader icon="target" title="Distribuição de Fit"/>
-            <div style={{display:"flex",alignItems:"center",gap:20}}>
-              <Donut size={110} segments={[{v:byFit.ALTO,c:"#6366f1"},{v:byFit.MEDIO,c:"#0ea5e9"},{v:byFit.BAIXO,c:"#e2e8f0"}]} label={total} sub="total"/>
+        <div className="rpt" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("target","Distribuição de Fit")}
+            <div style={{display:"flex",alignItems:"center",gap:18}}>
+              {dnut([{v:nFitAlto,c:"#6366f1"},{v:nFitMedio,c:"#0ea5e9"},{v:nFitBaixo,c:"#e2e8f0"}],String(total),"contas",100)}
               <div style={{flex:1}}>
-                {[{k:"ALTO",label:"Fit Alto",color:"#6366f1"},{k:"MEDIO",label:"Fit Médio",color:"#0ea5e9"},{k:"BAIXO",label:"Fit Baixo",color:"#e2e8f0"}].map(function(f){
-                  return <MiniBar key={f.k} label={f.label} pct={pct(byFit[f.k],total)} value={byFit[f.k]} color={f.color}/>;
-                })}
+                {mBar("Fit Alto",nFitAlto,total,"#6366f1")}
+                {mBar("Fit Médio",nFitMedio,total,"#0ea5e9")}
+                {mBar("Fit Baixo",nFitBaixo,total,"#e2e8f0")}
               </div>
             </div>
           </div>
-          {/* Tier */}
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            <SectionHeader icon="workspace_premium" title="Distribuição por Tier"/>
-            <div style={{display:"flex",alignItems:"center",gap:20}}>
-              <Donut size={110} segments={[{v:byTier["Tier 1"],c:"#6366f1"},{v:byTier["Tier 2"],c:"#a855f7"},{v:byTier["Tier 3"],c:"#c084fc"}]} label={total} sub="total"/>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("workspace_premium","Distribuição por Tier")}
+            <div style={{display:"flex",alignItems:"center",gap:18}}>
+              {dnut([{v:nTier1,c:"#6366f1"},{v:nTier2,c:"#a855f7"},{v:nTier3,c:"#c084fc"}],String(total),"contas",100)}
               <div style={{flex:1}}>
-                {["Tier 1","Tier 2","Tier 3"].map(function(t,i){
-                  var cols=["#6366f1","#a855f7","#c084fc"];
-                  return <MiniBar key={t} label={t} pct={pct(byTier[t],total)} value={byTier[t]} color={cols[i]}/>;
-                })}
+                {mBar("Tier 1",nTier1,total,"#6366f1")}
+                {mBar("Tier 2",nTier2,total,"#a855f7")}
+                {mBar("Tier 3",nTier3,total,"#c084fc")}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── 4. TOP SETORES ── */}
+      {/* 4. SETORES */}
       {sel.setor&&bySetor.length>0&&(
-        <div className="rpt-anim" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-          <SectionHeader icon="business" title="Top Setores" sub={bySetor.length+" segmentos"}/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 32px"}}>
+        <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+          {sHdr("business","Top Setores",bySetor.length+" segmentos")}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 32px"}}>
             {bySetor.map(function(s,i){
-              var hue = [240,210,270,190,300,170,230,250][i%8];
-              var col = "hsl("+hue+",65%,55%)";
-              return <MiniBar key={s.setor} label={s.setor} pct={pct(s.count,maxSetor)*100/100} value={s.count} color={col}/>;
+              var hues=[238,210,262,190,290,170,228,248];
+              return mBar(s.s,s.n,maxSetor,"hsl("+hues[i%8]+",62%,54%)");
             })}
           </div>
         </div>
       )}
 
-      {/* ── 5. VELOCITY LINE CHART ── */}
+      {/* 5. VELOCITY */}
       {sel.velocity&&(
-        <div className="rpt-anim" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-          <SectionHeader icon="trending_up" title="Atividade Semanal" sub="últimas 8 semanas"/>
+        <div className="rpt" style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px 24px",marginBottom:24,boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+          {sHdr("trending_up","Atividade Semanal","últimas 8 semanas")}
           {(function(){
-            var W=560,H=140,PAD=28;
-            var pts=weeks.map(function(wk,i){
-              return {x:(PAD+(i*(W-PAD*2)/(weeks.length-1))).toFixed(1), y:(H-20-((wk.mapped/maxWeek)*(H-50))).toFixed(1), wk:wk};
-            });
-            var linePath=pts.map(function(p,i){return(i===0?"M":"L")+" "+p.x+" "+p.y;}).join(" ");
-            var areaPath=linePath+" L "+pts[pts.length-1].x+" "+(H-20)+" L "+pts[0].x+" "+(H-20)+" Z";
+            var W=560,H=140,PL=32;
+            var pts=weeks.map(function(wk,i){return {x:parseFloat((PL+(i*(W-PL*2)/(weeks.length-1))).toFixed(1)),y:parseFloat((H-20-((wk.n/maxWeek)*(H-50))).toFixed(1)),wk:wk};});
+            var lp=pts.map(function(p,i){return(i===0?"M":"L")+" "+p.x+" "+p.y;}).join(" ");
+            var ap=lp+" L "+pts[pts.length-1].x+" "+(H-20)+" L "+pts[0].x+" "+(H-20)+" Z";
             return (
-              <svg width="100%" viewBox={"0 0 "+(W+20)+" "+H} style={{overflow:"visible"}}>
-                <defs>
-                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.18"/>
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0.01"/>
-                  </linearGradient>
-                </defs>
-                {[0,.25,.5,.75,1].map(function(t,i){
-                  var y=(H-20-(t*(H-50))).toFixed(1);
-                  return <line key={i} x1={PAD} y1={y} x2={W} y2={y} stroke="#f1f5f9" strokeWidth="1"/>;
-                })}
-                <path d={areaPath} fill="url(#areaGrad)"/>
-                <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                {pts.map(function(p,i){
-                  return <g key={i}>
+              <svg width="100%" viewBox={"0 0 "+(W+10)+" "+H} style={{overflow:"visible"}}>
+                <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity="0.16"/><stop offset="100%" stopColor="#6366f1" stopOpacity="0.01"/></linearGradient></defs>
+                {[0,.33,.66,1].map(function(t,i){var y=(H-20-(t*(H-50))).toFixed(1);return <line key={i} x1={PL} y1={y} x2={W} y2={y} stroke="#f1f5f9" strokeWidth="1"/>;} )}
+                <path d={ap} fill="url(#ag)"/>
+                <path d={lp} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                {pts.map(function(p,i){return (
+                  <g key={i}>
                     <circle cx={p.x} cy={p.y} r="4" fill="#6366f1" stroke="#fff" strokeWidth="2"/>
-                    {p.wk.mapped>0&&<text x={p.x} y={parseFloat(p.y)-10} textAnchor="middle" fontSize="10" fontWeight="700" fill="#4f46e5">{p.wk.mapped}</text>}
-                    <text x={p.x} y={H-4} textAnchor="middle" fontSize="9" fill="#94a3b8">{p.wk.label}</text>
-                  </g>;
-                })}
+                    {p.wk.n>0&&<text x={p.x} y={p.y-9} textAnchor="middle" fontSize="10" fontWeight="700" fill="#4f46e5">{p.wk.n}</text>}
+                    <text x={p.x} y={H-3} textAnchor="middle" fontSize="9" fill="#94a3b8">{p.wk.lb}</text>
+                  </g>
+                );})}
               </svg>
             );
           })()}
         </div>
       )}
 
-      {/* ── 6. AI COVERAGE ── */}
+      {/* 6. AI */}
       {sel.ai&&(
-        <div className="rpt-anim" style={{background:"linear-gradient(135deg,#faf5ff,#eff6ff)",borderRadius:16,border:"1px solid rgba(99,102,241,.12)",padding:"20px 24px",marginBottom:24}}>
-          <SectionHeader icon="auto_awesome" title="Cobertura de IA" sub={aiCov+"% mapeadas"}/>
+        <div className="rpt" style={{background:"linear-gradient(135deg,#faf5ff,#eff6ff)",borderRadius:16,border:"1px solid rgba(99,102,241,.14)",padding:"22px 24px",marginBottom:24}}>
+          {sHdr("auto_awesome","Cobertura de IA",pct(nAiMapped,total)+"% mapeadas com IA")}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
             {[
-              {label:"AI Mapeadas",    count:aiMapped,      total:total,      color:"#6366f1", icon:"auto_awesome"},
-              {label:"Com Dores",      count:hasDores,      total:total,      color:"#8b5cf6", icon:"health_and_safety"},
-              {label:"Com SPIN",       count:hasSpin,       total:total,      color:"#06b6d4", icon:"quiz"},
-              {label:"Com E-mails",    count:hasEmails,     total:total,      color:"#0ea5e9", icon:"mail"},
-              {label:"Stakeholders",   count:hasStakeholders,total:total,     color:"#a855f7", icon:"group"},
-              {label:"Sequências",     count:Math.min(totalSeqs,total), total:total, color:"#22c55e", icon:"send"},
+              {lb:"AI Mapeadas",n:nAiMapped,c:"#6366f1",ico:"auto_awesome"},
+              {lb:"Com Dores",n:nHasDores,c:"#8b5cf6",ico:"health_and_safety"},
+              {lb:"Com SPIN",n:nHasSpin,c:"#06b6d4",ico:"quiz"},
+              {lb:"Com E-mails",n:nHasEmails,c:"#0ea5e9",ico:"mail"},
+              {lb:"Stakeholders",n:nHasStk,c:"#a855f7",ico:"group"},
+              {lb:"Sequências",n:Math.min(nSeqs,total),c:"#22c55e",ico:"send"},
             ].map(function(m,i){
-              var p=pct(m.count,m.total||1);
+              var p=pct(m.n,total||1);
               return (
                 <div key={i} style={{background:"#fff",borderRadius:12,padding:"14px",border:"1px solid rgba(99,102,241,.1)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                    <Icon name={m.icon} size={13} color={m.color}/>
-                    <span style={{fontSize:10,fontWeight:700,color:"#475569"}}>{m.label}</span>
-                  </div>
-                  <div style={{fontSize:22,fontWeight:900,color:m.color,marginBottom:4,letterSpacing:"-.3px"}}>{m.count}</div>
-                  <div style={{background:"#f1f5f9",borderRadius:3,height:4}}>
-                    <div style={{width:p+"%",height:"100%",background:m.color,borderRadius:3,transition:"width .8s ease"}}/>
-                  </div>
-                  <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>{p+"% de "+m.total}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><Icon name={m.ico} size={13} color={m.c}/><span style={{fontSize:10,fontWeight:700,color:"#475569"}}>{m.lb}</span></div>
+                  <div style={{fontSize:24,fontWeight:900,color:m.c,marginBottom:6,letterSpacing:"-.4px"}}>{m.n}</div>
+                  <div style={{background:"#f1f5f9",borderRadius:3,height:4}}><div style={{width:p+"%",height:"100%",background:m.c,borderRadius:3,transition:"width .7s ease"}}/></div>
+                  <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>{p+"% de "+total}</div>
                 </div>
               );
             })}
@@ -4985,57 +4973,49 @@ function InsightsView(props) {
         </div>
       )}
 
-      {/* ── 7. SEQUÊNCIAS ── */}
-      {sel.seq&&totalSeqs>0&&(
-        <div className="rpt-anim" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
-          {/* Canais */}
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            <SectionHeader icon="forward_to_inbox" title="Canais Usados" sub={totalSeqs+" sequências"}/>
-            {[
-              {type:"email",    label:"E-mail",     color:"#0ea5e9"},
-              {type:"linkedin", label:"LinkedIn",   color:"#0a66c2"},
-              {type:"call",     label:"Cold Call",  color:"#f59e0b"},
-              {type:"whatsapp", label:"WhatsApp",   color:"#22c55e"},
-              {type:"breakup",  label:"Breakup",    color:"#94a3b8"},
-            ].map(function(ch){
-              var cnt=touchMap[ch.type]||0;
+      {/* 7. SEQUÊNCIAS */}
+      {sel.seq&&nSeqs>0&&(
+        <div className="rpt" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("forward_to_inbox","Canais Usados",nSeqs+" sequências")}
+            {(function(){
               var tot2=Object.values(touchMap).reduce(function(s,v){return s+v;},0)||1;
-              return <MiniBar key={ch.type} label={ch.label} pct={pct(cnt,tot2)} value={cnt} color={ch.color}/>;
-            })}
+              return [
+                {type:"email",lb:"E-mail",c:"#0ea5e9"},
+                {type:"linkedin",lb:"LinkedIn",c:"#0a66c2"},
+                {type:"call",lb:"Cold Call",c:"#f59e0b"},
+                {type:"whatsapp",lb:"WhatsApp",c:"#22c55e"},
+                {type:"breakup",lb:"Breakup",c:"#94a3b8"},
+              ].map(function(ch){return mBar(ch.lb,touchMap[ch.type]||0,tot2,ch.c);});
+            })()}
           </div>
-          {/* Top profiles */}
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            <SectionHeader icon="people" title="Top Perfis" sub={topProfiles.length+" perfis"}/>
-            {topProfiles.length ? topProfiles.map(function(p,i){
-              var colors=["#6366f1","#8b5cf6","#0ea5e9","#22c55e","#f59e0b"];
-              return <MiniBar key={p.label} label={p.label} pct={pct(p.count,totalSeqs)} value={p.count} color={colors[i%5]}/>;
-            }) : <div style={{fontSize:12,color:"#94a3b8",padding:"16px 0"}}>Nenhum perfil ainda.</div>}
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("people","Top Perfis Usados")}
+            {topProfiles.length
+              ? topProfiles.map(function(p,i){var cols=["#6366f1","#8b5cf6","#0ea5e9","#22c55e","#f59e0b"];return mBar(p.k,p.n,nSeqs,cols[i%5]);})
+              : <div style={{fontSize:12,color:"#94a3b8",padding:"10px 0"}}>Nenhum perfil ainda.</div>}
           </div>
         </div>
       )}
 
-      {/* ── 8. CONTATOS ── */}
-      {sel.contacts&&totalContacts>0&&(
-        <div className="rpt-anim" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
-          {/* Email hit rate */}
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            <SectionHeader icon="mail_outline" title="Enriquecimento de E-mail"/>
-            <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:12}}>
-              <Donut size={90} segments={[{v:withEmail,c:"#22c55e"},{v:totalContacts-withEmail,c:"#f1f5f9"}]} label={emailHit+"%"} sub="hit rate"/>
+      {/* 8. CONTATOS */}
+      {sel.cont&&nContacts>0&&(
+        <div className="rpt" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("mail_outline","Hit Rate de E-mail")}
+            <div style={{display:"flex",alignItems:"center",gap:18}}>
+              {dnut([{v:nWithEmail,c:"#22c55e"},{v:nContacts-nWithEmail,c:"#f1f5f9"}],pct(nWithEmail,nContacts||1)+"%","hit rate",100)}
               <div>
-                <div style={{fontSize:22,fontWeight:900,color:"#0f172a"}}>{withEmail}</div>
-                <div style={{fontSize:11,color:"#64748b"}}>e-mails encontrados</div>
-                <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>{totalContacts-withEmail+" sem e-mail"}</div>
+                <div style={{fontSize:24,fontWeight:900,color:"#0f172a"}}>{nWithEmail}</div>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>e-mails encontrados</div>
+                <div style={{fontSize:11,color:"#94a3b8"}}>{(nContacts-nWithEmail)+" sem e-mail"}</div>
+                <div style={{fontSize:11,color:"#f59e0b",marginTop:4}}>{nFav+" favoritos"}</div>
               </div>
             </div>
           </div>
-          {/* Top companies with contacts */}
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"20px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
-            <SectionHeader icon="contacts" title="Contas com Mais Contatos"/>
-            {topCompanyC.map(function(c,i){
-              var colors=["#6366f1","#8b5cf6","#0ea5e9","#22c55e","#f59e0b"];
-              return <MiniBar key={c.k} label={c.k} pct={pct(c.v,topCompanyC[0]&&topCompanyC[0].v||1)*100/100} value={c.v} color={colors[i%5]}/>;
-            })}
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #e6e9ef",padding:"22px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+            {sHdr("contacts","Contas com Mais Contatos")}
+            {topCompanies.map(function(c,i){var cols=["#6366f1","#8b5cf6","#0ea5e9","#22c55e","#f59e0b"];return mBar(c.k,c.n,topCompanies[0].n||1,cols[i%5]);})}
           </div>
         </div>
       )}
