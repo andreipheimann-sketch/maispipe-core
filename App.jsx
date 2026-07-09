@@ -4600,6 +4600,59 @@ function exportRelatoriosPDF(accounts, filters) {
   w.document.close();
   setTimeout(function(){w.print();}, 400);
 }
+
+function Card(p) {
+  return (
+    <div style={{background:p.bg||"#fff",borderRadius:16,padding:"18px 20px",border:"1px solid "+(p.borderColor||"#e6e9ef"),boxShadow:p.shadow||"0 1px 4px rgba(15,23,42,.05)",position:"relative",overflow:"hidden"}}>
+      {p.accent && <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:p.accent,borderRadius:"16px 16px 0 0"}}/>}
+      {p.children}
+    </div>
+  );
+}
+
+function SectionHeader(p) {
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,marginTop:p.mt?p.mt:0}}>
+      <Icon name={p.icon} size={16} color="#6366f1"/>
+      <h2 style={{margin:0,fontSize:14,fontWeight:800,color:"#0f172a",letterSpacing:"-.2px"}}>{p.title}</h2>
+      {p.sub && <span style={{fontSize:11,color:"#94a3b8",fontWeight:400}}>{p.sub}</span>}
+    </div>
+  );
+}
+
+function MiniBar(p) {
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+      <span style={{fontSize:11,color:"#475569",minWidth:110,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.label}</span>
+      <div style={{flex:1,background:"#f1f5f9",borderRadius:4,height:8,overflow:"hidden"}}>
+        <div style={{width:p.pct+"%",height:"100%",background:p.color||"#6366f1",borderRadius:4,transition:"width .6s ease"}}/>
+      </div>
+      <span style={{fontSize:11,fontWeight:700,color:"#0f172a",minWidth:24,textAlign:"right"}}>{p.value}</span>
+    </div>
+  );
+}
+
+function Donut(p) {
+  var segs=p.segments; var size=p.size||100; var cx=size/2,cy=size/2,r=size/2-6,ir=r*0.6;
+  var tot=segs.reduce(function(s,x){return s+x.v;},0)||1;
+  var paths=[]; var angle=-Math.PI/2;
+  segs.forEach(function(s,i){
+    var a=(s.v/tot)*Math.PI*2;
+    if(s.v===0){return;}
+    var e=angle+a;
+    var large=a>Math.PI?1:0;
+    paths.push(<path key={i} d={"M "+(cx+r*Math.cos(angle)).toFixed(1)+" "+(cy+r*Math.sin(angle)).toFixed(1)+" A "+r+" "+r+" 0 "+large+" 1 "+(cx+r*Math.cos(e)).toFixed(1)+" "+(cy+r*Math.sin(e)).toFixed(1)+" L "+(cx+ir*Math.cos(e)).toFixed(1)+" "+(cy+ir*Math.sin(e)).toFixed(1)+" A "+ir+" "+ir+" 0 "+large+" 0 "+(cx+ir*Math.cos(angle)).toFixed(1)+" "+(cy+ir*Math.sin(angle)).toFixed(1)+" Z"} fill={s.c} opacity="0.88"/>);
+    angle=e;
+  });
+  return (
+    <svg width={size} height={size} viewBox={"0 0 "+size+" "+size}>
+      {paths}
+      {p.label&&<text x={cx} y={cy-4} textAnchor="middle" fontSize="16" fontWeight="800" fill="#0f172a">{p.label}</text>}
+      {p.sub&&<text x={cx} y={cy+12} textAnchor="middle" fontSize="9" fill="#94a3b8">{p.sub}</text>}
+    </svg>
+  );
+}
+
 function InsightsView(props) {
   var accounts = props.accounts || [];
   var total    = accounts.length;
@@ -4694,57 +4747,9 @@ function InsightsView(props) {
   // ── Helpers ───────────────────────────────────────────────────────────────
   function pct(n,d){ return d?Math.round(n/d*100):0; }
 
-  function Card(p) {
-    return (
-      <div style={{background:p.bg||"#fff",borderRadius:16,padding:"18px 20px",border:"1px solid "+(p.borderColor||"#e6e9ef"),boxShadow:p.shadow||"0 1px 4px rgba(15,23,42,.05)",position:"relative",overflow:"hidden"}}>
-        {p.accent && <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:p.accent,borderRadius:"16px 16px 0 0"}}/>}
-        {p.children}
-      </div>
-    );
-  }
 
-  function SectionHeader(p) {
-    return (
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,marginTop:p.mt?p.mt:0}}>
-        <Icon name={p.icon} size={16} color="#6366f1"/>
-        <h2 style={{margin:0,fontSize:14,fontWeight:800,color:"#0f172a",letterSpacing:"-.2px"}}>{p.title}</h2>
-        {p.sub && <span style={{fontSize:11,color:"#94a3b8",fontWeight:400}}>{p.sub}</span>}
-      </div>
-    );
-  }
 
-  function MiniBar(p) {
-    return (
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-        <span style={{fontSize:11,color:"#475569",minWidth:110,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.label}</span>
-        <div style={{flex:1,background:"#f1f5f9",borderRadius:4,height:8,overflow:"hidden"}}>
-          <div style={{width:p.pct+"%",height:"100%",background:p.color||"#6366f1",borderRadius:4,transition:"width .6s ease"}}/>
-        </div>
-        <span style={{fontSize:11,fontWeight:700,color:"#0f172a",minWidth:24,textAlign:"right"}}>{p.value}</span>
-      </div>
-    );
-  }
 
-  function Donut(p) {
-    var segs=p.segments; var size=p.size||100; var cx=size/2,cy=size/2,r=size/2-6,ir=r*0.6;
-    var tot=segs.reduce(function(s,x){return s+x.v;},0)||1;
-    var paths=[]; var angle=-Math.PI/2;
-    segs.forEach(function(s,i){
-      var a=(s.v/tot)*Math.PI*2;
-      if(s.v===0){return;}
-      var e=angle+a;
-      var large=a>Math.PI?1:0;
-      paths.push(<path key={i} d={"M "+(cx+r*Math.cos(angle)).toFixed(1)+" "+(cy+r*Math.sin(angle)).toFixed(1)+" A "+r+" "+r+" 0 "+large+" 1 "+(cx+r*Math.cos(e)).toFixed(1)+" "+(cy+r*Math.sin(e)).toFixed(1)+" L "+(cx+ir*Math.cos(e)).toFixed(1)+" "+(cy+ir*Math.sin(e)).toFixed(1)+" A "+ir+" "+ir+" 0 "+large+" 0 "+(cx+ir*Math.cos(angle)).toFixed(1)+" "+(cy+ir*Math.sin(angle)).toFixed(1)+" Z"} fill={s.c} opacity="0.88"/>);
-      angle=e;
-    });
-    return (
-      <svg width={size} height={size} viewBox={"0 0 "+size+" "+size}>
-        {paths}
-        {p.label&&<text x={cx} y={cy-4} textAnchor="middle" fontSize="16" fontWeight="800" fill="#0f172a">{p.label}</text>}
-        {p.sub&&<text x={cx} y={cy+12} textAnchor="middle" fontSize="9" fill="#94a3b8">{p.sub}</text>}
-      </svg>
-    );
-  }
 
   if (total === 0) return (
     <div>
