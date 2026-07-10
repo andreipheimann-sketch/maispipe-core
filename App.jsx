@@ -1,4 +1,4 @@
-// BUILD: 1783694121
+// BUILD: 1783706319
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -522,6 +522,7 @@ function SequenceView(props) {
         var without = prev.filter(function(s){ return s.id !== id; });
         return [toSave].concat(without);
       });
+      if (props.authUser && props.authUser.id) syncTasksToServer(props.authUser.id);
     });
     return toSave;
   }
@@ -5564,6 +5565,87 @@ function advanceSequenceAfterSent(seq, sentIdx) {
   return Object.assign({}, seq, { touches:touches });
 }
 
+// ── Sincronização com o servidor (necessária para o Cron de envio automático) ──
+// As sequências vivem no localStorage do navegador. O Cron roda no servidor e não
+// tem acesso a isso. syncTasksToServer espelha os touches de e-mail agendados no
+// Vercel KV, e pullTasksFromServer traz de volta o que o Cron já processou.
+function syncTasksToServer(userId) {
+  if (!userId) return Promise.resolve();
+  return Promise.all([storageList("seq:"), storageList("contact:")]).then(function(res) {
+    var seqKeys = res[0], contactKeys = res[1];
+    return Promise.all([
+      Promise.all(seqKeys.map(storageGet)),
+      Promise.all(contactKeys.map(storageGet)),
+    ]).then(function(res2) {
+      var seqs = res2[0].filter(Boolean);
+      var contacts = res2[1].filter(Boolean);
+
+      function resolveEmail(seq) {
+        if (!seq.contactName) return null;
+        var nameKey = seq.contactName.toLowerCase().trim();
+        var accName = ((seq.account && seq.account.nome) || "").toLowerCase().trim();
+        var match = contacts.find(function(c) {
+          return (c.nome||"").toLowerCase().trim() === nameKey && (!accName || (c.empresa||"").toLowerCase().trim() === accName);
+        });
+        return (match && match.email) || null;
+      }
+
+      var tasks = [];
+      seqs.forEach(function(seq) {
+        var email = resolveEmail(seq);
+        (seq.touches||[]).forEach(function(t, idx) {
+          tasks.push({
+            seqId: seq.id, idx: idx, type: t.type, status: t.status,
+            scheduledFor: t.scheduledFor, sentAt: t.sentAt||null,
+            subject: t.subject||"", body: t.body||"",
+            accountName: (seq.account && seq.account.nome) || "",
+            contactName: seq.contactName || "",
+            contactEmail: t.type === "email" ? email : null,
+          });
+        });
+      });
+
+      return fetch("/api/tasks-sync", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ userId: userId, tasks: tasks }),
+      }).catch(function(){ /* sync falhou silenciosamente — próxima ação tenta de novo */ });
+    });
+  });
+}
+
+// Traz de volta o que o Cron já processou no servidor, e reconcilia com o localStorage.
+// Chamado ao abrir a Central de Tarefas — garante que envios automáticos apareçam mesmo
+// se o navegador estava fechado quando o Cron rodou.
+function pullTasksFromServer(userId, onUpdated) {
+  if (!userId) return Promise.resolve();
+  return fetch("/api/tasks-sync?userId=" + encodeURIComponent(userId))
+    .then(function(r){ return r.ok ? r.json() : {tasks:[]}; })
+    .then(function(data) {
+      var serverTasks = data.tasks || [];
+      if (!serverTasks.length) return;
+      return storageList("seq:").then(function(ks) {
+        return Promise.all(ks.map(storageGet)).then(function(seqs) {
+          var anyChanged = false;
+          var writes = [];
+          seqs.filter(Boolean).forEach(function(seq) {
+            var touched = false;
+            var newTouches = seq.touches.map(function(t, idx) {
+              var srv = serverTasks.find(function(x){ return x.seqId === seq.id && x.idx === idx; });
+              if (srv && srv.status !== t.status && (srv.status === "sent" || srv.status === "blocked" || srv.status === "scheduled")) {
+                touched = true; anyChanged = true;
+                return Object.assign({}, t, { status:srv.status, sentAt:srv.sentAt||t.sentAt, validatedBy:srv.sentAt?"auto":t.validatedBy, blockReason:srv.blockReason });
+              }
+              return t;
+            });
+            if (touched) writes.push(storageSet(seq.id, Object.assign({}, seq, {touches:newTouches})));
+          });
+          return Promise.all(writes).then(function(){ if (anyChanged && onUpdated) onUpdated(); });
+        });
+      });
+    })
+    .catch(function(){});
+}
+
 // -- CENTRAL DE TAREFAS ---------------------------------------------------------
 function TasksView(props) {
   var _st_seqs = useState([]); var seqs = _st_seqs[0]; var setSeqs = _st_seqs[1];
@@ -5580,13 +5662,22 @@ function TasksView(props) {
       });
     });
   }
-  useEffect(function(){ loadSeqs(); }, []);
+  useEffect(function(){
+    // Ao abrir: traz o que o Cron já processou desde a última vez (ex: e-mails
+    // enviados automaticamente enquanto o navegador estava fechado).
+    var userId = props.authUser && props.authUser.id;
+    if (userId) {
+      pullTasksFromServer(userId, function(){ loadSeqs(); });
+    } else {
+      loadSeqs();
+    }
+  }, []);
 
-  // Flatten: one row per touch that is "scheduled" (ready to act) — pending touches are hidden (not yet unlocked)
+  // Flatten: touches "scheduled" (aguardando ação/envio) ou "blocked" (auto falhou, precisa manual)
   var tasks = [];
   seqs.forEach(function(seq){
     (seq.touches||[]).forEach(function(touch, idx){
-      if (touch.status === "scheduled") {
+      if (touch.status === "scheduled" || touch.status === "blocked") {
         tasks.push({ seqId:seq.id, seq:seq, touch:touch, idx:idx, channel:touchChannel(touch.type) });
       }
     });
@@ -5610,6 +5701,8 @@ function TasksView(props) {
       storageSet(task.seqId, updated).then(function(){
         setMarking(null);
         loadSeqs();
+        var userId = props.authUser && props.authUser.id;
+        if (userId) syncTasksToServer(userId);
         if (props.showToast) props.showToast("Touch marcado como enviado. Próximo da cadência liberado.", "#10b981");
       });
     });
@@ -5650,16 +5743,18 @@ function TasksView(props) {
             var tc = TOUCH_TYPES[task.touch.type] || TOUCH_TYPES.email;
             var overdue = isOverdue(task);
             var isEmail = task.channel === "email";
+            var isBlocked = task.touch.status === "blocked";
             var key = task.seqId+":"+task.idx;
             return (
-              <div key={key} style={{background:"#fff",border:"1.5px solid "+(overdue?"rgba(239,68,68,.35)":"#e6e9ef"),borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+              <div key={key} style={{background:"#fff",border:"1.5px solid "+(overdue?"rgba(239,68,68,.35)":isBlocked?"rgba(245,158,11,.4)":"#e6e9ef"),borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8,flexWrap:"wrap"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                     <span style={{background:tc.bg,color:tc.color,borderRadius:20,padding:"2px 9px",fontSize:10,fontWeight:700}}>{tc.label}</span>
                     <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{task.seq.account && task.seq.account.nome}</span>
                     {task.seq.contactName && <span style={{fontSize:11,color:"#64748b"}}>{"· "+task.seq.contactName}</span>}
-                    {overdue && <span style={{background:"rgba(239,68,68,.1)",color:"#dc2626",borderRadius:6,padding:"1px 7px",fontSize:9,fontWeight:700}}>ATRASADA</span>}
-                    {isEmail && <span style={{background:"rgba(99,102,241,.1)",color:"#4f46e5",borderRadius:6,padding:"1px 7px",fontSize:9,fontWeight:700}}>AUTO (em breve)</span>}
+                    {overdue && !isBlocked && <span style={{background:"rgba(239,68,68,.1)",color:"#dc2626",borderRadius:6,padding:"1px 7px",fontSize:9,fontWeight:700}}>ATRASADA</span>}
+                    {isBlocked && <span style={{background:"rgba(245,158,11,.12)",color:"#b45309",borderRadius:6,padding:"1px 7px",fontSize:9,fontWeight:700}} title="O envio automático não encontrou o e-mail deste contato — envie manualmente e marque como enviado.">{"⚠ sem e-mail — enviar manual"}</span>}
+                    {isEmail && !isBlocked && <span style={{background:"rgba(99,102,241,.1)",color:"#4f46e5",borderRadius:6,padding:"1px 7px",fontSize:9,fontWeight:700}} title="O Cron roda 1x ao dia e envia automaticamente pelo Gmail conectado.">{"AUTO — envio automático diário"}</span>}
                   </div>
                   <span style={{fontSize:10,color:"#94a3b8",whiteSpace:"nowrap"}}>{"Dia "+task.touch.day+" · "+fmtDate(task.touch.scheduledFor)}</span>
                 </div>
@@ -7436,8 +7531,8 @@ export default function App() {
               {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch}/>}
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
-              {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
-              {nav==="tasks" && <TasksView showToast={showToast}/>}
+              {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}} authUser={authUser}/>}
+              {nav==="tasks" && <TasksView showToast={showToast} authUser={authUser}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts} contactsRefreshKey={contactsRefreshKey}/>}
               {nav==="biblioteca" && <BibliotecaView showToast={showToast} onCountChange={setSeqCount} onOpenSeq={setOpenSeq}/>}
               {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} defaultSearch={pendingContactSearch} onMounted={function(){ setPendingContactSearch(""); }} onFavoriteChange={triggerContactsRefresh} onCreateAccount={function(nome){
