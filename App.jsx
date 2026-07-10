@@ -1,4 +1,4 @@
-// BUILD: 1783626013
+// BUILD: 1783627521
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -5394,6 +5394,12 @@ function FeedbackWidget(props) {
     });
   }
   function update(field, val) { setForm(function(f){ var n=Object.assign({},f); if(field==="nome")n.nome=val; else if(field==="assunto")n.assunto=val; else n.mensagem=val; return n; }); }
+  useEffect(function(){
+    if (sent) {
+      var t = setTimeout(function(){ setSent(false); }, 4000);
+      return function(){ clearTimeout(t); };
+    }
+  }, [sent]);
   var inputStyle = {width:"100%",background:"#ffffff",border:"1.5px solid #e6e9ef",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#0f172a",fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
   return (
     <div style={{position:"relative",zIndex:200}}>
@@ -5439,6 +5445,12 @@ function FeedbackWidget(props) {
               <div style={{fontSize:10,color:"#94a3b8",textAlign:"center"}}>{"Sua mensagem sera enviada diretamente para a equipe + Pipe."}</div>
             </div>
           </div>
+        </div>
+      )}
+      {sent && (
+        <div role="status" aria-live="polite" style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#059669,#047857)",color:"#fff",borderRadius:12,padding:"12px 20px",fontSize:13,fontWeight:600,boxShadow:"0 12px 32px rgba(5,150,105,.35)",zIndex:9999,display:"flex",alignItems:"center",gap:9,animation:"fadeUp .3s cubic-bezier(.22,1,.36,1) both"}}>
+          <Icon name="check_circle" size={17} color="#fff"/>
+          {"Feedback enviado com sucesso! Obrigado pela contribuição."}
         </div>
       )}
     </div>
@@ -5853,7 +5865,7 @@ function ProspectView(props) {
                       {jaEnriq && !jaMapeada && <span style={{fontSize:8,fontWeight:700,background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.25)",color:"#4f46e5",borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>{"✓ enriquecida"}</span>}
                     </div>
                   </div>
-                  {emp.porte_estimado && <div style={{fontSize:10,color:"#94a3b8",marginBottom:8,display:"flex",alignItems:"center",gap:4}}><Icon name="groups" size={12} color="#94a3b8"/>{emp.porte_estimado}</div>}
+                  {emp.porte_estimado && <div style={{fontSize:10,color:"#94a3b8",marginBottom:8,display:"flex",alignItems:"center",gap:4}} title="Estimativa gerada por IA — pode não refletir o número exato de colaboradores"><Icon name="groups" size={12} color="#94a3b8"/>{emp.porte_estimado}</div>}
                   <div style={{fontSize:12,color:"#475569",lineHeight:1.6,marginBottom:8}}>{emp.resumo}</div>
                   {emp.motivo_fit && (
                     <div style={{background:"rgba(99,102,241,.05)",border:"1px solid rgba(99,102,241,.12)",borderRadius:8,padding:"7px 10px",fontSize:11,color:"#4338ca",lineHeight:1.5,marginBottom:12}}>
