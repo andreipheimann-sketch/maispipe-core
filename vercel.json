@@ -18,5 +18,11 @@
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/send-emails",
+      "schedule": "0 12 * * *"
+    }
   ]
 }
