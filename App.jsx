@@ -1,4 +1,4 @@
-// BUILD: 1783706319
+// BUILD: 1783712540
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -5605,7 +5605,7 @@ function syncTasksToServer(userId) {
         });
       });
 
-      return fetch("/api/tasks-sync", {
+      return fetch("/api/tasks", {
         method: "POST", headers: {"Content-Type":"application/json"},
         body: JSON.stringify({ userId: userId, tasks: tasks }),
       }).catch(function(){ /* sync falhou silenciosamente — próxima ação tenta de novo */ });
@@ -5618,7 +5618,7 @@ function syncTasksToServer(userId) {
 // se o navegador estava fechado quando o Cron rodou.
 function pullTasksFromServer(userId, onUpdated) {
   if (!userId) return Promise.resolve();
-  return fetch("/api/tasks-sync?userId=" + encodeURIComponent(userId))
+  return fetch("/api/tasks?userId=" + encodeURIComponent(userId))
     .then(function(r){ return r.ok ? r.json() : {tasks:[]}; })
     .then(function(data) {
       var serverTasks = data.tasks || [];
