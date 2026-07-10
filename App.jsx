@@ -1,4 +1,4 @@
-// BUILD: 1783627521
+// BUILD: 1783652896
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -462,7 +462,8 @@ function SequenceView(props) {
       var touches = template.map(function(t) {
         return Object.assign({}, t, {body:applyVars(t.body, acc, contactName), subject:applyVars(t.subject||"", acc, contactName)});
       });
-      var seq = {id:"seq:"+Date.now()+"-"+Math.random().toString(36).slice(2,6), account:acc, profile:p, contactName:contactName||"", touches:touches, createdAt:Date.now(), engine:"template"};
+      var createdAt = Date.now();
+      var seq = {id:"seq:"+createdAt+"-"+Math.random().toString(36).slice(2,6), account:acc, profile:p, contactName:contactName||"", touches:seedTouchStatuses(touches, createdAt), createdAt:createdAt, engine:"template"};
       setGenerated(seq);
       persistSeq(seq);
     }
@@ -489,7 +490,8 @@ function SequenceView(props) {
         }
         if (touches && touches.length) {
           var norm = touches.map(function(t){ return {day:(t&&t.day)||1, type:(t&&t.type)||"email", subject:applyVars(String((t&&t.subject)||""), acc, contactName), body:applyVars(String((t&&t.body!=null)?t.body:""), acc, contactName)}; });
-          var seq = {id:"seq:"+Date.now()+"-"+Math.random().toString(36).slice(2,6), account:acc, profile:p, contactName:contactName||"", touches:norm, createdAt:Date.now(), engine:"ai"};
+          var createdAt2 = Date.now();
+          var seq = {id:"seq:"+createdAt2+"-"+Math.random().toString(36).slice(2,6), account:acc, profile:p, contactName:contactName||"", touches:seedTouchStatuses(norm, createdAt2), createdAt:createdAt2, engine:"ai"};
           setGenerated(seq);
           persistSeq(seq);
           props.showToast("Sequência gerada com IA e salva na biblioteca.", "#10b981");
@@ -5457,6 +5459,150 @@ function FeedbackWidget(props) {
   );
 }
 // ── PROSPECT VIEW ─────────────────────────────────────────────────────────────
+function touchChannel(type) {
+  return type === "email" ? "email" : "manual";
+}
+function seedTouchStatuses(touches, createdAt) {
+  return touches.map(function(t, i) {
+    var scheduledFor = createdAt + Math.max(0, (t.day||1) - 1) * 86400000;
+    return Object.assign({}, t, {
+      status: i === 0 ? "scheduled" : "pending",
+      scheduledFor: scheduledFor,
+      sentAt: null,
+      validatedBy: null,
+    });
+  });
+}
+function advanceSequenceAfterSent(seq, sentIdx) {
+  var touches = seq.touches.map(function(t, i) {
+    if (i === sentIdx) return Object.assign({}, t, { status:"sent", sentAt:Date.now(), validatedBy:t.validatedBy||"user" });
+    if (i === sentIdx + 1 && t.status === "pending") return Object.assign({}, t, { status:"scheduled" });
+    return t;
+  });
+  return Object.assign({}, seq, { touches:touches });
+}
+
+// -- CENTRAL DE TAREFAS ---------------------------------------------------------
+function TasksView(props) {
+  var _st_seqs = useState([]); var seqs = _st_seqs[0]; var setSeqs = _st_seqs[1];
+  var _st_loading = useState(true); var loading = _st_loading[0]; var setLoading = _st_loading[1];
+  var _st_filter = useState("all"); var filter = _st_filter[0]; var setFilter = _st_filter[1];
+  var _st_marking = useState(null); var marking = _st_marking[0]; var setMarking = _st_marking[1];
+
+  function loadSeqs() {
+    setLoading(true);
+    storageList("seq:").then(function(ks){
+      Promise.all(ks.map(storageGet)).then(function(items){
+        setSeqs(items.filter(Boolean));
+        setLoading(false);
+      });
+    });
+  }
+  useEffect(function(){ loadSeqs(); }, []);
+
+  // Flatten: one row per touch that is "scheduled" (ready to act) — pending touches are hidden (not yet unlocked)
+  var tasks = [];
+  seqs.forEach(function(seq){
+    (seq.touches||[]).forEach(function(touch, idx){
+      if (touch.status === "scheduled") {
+        tasks.push({ seqId:seq.id, seq:seq, touch:touch, idx:idx, channel:touchChannel(touch.type) });
+      }
+    });
+  });
+  tasks.sort(function(a,b){ return (a.touch.scheduledFor||0) - (b.touch.scheduledFor||0); });
+
+  var filtered = tasks.filter(function(t){
+    if (filter === "all") return true;
+    if (filter === "email") return t.channel === "email";
+    return t.channel === "manual";
+  });
+
+  var now = Date.now();
+  function isOverdue(t) { return t.touch.scheduledFor && t.touch.scheduledFor < now - 3600000; }
+
+  function markSent(task) {
+    setMarking(task.seqId + ":" + task.idx);
+    storageGet(task.seqId).then(function(stored){
+      if (!stored) { setMarking(null); return; }
+      var updated = advanceSequenceAfterSent(stored, task.idx);
+      storageSet(task.seqId, updated).then(function(){
+        setMarking(null);
+        loadSeqs();
+        if (props.showToast) props.showToast("Touch marcado como enviado. Próximo da cadência liberado.", "#10b981");
+      });
+    });
+  }
+
+  var nEmail  = tasks.filter(function(t){return t.channel==="email";}).length;
+  var nManual = tasks.filter(function(t){return t.channel==="manual";}).length;
+  var nOverdue = tasks.filter(isOverdue).length;
+
+  if (loading) {
+    return <div style={{padding:"60px 0",textAlign:"center",color:"#94a3b8",fontSize:13}}>Carregando tarefas...</div>;
+  }
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:26,fontWeight:800,color:"#0f172a",letterSpacing:"-.5px"}}>Central de Tarefas</div>
+          <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{tasks.length+" ação"+(tasks.length!==1?"ões":"")+" pendente"+(tasks.length!==1?"s":"")+(nOverdue?" · "+nOverdue+" atrasada"+(nOverdue!==1?"s":""):"")}</div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          {[{id:"all",label:"Todas ("+tasks.length+")"},{id:"email",label:"E-mail ("+nEmail+")"},{id:"manual",label:"Manuais ("+nManual+")"}].map(function(f){
+            var active = filter===f.id;
+            return <button key={f.id} onClick={function(){setFilter(f.id);}} style={{background:active?"#4f46e5":"#fff",color:active?"#fff":"#475569",border:"1.5px solid "+(active?"#4f46e5":"#e2e8f0"),borderRadius:9,padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{f.label}</button>;
+          })}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{textAlign:"center",padding:"80px 0",background:"#fbfbfd",borderRadius:20,border:"1.5px dashed #e6e9ef"}}>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Icon name="task_alt" size={48} color="#d1d5db"/></div>
+          <div style={{fontSize:15,fontWeight:700,color:"#334155",marginBottom:6}}>Nenhuma tarefa pendente</div>
+          <div style={{fontSize:12,color:"#64748b"}}>Gere sequências para ver as ações aqui, na ordem certa da cadência.</div>
+        </div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {filtered.map(function(task){
+            var tc = TOUCH_TYPES[task.touch.type] || TOUCH_TYPES.email;
+            var overdue = isOverdue(task);
+            var isEmail = task.channel === "email";
+            var key = task.seqId+":"+task.idx;
+            return (
+              <div key={key} style={{background:"#fff",border:"1.5px solid "+(overdue?"rgba(239,68,68,.35)":"#e6e9ef"),borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 4px rgba(15,23,42,.04)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{background:tc.bg,color:tc.color,borderRadius:20,padding:"2px 9px",fontSize:10,fontWeight:700}}>{tc.label}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{task.seq.account && task.seq.account.nome}</span>
+                    {task.seq.contactName && <span style={{fontSize:11,color:"#64748b"}}>{"· "+task.seq.contactName}</span>}
+                    {overdue && <span style={{background:"rgba(239,68,68,.1)",color:"#dc2626",borderRadius:6,padding:"1px 7px",fontSize:9,fontWeight:700}}>ATRASADA</span>}
+                    {isEmail && <span style={{background:"rgba(99,102,241,.1)",color:"#4f46e5",borderRadius:6,padding:"1px 7px",fontSize:9,fontWeight:700}}>AUTO (em breve)</span>}
+                  </div>
+                  <span style={{fontSize:10,color:"#94a3b8",whiteSpace:"nowrap"}}>{"Dia "+task.touch.day+" · "+fmtDate(task.touch.scheduledFor)}</span>
+                </div>
+                {task.touch.subject && <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:4}}>{task.touch.subject}</div>}
+                <div style={{fontSize:12,color:"#475569",lineHeight:1.6,marginBottom:12,maxHeight:80,overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {(task.touch.body||"").slice(0,220)}{(task.touch.body||"").length>220?"...":""}
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <CopyBtn text={(task.touch.subject?"Assunto: "+task.touch.subject+"\n\n":"")+task.touch.body}/>
+                  <button onClick={function(){markSent(task);}} disabled={marking===key} style={{display:"flex",alignItems:"center",gap:6,background:marking===key?"#f1f5f9":"linear-gradient(135deg,#059669,#047857)",color:marking===key?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:marking===key?"default":"pointer",fontFamily:"inherit",boxShadow:marking===key?"none":"0 3px 10px rgba(5,150,105,.3)"}}>
+                    {marking===key
+                      ? <><div style={{width:11,height:11,borderRadius:"50%",border:"2px solid rgba(148,163,184,.4)",borderTopColor:"#94a3b8",animation:"spin .7s linear infinite"}}/>Marcando...</>
+                      : <><Icon name="check" size={13}/>Marcar como enviado</>
+                    }
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProspectView(props) {
   var accounts   = props.accounts || [];
   var usage      = props.usage || {};
@@ -5940,6 +6086,7 @@ var ALL_NAV = [
   {id:"accounts",   icon:"folder_open",           label:"Contas"},
   {id:"contacts",   icon:"contacts",              label:"Contatos"},
   {id:"sequences",  icon:"forward_to_inbox",      label:"Sequências"},
+  {id:"tasks",      icon:"task_alt",              label:"Tarefas"},
   {id:"biblioteca", icon:"local_library",         label:"Biblioteca"},
   {id:"pipeline",   icon:"view_kanban",           label:"Pipeline"},
   {id:"relatorios", icon:"monitoring",            label:"Relatórios"},
@@ -7077,6 +7224,7 @@ export default function App() {
     {id:"accounts",     icon:"folder_open",             label:"Contas"},
     {id:"contacts",     icon:"contacts",                label:"Contatos"},
     {id:"sequences",    icon:"forward_to_inbox",        label:"Sequências"},
+    {id:"tasks",        icon:"task_alt",                 label:"Tarefas"},
     {id:"biblioteca",   icon:"local_library",           label:"Biblioteca"},
     {id:"pipeline",     icon:"view_kanban",             label:"Pipeline"},
     {id:"relatorios",   icon:"monitoring",              label:"Relatórios"},
@@ -7207,6 +7355,7 @@ export default function App() {
               {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}}/>}
+              {nav==="tasks" && <TasksView showToast={showToast}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts} contactsRefreshKey={contactsRefreshKey}/>}
               {nav==="biblioteca" && <BibliotecaView showToast={showToast} onCountChange={setSeqCount} onOpenSeq={setOpenSeq}/>}
               {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} defaultSearch={pendingContactSearch} onMounted={function(){ setPendingContactSearch(""); }} onFavoriteChange={triggerContactsRefresh} onCreateAccount={function(nome){
