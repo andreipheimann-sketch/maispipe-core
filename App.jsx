@@ -1,4 +1,4 @@
-// BUILD: 1783652896
+// BUILD: 1783653164
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -2727,7 +2727,88 @@ function ContactsView(props) {
 
 
 // -- INTEGRATIONS VIEW ---------------------------------------------------------
-function IntegrationsView() {
+function GmailConnectCard(props) {
+  var authUser = props.authUser;
+  var _st_status = useState(null); var status = _st_status[0]; var setStatus = _st_status[1];
+  var _st_loading = useState(true); var loading = _st_loading[0]; var setLoading = _st_loading[1];
+  var _st_disconnecting = useState(false); var disconnecting = _st_disconnecting[0]; var setDisconnecting = _st_disconnecting[1];
+
+  function refreshStatus() {
+    if (!authUser || !authUser.id) { setLoading(false); return; }
+    fetch("/api/auth/google/status?userId=" + encodeURIComponent(authUser.id))
+      .then(function(r){ return r.json(); })
+      .then(function(data){ setStatus(data); setLoading(false); })
+      .catch(function(){ setLoading(false); });
+  }
+
+  useEffect(function(){
+    refreshStatus();
+    // Verifica se acabamos de voltar do callback OAuth (parâmetros na URL)
+    var params = new URLSearchParams(window.location.search);
+    var gmailConnect = params.get("gmail_connect");
+    if (gmailConnect === "success") {
+      if (props.showToast) props.showToast("Gmail conectado com sucesso" + (params.get("gmail_email") ? ": " + params.get("gmail_email") : "") + ".", "#10b981");
+      window.history.replaceState({}, "", window.location.pathname);
+      refreshStatus();
+    } else if (gmailConnect === "error") {
+      if (props.showToast) props.showToast("Falha ao conectar Gmail: " + (params.get("gmail_error") || "erro desconhecido"), "#ef4444", 7000);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  function connect() {
+    if (!authUser || !authUser.id) return;
+    window.location.href = "/api/auth/google/start?userId=" + encodeURIComponent(authUser.id);
+  }
+
+  function disconnect() {
+    if (!window.confirm("Desconectar sua conta Gmail? O envio automático de e-mails das sequências vai parar até reconectar.")) return;
+    setDisconnecting(true);
+    fetch("/api/auth/google/disconnect", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ userId: authUser.id }),
+    })
+      .then(function(r){ return r.json(); })
+      .then(function(){ setDisconnecting(false); refreshStatus(); if(props.showToast) props.showToast("Gmail desconectado.", "#64748b"); })
+      .catch(function(){ setDisconnecting(false); });
+  }
+
+  var isConn = status && status.connected;
+
+  return (
+    <div style={{background:"#fff",border:"1.5px solid "+(isConn?"#bbf7d0":"#e8edf4"),borderRadius:20,padding:24,boxShadow:"0 2px 12px rgba(15,23,42,.06)",marginBottom:24}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+        <div style={{width:44,height:44,borderRadius:12,background:"#ea433520",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <Icon name="mail" size={22} color="#ea4335"/>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:15,fontWeight:800,color:"#0f172a"}}>{"Gmail — Envio Automático"}</div>
+          <div style={{fontSize:12,color:"#64748b"}}>{"Conecte sua conta para enviar e-mails de sequências automaticamente."}</div>
+        </div>
+        {isConn && <span style={{background:"#dcfce7",color:"#166534",borderRadius:20,padding:"3px 11px",fontSize:10,fontWeight:700,flexShrink:0}}>{"✓ conectado"}</span>}
+      </div>
+      {loading ? (
+        <div style={{fontSize:12,color:"#94a3b8"}}>Verificando conexão...</div>
+      ) : isConn ? (
+        <div>
+          <div style={{fontSize:13,color:"#334155",marginBottom:12,display:"flex",alignItems:"center",gap:6}}>
+            <Icon name="account_circle" size={15} color="#64748b"/>
+            {"Enviando como "}<strong>{status.email}</strong>
+          </div>
+          <button onClick={disconnect} disabled={disconnecting} style={{background:"#fff",border:"1.5px solid rgba(239,68,68,.3)",color:"#ef4444",borderRadius:10,padding:"9px 18px",fontSize:12,fontWeight:600,cursor:disconnecting?"default":"pointer",fontFamily:"inherit"}}>
+            {disconnecting ? "Desconectando..." : "Desconectar"}
+          </button>
+        </div>
+      ) : (
+        <button onClick={connect} style={{display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#4285F4,#34A853)",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 14px rgba(66,133,244,.3)"}}>
+          <Icon name="link" size={15}/>{"Conectar com Google"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function IntegrationsView(props) {
   var INTEGRATIONS = [
     {id:"salesforce", name:"Salesforce", icon:"cloud",        desc:"Sincronize contas, contatos e oportunidades com o Salesforce CRM.", color:"#00A1E0", connected:false},
     {id:"hubspot",    name:"HubSpot",    icon:"hub",          desc:"Exporte leads e sequencias diretamente para o HubSpot CRM.",      color:"#FF7A59", connected:false},
@@ -2791,6 +2872,7 @@ function IntegrationsView() {
         <div style={{fontSize:28,fontWeight:800,color:"#0f172a",marginBottom:4,letterSpacing:"-0.6px"}}>{"Integrações"}</div>
         <div style={{fontSize:13,color:"#52617a"}}>{"Conecte o + Pipe ao seu CRM e ferramentas de vendas."}</div>
       </div>
+      <GmailConnectCard authUser={props.authUser} showToast={props.showToast}/>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16,marginBottom:32}}>
         {INTEGRATIONS.map(function(int) {
           var st = intStates[int.id] || {};
@@ -7364,7 +7446,7 @@ export default function App() {
                 storageSet(id,acc).then(function(){setAccounts(function(prev){return [acc].concat(prev);});});
                 return acc;
               }}/>}
-              {nav==="integracoes" && <IntegrationsView/>}
+              {nav==="integracoes" && <IntegrationsView authUser={authUser} showToast={showToast}/>}
               {nav==="pipeline"  && (
                 <div>
                   <div style={{fontSize:28,fontWeight:800,color:"#0f172a",marginBottom:4,letterSpacing:"-0.6px"}}>Pipeline</div>
