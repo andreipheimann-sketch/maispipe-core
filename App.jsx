@@ -1,4 +1,4 @@
-// BUILD: 1783712540
+// BUILD: 1783713638
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -2268,7 +2268,7 @@ function GroupedContactsView(props) {
                       <div style={{flex:"2 1 180px",minWidth:0}}>
                         {c.email ? (
                           <div style={{display:"flex",alignItems:"center",gap:5}}>
-                            <a href={"mailto:"+c.email} style={{color:"#0ea5e9",textDecoration:"none",fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{c.email}</a>
+                            <button onClick={function(){ if(props.onCompose) props.onCompose(c); }} title="Enviar e-mail pelo +Pipe" style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"#0ea5e9",fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200,fontFamily:"inherit",textAlign:"left"}}>{c.email}</button>
                             {c.emailConfidence && <span style={{fontSize:8,fontWeight:700,color:"#047857",background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.3)",borderRadius:5,padding:"1px 5px",flexShrink:0}}>{c.emailConfidence+"%"}</span>}
                             <CopyBtn text={c.email}/>
                           </div>
@@ -2296,6 +2296,9 @@ function GroupedContactsView(props) {
                         <button onClick={function(){props.toggleFavorite(c);}} title={c.favorite?"Remover dos favoritos":"Favoritar"} style={{background:c.favorite?"rgba(245,158,11,.12)":"none",border:"1px solid "+(c.favorite?"rgba(245,158,11,.4)":"#e2e8f0"),borderRadius:7,padding:"5px 7px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
                           <Icon name="star" size={13} fill={c.favorite} color={c.favorite?"#f59e0b":"#94a3b8"}/>
                         </button>
+                        <button onClick={function(){if(props.onEdit)props.onEdit(c);}} title="Editar contato" style={{background:"none",border:"1px solid #e2e8f0",color:"#64748b",borderRadius:7,padding:"5px 7px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <Icon name="edit" size={13}/>
+                        </button>
                         <button onClick={function(){props.deleteContact(c.id);}} title="Remover" style={{background:"none",border:"1px solid rgba(248,113,113,.25)",color:"#ef4444",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center"}}>
                           <Icon name="delete" size={13}/>
                         </button>
@@ -2308,6 +2311,130 @@ function GroupedContactsView(props) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// -- COMPOSITOR DE E-MAIL INTERNO ------------------------------------------------
+function ComposeEmailModal(props) {
+  var contact = props.contact;
+  var authUser = props.authUser;
+  var _st_subject = useState(""); var subject = _st_subject[0]; var setSubject = _st_subject[1];
+  var _st_body = useState(""); var body = _st_body[0]; var setBody = _st_body[1];
+  var _st_sending = useState(false); var sending = _st_sending[0]; var setSending = _st_sending[1];
+  var _st_error = useState(""); var error = _st_error[0]; var setError = _st_error[1];
+  var _st_sent = useState(false); var sent = _st_sent[0]; var setSent = _st_sent[1];
+  var _st_history = useState([]); var history = _st_history[0]; var setHistory = _st_history[1];
+  var _st_loadingHist = useState(true); var loadingHist = _st_loadingHist[0]; var setLoadingHist = _st_loadingHist[1];
+
+  function loadHistory() {
+    setLoadingHist(true);
+    storageList("email_log:").then(function(ks){
+      Promise.all(ks.map(storageGet)).then(function(items){
+        var mine = items.filter(Boolean).filter(function(e){ return e.contactId === contact.id || e.to === contact.email; });
+        mine.sort(function(a,b){ return (b.sentAt||0) - (a.sentAt||0); });
+        setHistory(mine);
+        setLoadingHist(false);
+      });
+    }).catch(function(){ setLoadingHist(false); });
+  }
+  useEffect(function(){ loadHistory(); }, []);
+
+  function send() {
+    if (!contact.email) { setError("Este contato não tem e-mail cadastrado."); return; }
+    if (!authUser || !authUser.id) { setError("Você precisa estar logado."); return; }
+    setSending(true); setError("");
+    fetch("/api/auth/google?action=send", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ userId: authUser.id, to: contact.email, subject: subject, body: body }),
+    })
+      .then(function(r){ return r.json().then(function(data){ return {ok:r.ok, data:data}; }); })
+      .then(function(res){
+        setSending(false);
+        var logId = "email_log:" + Date.now() + "-" + Math.random().toString(36).slice(2,7);
+        var entry = {
+          id: logId, contactId: contact.id, to: contact.email, contactName: contact.nome||"",
+          subject: subject, body: body, sentAt: Date.now(),
+          status: res.ok ? "sent" : "error", error: res.ok ? null : (res.data && res.data.error) || "Erro desconhecido",
+        };
+        storageSet(logId, entry);
+        if (res.ok) {
+          setSent(true);
+          setSubject(""); setBody("");
+          if (props.showToast) props.showToast("E-mail enviado para " + contact.email, "#10b981");
+          loadHistory();
+          setTimeout(function(){ setSent(false); }, 3000);
+        } else {
+          setError((res.data && res.data.error) || "Falha ao enviar. Verifique se o Gmail está conectado em Integrações.");
+          loadHistory();
+        }
+      })
+      .catch(function(err){ setSending(false); setError("Erro de conexão: " + err.message); });
+  }
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.4)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"50px 20px 20px"}} onClick={function(e){if(e.target===e.currentTarget)props.onClose();}}>
+      <div style={{background:"#fff",border:"1px solid #dde1e8",borderRadius:20,width:"100%",maxWidth:560,boxShadow:"0 24px 80px rgba(15,23,42,.16)",maxHeight:"92vh",display:"flex",flexDirection:"column"}} onClick={function(e){e.stopPropagation();}}>
+        {/* Header */}
+        <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #f1f5f9",flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <Icon name="send" size={17} color="#4f46e5"/>
+              <div style={{fontSize:16,fontWeight:800,color:"#0f172a"}}>{"Novo E-mail"}</div>
+            </div>
+            <button onClick={props.onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:20,fontWeight:300,lineHeight:1,padding:4}}>{"✕"}</button>
+          </div>
+          <div style={{fontSize:12,color:"#64748b"}}>{"Para: "}<strong style={{color:"#0f172a"}}>{contact.nome||contact.email}</strong>{contact.email && contact.nome ? " <"+contact.email+">" : ""}</div>
+        </div>
+
+        {/* Body */}
+        <div style={{padding:"20px 24px",overflowY:"auto",flex:1}}>
+          {!contact.email && (
+            <div style={{background:"#fef2f2",border:"1px solid rgba(239,68,68,.25)",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#b91c1c",marginBottom:14}}>
+              {"Este contato não tem e-mail cadastrado. Edite o contato para adicionar um e-mail antes de enviar."}
+            </div>
+          )}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{"Assunto"}</div>
+            <input value={subject} onChange={function(e){setSubject(e.target.value);}} placeholder="Assunto do e-mail" style={{width:"100%",boxSizing:"border-box",background:"#fbfbfd",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 12px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+          </div>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{"Mensagem"}</div>
+            <textarea value={body} onChange={function(e){setBody(e.target.value);}} placeholder="Escreva sua mensagem..." rows={8} style={{width:"100%",boxSizing:"border-box",background:"#fbfbfd",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"10px 12px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none",resize:"vertical",lineHeight:1.6}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+          </div>
+
+          {error && <div style={{background:"#fef2f2",border:"1px solid rgba(239,68,68,.25)",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#b91c1c",marginBottom:14}}>{error}</div>}
+          {sent && <div style={{background:"#ecfdf5",border:"1px solid rgba(16,185,129,.25)",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#047857",marginBottom:14,display:"flex",alignItems:"center",gap:6}}><Icon name="check_circle" size={14} color="#059669"/>{"Enviado com sucesso!"}</div>}
+
+          <button onClick={send} disabled={sending || !contact.email} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:(sending||!contact.email)?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:(sending||!contact.email)?"#94a3b8":"#fff",border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:700,cursor:(sending||!contact.email)?"default":"pointer",fontFamily:"inherit",boxShadow:(sending||!contact.email)?"none":"0 4px 14px rgba(99,102,241,.3)"}}>
+            {sending ? <><div style={{width:13,height:13,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",animation:"spin .7s linear infinite"}}/>Enviando...</> : <><Icon name="send" size={14}/>Enviar e-mail</>}
+          </button>
+
+          {/* Histórico */}
+          <div style={{marginTop:24,paddingTop:16,borderTop:"1px solid #f1f5f9"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>{"Histórico com este contato"}</div>
+            {loadingHist ? (
+              <div style={{fontSize:12,color:"#94a3b8"}}>{"Carregando..."}</div>
+            ) : history.length === 0 ? (
+              <div style={{fontSize:12,color:"#94a3b8"}}>{"Nenhum e-mail enviado ainda para este contato."}</div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {history.map(function(h){
+                  return (
+                    <div key={h.id} style={{border:"1px solid #f1f5f9",borderRadius:10,padding:"10px 12px",background:h.status==="error"?"#fef2f2":"#fafbfd"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"#0f172a"}}>{h.subject||"(sem assunto)"}</span>
+                        <span style={{fontSize:9,color:h.status==="error"?"#dc2626":"#94a3b8"}}>{h.status==="error"?"falhou":fmtDate(h.sentAt)}</span>
+                      </div>
+                      <div style={{fontSize:11,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.body}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2333,6 +2460,19 @@ function ContactsView(props) {
   var _st_newAccNome = useState(""); var newAccNome = _st_newAccNome[0]; var setNewAccNome = _st_newAccNome[1];
   var _st_accSearch = useState(""); var accSearch = _st_accSearch[0]; var setAccSearch = _st_accSearch[1];
   var _st_tab = useState("all"); var activeTab = _st_tab[0]; var setActiveTab = _st_tab[1];
+  // Edit contact modal state
+  var _st_editModal = useState(null); var editModal = _st_editModal[0]; var setEditModal = _st_editModal[1];
+  var _st_editNome = useState(""); var editNome = _st_editNome[0]; var setEditNome = _st_editNome[1];
+  var _st_editCargo = useState(""); var editCargo = _st_editCargo[0]; var setEditCargo = _st_editCargo[1];
+  var _st_editEmail = useState(""); var editEmail = _st_editEmail[0]; var setEditEmail = _st_editEmail[1];
+  var _st_editLinkedin = useState(""); var editLinkedin = _st_editLinkedin[0]; var setEditLinkedin = _st_editLinkedin[1];
+  var _st_editAccMode = useState("existing"); var editAccMode = _st_editAccMode[0]; var setEditAccMode = _st_editAccMode[1];
+  var _st_editSelAccId = useState(""); var editSelAccId = _st_editSelAccId[0]; var setEditSelAccId = _st_editSelAccId[1];
+  var _st_editNewAccNome = useState(""); var editNewAccNome = _st_editNewAccNome[0]; var setEditNewAccNome = _st_editNewAccNome[1];
+  var _st_editAccSearch = useState(""); var editAccSearch = _st_editAccSearch[0]; var setEditAccSearch = _st_editAccSearch[1];
+  var _st_editSaving = useState(false); var editSaving = _st_editSaving[0]; var setEditSaving = _st_editSaving[1];
+  // Compose (internal email sender) modal state
+  var _st_composeContact = useState(null); var composeContact = _st_composeContact[0]; var setComposeContact = _st_composeContact[1];
 
   var accounts = props.accounts || [];
 
@@ -2341,6 +2481,46 @@ function ContactsView(props) {
     setAccMode("existing"); setSelAccId(""); setNewAccNome(""); setAccSearch("");
     setAddModal(false);
   }
+
+  function openEditModal(c) {
+    setEditNome(c.nome||""); setEditCargo(c.cargo||""); setEditEmail(c.email||""); setEditLinkedin(c.linkedin||"");
+    // Tenta pré-selecionar a conta atual do contato, se ela existir na lista
+    var currentAcc = c.empresa ? accounts.find(function(a){ return (a.nome||"").toLowerCase().trim() === c.empresa.toLowerCase().trim(); }) : null;
+    if (currentAcc) { setEditAccMode("existing"); setEditSelAccId(currentAcc.id); setEditNewAccNome(""); }
+    else if (c.empresa) { setEditAccMode("new"); setEditSelAccId(""); setEditNewAccNome(c.empresa); }
+    else { setEditAccMode("none"); setEditSelAccId(""); setEditNewAccNome(""); }
+    setEditAccSearch("");
+    setEditModal(c);
+  }
+  function closeEditModal() { setEditModal(null); }
+
+  function saveEditedContact() {
+    if (!editModal) return;
+    var empresaNome = "";
+    if (editAccMode === "existing" && editSelAccId) {
+      var found = accounts.find(function(a){ return a.id === editSelAccId; });
+      empresaNome = found ? found.nome : "";
+    } else if (editAccMode === "new" && editNewAccNome.trim()) {
+      empresaNome = editNewAccNome.trim();
+      // Só cria a conta se ainda não existir uma com esse nome exato
+      var already = accounts.find(function(a){ return (a.nome||"").toLowerCase().trim() === empresaNome.toLowerCase(); });
+      if (!already && props.onCreateAccount) props.onCreateAccount(empresaNome);
+    }
+    setEditSaving(true);
+    var updated = Object.assign({}, editModal, {
+      nome: editNome || editModal.nome, cargo: editCargo, email: editEmail,
+      linkedin: editLinkedin, empresa: empresaNome,
+    });
+    storageSet(editModal.id, updated).then(function() {
+      setContacts(function(prev){ return prev.map(function(p){ return p.id===editModal.id ? updated : p; }); });
+      setEditSaving(false);
+      closeEditModal();
+      showToastC("Contato atualizado.", "#10b981");
+    }).catch(function(){ setEditSaving(false); });
+  }
+
+  function openComposeModal(c) { setComposeContact(c); }
+  function closeComposeModal() { setComposeContact(null); }
 
   function toggleGroup(empresa) {
     setExpandedGroups(function(prev) { var n=Object.assign({},prev); n[empresa]=!prev[empresa]; return n; });
@@ -2679,6 +2859,79 @@ function ContactsView(props) {
           </div>
         </div>
       )}
+      {editModal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.32)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"60px 20px 20px"}} onClick={function(e){if(e.target===e.currentTarget)closeEditModal();}}>
+          <div style={{background:"#ffffff",border:"1px solid #dde1e8",borderRadius:20,width:"100%",maxWidth:460,padding:"24px",boxShadow:"0 24px 80px rgba(15,23,42,.12)",maxHeight:"90vh",overflowY:"auto"}} onClick={function(e){e.stopPropagation();}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+              <div style={{fontSize:16,fontWeight:800,color:"#0f172a"}}>{"Editar Contato"}</div>
+              <button onClick={closeEditModal} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:20,fontWeight:300,lineHeight:1,padding:4}} onMouseEnter={function(e){e.currentTarget.style.color="#0f172a";}} onMouseLeave={function(e){e.currentTarget.style.color="#94a3b8";}}>{"✕"}</button>
+            </div>
+
+            {/* Account picker */}
+            <div style={{marginBottom:16,background:"#f8fafc",borderRadius:12,padding:"14px 16px",border:"1px solid #e8edf4"}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>{"Empresa / Conta"}</div>
+              <div style={{display:"flex",gap:6,marginBottom:12}}>
+                <button onClick={function(){setEditAccMode("existing");setEditNewAccNome("");}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid "+(editAccMode==="existing"?"#6366f1":"#e2e8f0"),background:editAccMode==="existing"?"rgba(99,102,241,.08)":"#fff",color:editAccMode==="existing"?"#4f46e5":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{"Conta existente"}</button>
+                <button onClick={function(){setEditAccMode("new");setEditSelAccId("");setEditAccSearch("");}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid "+(editAccMode==="new"?"#6366f1":"#e2e8f0"),background:editAccMode==="new"?"rgba(99,102,241,.08)":"#fff",color:editAccMode==="new"?"#4f46e5":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{"Criar conta nova"}</button>
+                <button onClick={function(){setEditAccMode("none");setEditSelAccId("");setEditNewAccNome("");setEditAccSearch("");}} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid "+(editAccMode==="none"?"#6366f1":"#e2e8f0"),background:editAccMode==="none"?"rgba(99,102,241,.08)":"#fff",color:editAccMode==="none"?"#4f46e5":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>{"Sem empresa"}</button>
+              </div>
+              {editAccMode==="existing" && (
+                <div>
+                  <input value={editAccSearch} onChange={function(e){setEditAccSearch(e.target.value);}} placeholder={"Buscar conta..."} style={{width:"100%",boxSizing:"border-box",background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#0f172a",fontFamily:"inherit",outline:"none",marginBottom:6}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+                  <div style={{maxHeight:140,overflowY:"auto",border:"1px solid #e8edf4",borderRadius:8,background:"#fff"}}>
+                    {(editAccSearch ? accounts.filter(function(a){return (a.nome||"").toLowerCase().includes(editAccSearch.toLowerCase());}) : accounts).map(function(a){
+                      var isSel = editSelAccId === a.id;
+                      return (
+                        <div key={a.id} onClick={function(){setEditSelAccId(a.id);}} style={{padding:"8px 12px",cursor:"pointer",background:isSel?"rgba(99,102,241,.08)":"transparent",borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"center",gap:8}} onMouseEnter={function(e){if(!isSel)e.currentTarget.style.background="#f8fafc";}} onMouseLeave={function(e){if(!isSel)e.currentTarget.style.background="transparent";}}>
+                          {isSel && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                          <span style={{fontSize:12,fontWeight:isSel?700:500,color:isSel?"#4f46e5":"#0f172a",flex:1}}>{a.nome}</span>
+                          {a.manualOnly && <span style={{fontSize:8,color:"#94a3b8",background:"#f1f5f9",borderRadius:4,padding:"1px 5px"}}>{"manual"}</span>}
+                          {a.mapped && <span style={{fontSize:8,color:"#4f46e5",background:"rgba(99,102,241,.08)",borderRadius:4,padding:"1px 5px"}}>{"mapeada"}</span>}
+                        </div>
+                      );
+                    })}
+                    {accounts.length === 0 && <div style={{padding:"12px",fontSize:11,color:"#94a3b8",textAlign:"center"}}>{"Nenhuma conta ainda. Use 'Criar conta nova'."}</div>}
+                  </div>
+                </div>
+              )}
+              {editAccMode==="new" && (
+                <div>
+                  <input value={editNewAccNome} onChange={function(e){setEditNewAccNome(e.target.value);}} placeholder={"Nome da empresa..."} style={{width:"100%",boxSizing:"border-box",background:"#fff",border:"1.5px solid #e6e9ef",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#0f172a",fontFamily:"inherit",outline:"none"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.5}}>{"A conta será criada como manual, se ainda não existir."}</div>
+                </div>
+              )}
+              {editAccMode==="none" && (
+                <div style={{fontSize:11,color:"#94a3b8"}}>{"Contato ficará sem vínculo com conta."}</div>
+              )}
+            </div>
+
+            {/* Contact fields */}
+            <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{"Dados do contato"}</div>
+            {[
+              {label:"Nome completo", val:editNome, set:setEditNome, ph:"Ex: Ana Lima"},
+              {label:"Cargo", val:editCargo, set:setEditCargo, ph:"Ex: VP de Operações"},
+              {label:"E-mail", val:editEmail, set:setEditEmail, ph:"Ex: ana@nubank.com"},
+              {label:"LinkedIn URL", val:editLinkedin, set:setEditLinkedin, ph:"Ex: linkedin.com/in/analima"},
+            ].map(function(f) {
+              return (
+                <div key={f.label} style={{marginBottom:10}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#52617a",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{f.label}</div>
+                  <input value={f.val} onChange={function(e){f.set(e.target.value);}} placeholder={f.ph} style={{width:"100%",boxSizing:"border-box",background:"#fbfbfd",border:"1.5px solid #e6e9ef",borderRadius:10,padding:"9px 12px",fontSize:13,color:"#0f172a",fontFamily:"inherit",outline:"none"}} onFocus={function(e){e.target.style.borderColor="rgba(99,102,241,.5)";}} onBlur={function(e){e.target.style.borderColor="#e6e9ef";}}/>
+                </div>
+              );
+            })}
+            <div style={{display:"flex",gap:8,marginTop:18}}>
+              <button onClick={closeEditModal} style={{flex:1,background:"#fbfbfd",border:"1px solid #e6e9ef",color:"#52617a",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{"Cancelar"}</button>
+              <button onClick={saveEditedContact} disabled={editSaving} style={{flex:2,background:editSaving?"#e2e8f0":"linear-gradient(135deg,#6366f1,#4f46e5)",color:editSaving?"#94a3b8":"#fff",border:"none",borderRadius:10,padding:"10px 0",fontSize:12,fontWeight:700,cursor:editSaving?"default":"pointer",fontFamily:"inherit",transition:"all .2s"}}>
+                {editSaving ? "Salvando..." : "Salvar alterações"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {composeContact && (
+        <ComposeEmailModal contact={composeContact} authUser={props.authUser} onClose={closeComposeModal} showToast={showToastC}/>
+      )}
       {loadingC ? (
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"64px 0",gap:10}}>
           <div style={{width:8,height:8,borderRadius:"50%",background:"#6366f1"}}/>
@@ -2715,6 +2968,8 @@ function ContactsView(props) {
           toggleFavorite={toggleFavorite}
           deleteContact={deleteContact}
           onGenerateSequence={props.onGenerateSequence}
+          onEdit={function(c){ openEditModal(c); }}
+          onCompose={function(c){ openComposeModal(c); }}
         />
       )}
       {toastC && (
@@ -5663,13 +5918,13 @@ function TasksView(props) {
     });
   }
   useEffect(function(){
-    // Ao abrir: traz o que o Cron já processou desde a última vez (ex: e-mails
-    // enviados automaticamente enquanto o navegador estava fechado).
+    // Sempre carrega do localStorage primeiro — nunca fica esperando o servidor.
+    loadSeqs();
+    // Em paralelo, traz o que o Cron já processou (ex: e-mails enviados enquanto
+    // o navegador estava fechado) e recarrega só se algo mudou.
     var userId = props.authUser && props.authUser.id;
     if (userId) {
       pullTasksFromServer(userId, function(){ loadSeqs(); });
-    } else {
-      loadSeqs();
     }
   }, []);
 
@@ -7535,7 +7790,7 @@ export default function App() {
               {nav==="tasks" && <TasksView showToast={showToast} authUser={authUser}/>}
               {nav==="relatorios"&& <InsightsView accounts={accounts} contactsRefreshKey={contactsRefreshKey}/>}
               {nav==="biblioteca" && <BibliotecaView showToast={showToast} onCountChange={setSeqCount} onOpenSeq={setOpenSeq}/>}
-              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} defaultSearch={pendingContactSearch} onMounted={function(){ setPendingContactSearch(""); }} onFavoriteChange={triggerContactsRefresh} onCreateAccount={function(nome){
+              {nav==="contacts" && <ContactsView showToast={showToast} onGenerateSequence={generateSequenceFromContact} accounts={accounts} refreshKey={contactsRefreshKey} defaultSearch={pendingContactSearch} onMounted={function(){ setPendingContactSearch(""); }} onFavoriteChange={triggerContactsRefresh} authUser={authUser} onCreateAccount={function(nome){
                 var id="acc:"+Date.now()+"-"+Math.random().toString(36).slice(2,7);
                 var acc={id:id,nome:nome,setor:"Criada manualmente",fit:"-",tier:"-",status:"prospecting",mapped:false,manualOnly:true,savedAt:Date.now(),data:null};
                 storageSet(id,acc).then(function(){setAccounts(function(prev){return [acc].concat(prev);});});
