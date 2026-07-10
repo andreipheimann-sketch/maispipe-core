@@ -1,4 +1,4 @@
-// BUILD: 1783653164
+// BUILD: 1783694121
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -2735,7 +2735,7 @@ function GmailConnectCard(props) {
 
   function refreshStatus() {
     if (!authUser || !authUser.id) { setLoading(false); return; }
-    fetch("/api/auth/google/status?userId=" + encodeURIComponent(authUser.id))
+    fetch("/api/auth/google?action=status&userId=" + encodeURIComponent(authUser.id))
       .then(function(r){ return r.json(); })
       .then(function(data){ setStatus(data); setLoading(false); })
       .catch(function(){ setLoading(false); });
@@ -2758,13 +2758,13 @@ function GmailConnectCard(props) {
 
   function connect() {
     if (!authUser || !authUser.id) return;
-    window.location.href = "/api/auth/google/start?userId=" + encodeURIComponent(authUser.id);
+    window.location.href = "/api/auth/google?action=start&userId=" + encodeURIComponent(authUser.id);
   }
 
   function disconnect() {
     if (!window.confirm("Desconectar sua conta Gmail? O envio automático de e-mails das sequências vai parar até reconectar.")) return;
     setDisconnecting(true);
-    fetch("/api/auth/google/disconnect", {
+    fetch("/api/auth/google?action=disconnect", {
       method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ userId: authUser.id }),
     })
