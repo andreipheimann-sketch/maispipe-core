@@ -1,4 +1,4 @@
-// BUILD: 1783713638
+// BUILD: 1784922534
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -1587,7 +1587,14 @@ function AccountModal(props) {
                             <Icon name="star" size={14} fill={contact.favorite} color={contact.favorite?"#f59e0b":"#94a3b8"}/>
                           </button>
                           <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:1,paddingRight:26}}>{contact.nome||contact.name||""}</div>
-                          {(contact.cargo||contact.title)&&<div style={{fontSize:10,color:"#a5b4fc",marginBottom:6,fontWeight:600}}>{contact.cargo||contact.title}</div>}
+                          {(contact.cargo||contact.title)&&(
+                            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:6,flexWrap:"wrap"}}>
+                              <span style={{fontSize:10,color:"#a5b4fc",fontWeight:600}}>{contact.cargo||contact.title}</span>
+                              {contact.cargo_confianca==="baixa"&&(
+                                <span title={contact.cargo_alerta||"Cargo extraído de busca web — confirme no perfil do LinkedIn antes de usar."} style={{fontSize:8,fontWeight:700,color:"#b45309",background:"rgba(245,158,11,.14)",border:"1px solid rgba(245,158,11,.3)",borderRadius:5,padding:"1px 5px",cursor:"help"}}>{"⚠ verificar"}</span>
+                              )}
+                            </div>
+                          )}
                           <div style={{display:"flex",flexDirection:"column",gap:5}}>
                             {contact.email&&(
                               <a href={"mailto:"+contact.email} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#0ea5e9",textDecoration:"none",background:"rgba(14,165,233,.06)",borderRadius:6,padding:"4px 8px"}}>
