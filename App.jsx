@@ -1,4 +1,4 @@
-// BUILD: 1784923523
+// BUILD: 1784926756
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -4208,6 +4208,7 @@ function SearchView(props) {
   var _st_loading = useState(false); var loading = _st_loading[0]; var setLoading = _st_loading[1];
   var _st_done = useState(null); var done = _st_done[0]; var setDone = _st_done[1];
   var _st_doneAcc = useState(null); var doneAcc = _st_doneAcc[0]; var setDoneAcc = _st_doneAcc[1];
+  var _st_enriching = useState(false); var enriching = _st_enriching[0]; var setEnriching = _st_enriching[1];
   var _st_searchError = useState(""); var searchError = _st_searchError[0]; var setSearchError = _st_searchError[1];
   var _st_duplicate = useState(null); var duplicate = _st_duplicate[0]; var setDuplicate = _st_duplicate[1];
   var _st_attachment = useState(null); var attachment = _st_attachment[0]; var setAttachment = _st_attachment[1];
@@ -4267,8 +4268,20 @@ function SearchView(props) {
     });
   }
 
-  function doEnrich(nome, domain) {
+  function doEnrich(nome, domain, onEnriched) {
     enhanceResumo(nome);
+
+    // Garante que o callback dispara no máximo uma vez, mesmo com múltiplos
+    // caminhos de saída (sucesso, falha, conta não encontrada, timeout).
+    var finished = false;
+    function finish(acc) {
+      if (finished) return;
+      finished = true;
+      if (onEnriched) onEnriched(acc || null);
+    }
+    // Rede de segurança: se a IA travar, libera a interface mesmo assim.
+    var safetyTimer = setTimeout(function(){ finish(null); }, 75000);
+    function finishAndClear(acc) { clearTimeout(safetyTimer); finish(acc); }
 
     // ── Full AI mapping — dores, triggers, SPIN, emails, stakeholders, próximos passos ──
     var icp = getStoredIcp();
@@ -4277,15 +4290,23 @@ function SearchView(props) {
 
     // Get rawContext from stored account to feed the AI
     storageList("acc:").then(function(keys){
+      var matched = false;
+      var pending = keys.length;
+      if (!pending) { finishAndClear(null); return; }
       keys.forEach(function(k){
         storageGet(k).then(function(stored){
-          if (!stored || stored.nome.toLowerCase() !== nome.toLowerCase()) return;
+          pending--;
+          if (!stored || stored.nome.toLowerCase() !== nome.toLowerCase()) {
+            if (!pending && !matched) finishAndClear(null);
+            return;
+          }
+          matched = true;
           var nomeKey = stored.nome.toLowerCase();
-          if (_mappingInProgress.has(nomeKey)) return;
+          if (_mappingInProgress.has(nomeKey)) { finishAndClear(stored); return; }
           // Only block retry if BOTH dores AND spin are present
           var hasDores = stored.aiMapped && stored.data && stored.data.dores && (stored.data.dores.principais||[]).length > 0;
           var hasSpin  = stored.data && stored.data.estrategia && (stored.data.estrategia.perguntas_spin||[]).length > 0;
-          if (hasDores && hasSpin) return;
+          if (hasDores && hasSpin) { finishAndClear(stored); return; }
           _mappingInProgress.add(nomeKey);
 
           var emp = (stored.data && stored.data.empresa) || {};
@@ -4311,6 +4332,7 @@ function SearchView(props) {
             _mappingInProgress.delete(nomeKey);
             if (!mapped || mapped.error) {
               console.warn("Mapping failed:", mapped && mapped.error);
+              finishAndClear(stored); // devolve a conta crua — melhor que travar
               return;
             }
             var est = mapped.estrategia || mapped["estratégia"] || {};
@@ -4327,7 +4349,7 @@ function SearchView(props) {
             }
             var objecoesFlat = est.objecoes || est["objeções"] || mapped.objecoes || [];
             storageGet(k).then(function(cur){
-              if (!cur) return;
+              if (!cur) { finishAndClear(stored); return; }
               var updated = Object.assign({}, cur, {
                 data: Object.assign({}, cur.data, {
                   fit:           mapped.fit           || cur.data.fit,
@@ -4354,9 +4376,10 @@ function SearchView(props) {
               });
               storageSet(k, updated);
               if (props.onUpdateAccount) props.onUpdateAccount(updated);
+              finishAndClear(updated); // conta completa — libera o botão "Ver mapeamento"
             });
           })
-          .catch(function(){ _mappingInProgress.delete(nomeKey); });
+          .catch(function(){ _mappingInProgress.delete(nomeKey); finishAndClear(stored); });
         });
       });
     });
@@ -4441,22 +4464,32 @@ function SearchView(props) {
     }
   }
   function runSearch(nome, domain, existingAcc) {
-    setLoading(true); setDone(null); setDoneAcc(null); setSearchError("");
+    setLoading(true); setDone(null); setDoneAcc(null); setSearchError(""); setEnriching(false);
+
+    // Só libera o botão "Ver mapeamento" quando a IA terminar — senão o usuário
+    // abre o modal com a conta crua (resumo de scraping, sem dores nem SPIN).
+    function afterSave(rawAcc) {
+      setLoading(false);
+      setEnriching(true);
+      doEnrich(nome, domain, function(enrichedAcc) {
+        setEnriching(false);
+        setDoneAcc(enrichedAcc || rawAcc);
+        setDone(nome);
+        setInputVal("");
+      });
+    }
+
     fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:nome,domain:domain||"",context:""})})
       .then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.error||"HTTP "+r.status);}); return r.json();})
       .then(function(resp){
         var data = buildData(nome, resp.results);
-        props.onSave(nome, data, true, attachment, attachName, function(acc){ setDoneAcc(acc); }, existingAcc);
+        props.onSave(nome, data, true, attachment, attachName, function(acc){ afterSave(acc); }, existingAcc);
         setAttachment(null); setAttachName("");
-        doEnrich(nome, domain);
-        setLoading(false); setDone(nome); setInputVal("");
       })
       .catch(function(){
         var data = buildData(nome, null);
-        props.onSave(nome, data, false, attachment, attachName, function(acc){ setDoneAcc(acc); }, existingAcc);
+        props.onSave(nome, data, false, attachment, attachName, function(acc){ afterSave(acc); }, existingAcc);
         setAttachment(null); setAttachName("");
-        doEnrich(nome, domain);
-        setLoading(false); setDone(nome); setInputVal("");
         setSearchError("Busca online indisponivel. Account mapping gerado com base de conhecimento.");
       });
   }
@@ -4610,6 +4643,17 @@ function SearchView(props) {
             </div>
           </div>
         )}
+        {enriching && (
+          <div style={{marginTop:14,background:"rgba(99,102,241,.06)",border:"1px solid rgba(99,102,241,.25)",borderRadius:14,padding:"16px 18px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+              <div style={{width:14,height:14,borderRadius:"50%",border:"2.5px solid rgba(99,102,241,.25)",borderTopColor:"#6366f1",animation:"spin .7s linear infinite",flexShrink:0}}/>
+              <span style={{fontSize:13,color:"#0f172a",fontWeight:700}}>{"Gerando inteligência de conta com IA..."}</span>
+            </div>
+            <div style={{fontSize:11.5,color:"#52617a",lineHeight:1.6,paddingLeft:24}}>
+              {"Analisando dores, gatilhos, perguntas SPIN e buscando contatos. Isso leva cerca de 30 segundos — o resultado completo abre em seguida."}
+            </div>
+          </div>
+        )}
         {done && (
           <div style={{marginTop:14,background:"rgba(99,102,241,.08)",border:"1px solid rgba(52,211,153,.35)",borderRadius:14,padding:"14px 18px"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
@@ -4618,7 +4662,21 @@ function SearchView(props) {
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               {doneAcc && (
-                <button onClick={function(){ if(props.onOpenAccount) props.onOpenAccount(doneAcc); }} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
+                <button onClick={function(){
+                  // Lê a versão mais recente do storage — a busca de stakeholders
+                  // roda em paralelo e pode ter atualizado a conta depois do mapeamento.
+                  storageList("acc:").then(function(ks){
+                    var found = null; var pending = ks.length;
+                    if (!pending) { if(props.onOpenAccount) props.onOpenAccount(doneAcc); return; }
+                    ks.forEach(function(k){
+                      storageGet(k).then(function(s){
+                        if (s && s.nome && s.nome.toLowerCase() === (doneAcc.nome||"").toLowerCase()) found = s;
+                        pending--;
+                        if (pending === 0 && props.onOpenAccount) props.onOpenAccount(found || doneAcc);
+                      });
+                    });
+                  });
+                }} style={{background:"linear-gradient(135deg,#6366f1,#4f46e5)",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(99,102,241,.3)"}}>
                   {"Ver mapeamento"}
                 </button>
               )}
