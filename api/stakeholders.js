@@ -152,40 +152,73 @@ export default async function handler(req, res) {
         `${companyQ} (Gerente OR "Head de" OR Superintendente OR Sócio OR "Diretor Comercial") site:linkedin.com/in Brasil`,
       ];
 
+      // Retorna { cargo, confianca } — a confiança indica de onde o cargo veio.
+      // "alta"  = cargo E empresa estão no título do LinkedIn (headline = cargo ATUAL)
+      // "media" = cargo no título, mas empresa só confirmada pelo snippet
+      // "baixa" = cargo extraído do snippet (pode ser cargo antigo ou de outra empresa)
+      // Separa campos do título do LinkedIn ("Nome - Cargo - Empresa | LinkedIn").
+      // IMPORTANTE: exige espaço ao redor do hífen. Sem isso, "Co-founder" e
+      // "Silva-Souza" eram quebrados no meio da palavra (origem do bug "CTO and Co").
+      const TITLE_SPLIT = /\s+[-–—]\s+|\s*\|\s*/;
+
       function extractRole(title, snippet, name, companyName) {
-        const parts = (title || "").split(/\s*[-–|]\s*/).map(s => s.trim()).filter(Boolean);
-        const roleRe = /(ceo|cfo|coo|cto|cio|ciso|cmo|vp|vice|diretor|director|head|gerente|manager|chief|lider|líder|founder|sócio|presidente|superintendente)/i;
+        const parts = (title || "").split(TITLE_SPLIT).map(s => s.trim()).filter(Boolean);
+        const roleRe = /(ceo|cfo|coo|cto|cio|ciso|cmo|vp|vice|diretor|director|head|gerente|manager|chief|lider|líder|founder|fundador|sócio|presidente|superintendente)/i;
+        const compLow = (companyName || "").toLowerCase();
 
         function cleanRole(raw) {
-          // Common business area words that start with caps but are NOT company names
           var bizAreas = /^(Vendas|Tecnologia|Finanças|Financeiro|Marketing|Operações|Operacional|Comercial|Produção|Logística|Juridico|Jurídico|Recursos|Humanos|Estratégia|Negócios|Sustentabilidade|Inovação|Qualidade|Compras|Suprimentos|TI|RH|BI|ESG)(\s|$)/;
           return raw
-            // Strip "at/na/no/em/pela/pelo/para/@ + rest"
             .replace(/\s+(at|na|no|em|pela|pelo|para|@)\s+.*/gi, "")
-            // Strip "da/de/do + Capitalized proper noun" (company) — but skip business area words
             .replace(/\s+(?:da|de|do)\s+([A-ZÁÉÍÓÚ][A-Za-záéíóôõúàâêîûãõ\s&.]{2,})$/g, function(match, after) {
-              return bizAreas.test(after) ? match : ""; // keep if it's a business area
+              return bizAreas.test(after) ? match : "";
             })
-            // Strip trailing Brazilian state/regional demonyms
             .replace(/\s+(catarinense|paulista|carioca|gaucho|gaúcho|mineiro|baiano|pernambucano|paranaense|capixaba|fluminense|amazonense|maranhense|cearense|potiguar|alagoano|sergipano|piauiense|tocantinense|paraense|amapaense|rondoniense|mato-grossense|goiano|brasiliense|sul-mato-grossense)\s*$/gi, "")
-            // Strip trailing country/region labels
             .replace(/\s+(brasil|brazil|latam|america latina|latin america|global)\s*$/gi, "")
+            .replace(/[,;]\s*$/, "")
             .trim();
         }
 
-        for (const part of parts) {
+        // ── 1. Procura o cargo no TÍTULO (headline do LinkedIn = cargo atual) ──
+        let roleFromTitle = null;
+        let roleIdx = -1;
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
           const lp = part.toLowerCase();
           if (lp === (name || "").toLowerCase()) continue;
           if (lp.includes("linkedin")) continue;
-          if (lp === (companyName || "").toLowerCase()) continue;
-          if (roleRe.test(part)) {
-            return cleanRole(part);
-          }
+          if (lp === compLow) continue;
+          if (roleRe.test(part)) { roleFromTitle = cleanRole(part); roleIdx = i; break; }
         }
-        // Fallback to snippet extraction — take only the role keyword + up to 2 words after
-        const m = (snippet || "").match(new RegExp(`((?:${roleRe.source})(?:\\s+[A-Za-zÀ-ÿ]+){0,2})`,"i"));
-        if (m && m[1] && m[1].length >= 3 && m[1].length <= 40) return cleanRole(m[1].trim());
-        return parts.find(p => p.toLowerCase() !== (companyName || "").toLowerCase()) || "";
+
+        if (roleFromTitle) {
+          // A empresa aparece no título também? Isso confirma que o cargo é NESSA empresa.
+          const companyInTitle = parts.some(function(p, i) {
+            if (i === roleIdx) return false;
+            const pl = p.toLowerCase();
+            return pl === compLow || pl.includes(compLow) || compLow.includes(pl);
+          });
+          // Se o título traz cargo E outra empresa (diferente da buscada), o cargo é de OUTRA empresa.
+          const otherCompanyInTitle = !companyInTitle && parts.some(function(p, i) {
+            if (i === roleIdx || i === 0) return false;
+            const pl = p.toLowerCase();
+            return !pl.includes("linkedin") && pl.length > 3 && !roleRe.test(p) && !pl.includes(compLow);
+          });
+          if (otherCompanyInTitle) return { cargo: roleFromTitle, confianca: "conflito" };
+          return { cargo: roleFromTitle, confianca: companyInTitle ? "alta" : "media" };
+        }
+
+        // ── 2. Fallback: extrai do snippet (menos confiável) ──
+        // Inclui hífen, & e "of/de" para não truncar "Co-founder", "Head of Sales", "CTO and Co-founder"
+        const snippetRe = new RegExp(
+          `((?:${roleRe.source})(?:[\\s&-]+(?:of|de|da|do|and|e)?[\\s]*[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]*){0,3})`,
+          "i"
+        );
+        const m = (snippet || "").match(snippetRe);
+        if (m && m[1] && m[1].trim().length >= 3 && m[1].trim().length <= 50) {
+          return { cargo: cleanRole(m[1].trim()), confianca: "baixa" };
+        }
+        return { cargo: "", confianca: "baixa" };
       }
 
       for (const q of queries) {
@@ -199,7 +232,7 @@ export default async function handler(req, res) {
           const json = await r.json();
           for (const result of (json.results || [])) {
             if (!result.url?.includes("linkedin.com/in/")) continue;
-            const titleParts = (result.title || "").split(/\s*[-–|]\s*/);
+            const titleParts = (result.title || "").split(TITLE_SPLIT);
             const name = (titleParts[0] || "").trim();
             if (!name || name.length < 4) continue;
 
@@ -239,7 +272,17 @@ export default async function handler(req, res) {
               const titleHasCompanyWord = significantWords.some(w => titleLow.includes(w));
               if (!titleHasCompanyWord) continue;
             }
-            const role = extractRole(result.title, snippet, name, company);
+            const roleResult = extractRole(result.title, snippet, name, company);
+            const role = roleResult.cargo;
+            const roleConfidence = roleResult.confianca;
+
+            // Descarta quando o título do LinkedIn indica cargo em OUTRA empresa —
+            // era a causa de "CEO da Digibee" para quem é CEO de outro lugar e só
+            // menciona a Digibee no perfil (parceiro, investidor, ex-funcionário).
+            if (roleConfidence === "conflito") continue;
+            // Sem cargo identificável não vale a pena listar
+            if (!role) continue;
+
             // Translate common English titles to Portuguese
             const rolePt = role
               .replace(/\bChief Executive Officer\b/gi, "CEO")
@@ -276,10 +319,11 @@ export default async function handler(req, res) {
             add({
               nome:     name,
               cargo:    rolePt,
+              cargo_confianca: roleConfidence,
               linkedin: result.url,
               email:    "",
               email_confidence: 0,
-              is_senior: /ceo|cto|ciso|coo|cfo|director|diretor|head|vp|chief|vice|presidente/i.test(role),
+              is_senior: /ceo|cto|ciso|coo|cfo|director|diretor|head|vp|chief|vice|presidente/i.test(rolePt),
               source:   "LinkedIn (Tavily)",
             });
           }
@@ -290,6 +334,23 @@ export default async function handler(req, res) {
       const tavilyCount = contacts.filter(c => c.source?.includes("Tavily")).length;
       if (tavilyCount) sources.push(`LinkedIn público (${tavilyCount} perfis)`);
     }
+
+    // ── Marca cargos executivos duplicados como suspeitos ─────────────────────
+    // Uma empresa não tem dois CEOs nem dois CTOs. Quando isso aparece, pelo menos
+    // um veio de extração errada — rebaixa a confiança para o usuário revisar.
+    const uniqueExecRe = /^(ceo|cto|cfo|coo|cio|ciso|cmo|presidente)\b/i;
+    const execCount = {};
+    contacts.forEach(c => {
+      const m = (c.cargo || "").match(uniqueExecRe);
+      if (m) { const k = m[1].toLowerCase(); execCount[k] = (execCount[k] || 0) + 1; }
+    });
+    contacts.forEach(c => {
+      const m = (c.cargo || "").match(uniqueExecRe);
+      if (m && execCount[m[1].toLowerCase()] > 1) {
+        c.cargo_confianca = "baixa";
+        c.cargo_alerta = "Mais de um " + m[1].toUpperCase() + " encontrado para esta empresa — verifique qual é o correto.";
+      }
+    });
 
     // Sort: senior first, then by email confidence
     contacts.sort((a, b) => {
