@@ -1,4 +1,4 @@
-// BUILD: 1784922534
+// BUILD: 1784923523
 import { useState, useEffect, useRef } from "react";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
@@ -494,17 +494,22 @@ function SequenceView(props) {
           var seq = {id:"seq:"+createdAt2+"-"+Math.random().toString(36).slice(2,6), account:acc, profile:p, contactName:contactName||"", touches:seedTouchStatuses(norm, createdAt2), createdAt:createdAt2, engine:"ai"};
           setGenerated(seq);
           persistSeq(seq);
-          props.showToast("Sequência gerada com IA e salva na biblioteca.", "#10b981");
+          if (data && data.partial && data.message) {
+            props.showToast(data.message, "#f59e0b", 7000);
+          } else {
+            props.showToast("Sequência gerada com IA e salva na biblioteca.", "#10b981");
+          }
         } else {
           var reason = (data && (data.error || data.message)) || ("HTTP " + res.status);
-          var isQuota  = reason.toLowerCase().includes("quota") || reason.toLowerCase().includes("resource_exhausted") || String(res.status) === "429";
-          var isKeyErr = reason.toLowerCase().includes("gemini_api_key") || reason.toLowerCase().includes("inválida") || reason.toLowerCase().includes("sem acesso") || reason.toLowerCase().includes("api_key");
+          var low = reason.toLowerCase();
+          var isQuota  = low.includes("quota") || low.includes("resource_exhausted") || low.includes("rate limit") || String(res.status) === "429";
+          var isKeyErr = low.includes("api_key") || low.includes("não configurada") || low.includes("nao configurada") || low.includes("inválida");
           if (isKeyErr) {
-            props.showToast("Erro de configuração: " + reason, "#ef4444", 8000);
+            props.showToast("Erro de configuração da IA: " + reason, "#ef4444", 9000);
           } else if (isQuota) {
-            props.showToast("Quota do Gemini atingida. Aguarde alguns minutos.", "#ef4444");
+            props.showToast("Provedores de IA saturados no momento. Gerado com templates — use \"Recarregar\" em cada toque para tentar a IA de novo.", "#f59e0b", 9000);
           } else {
-            props.showToast("IA indisponível: " + reason, "#f59e0b", 6000);
+            props.showToast("IA indisponível: " + reason, "#f59e0b", 8000);
           }
           localFallback();
         }
