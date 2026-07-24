@@ -1,41 +1,81 @@
 // api/gemini.js — Vercel serverless
-// Groq (Llama 3.3 70B)  → resumo + mapeamento   (GROQ_API_KEY)
-// Gemini 2.0 Flash       → sequências            (GEMINI_API_KEY)
+// Camada de IA com múltiplos provedores, retry com backoff e degradação progressiva.
+// Ordem padrão: Groq primeiro (mais estável no free tier), Gemini como reserva.
+// Configurável via env var AI_PROVIDER_ORDER = "groq,gemini" ou "gemini,groq".
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Erros que valem retry: rate limit, indisponibilidade temporária, erro de rede
+function isRetryable(status, msg) {
+  if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
+  const m = (msg || "").toLowerCase();
+  return m.includes("rate") || m.includes("quota") || m.includes("overload") ||
+         m.includes("timeout") || m.includes("try again") || m.includes("temporarily");
+}
 
 // ── Transport: Groq ────────────────────────────────────────────────────────────
-async function callGroq(apiKey, systemText, userText, maxTokens) {
+// Modelos em ordem de preferência. O 8b-instant tem limite de tokens/min MUITO
+// maior no free tier — é a rede de segurança quando o 70b está saturado.
+const GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+
+async function callGroqOnce(apiKey, systemText, userText, maxTokens, model, jsonMode) {
   const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method:  "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: model,
       max_tokens: maxTokens || 4096,
       temperature: 0.7,
+      ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: systemText },
         { role: "user",   content: userText   },
       ],
     }),
   });
-  const data = await r.json();
+  let data;
+  try { data = await r.json(); }
+  catch (e) { return { ok: false, status: r.status, error: "Resposta ilegível do Groq." }; }
   if (!r.ok) return { ok: false, status: r.status, error: data?.error?.message || ("HTTP " + r.status) };
   const text = ((data.choices || [])[0]?.message?.content || "").trim();
   if (!text) return { ok: false, status: 200, error: "Resposta vazia (Groq)." };
-  return { ok: true, text };
+  return { ok: true, text, provider: "groq/" + model };
+}
+
+// Tenta cada modelo Groq com até 2 tentativas e backoff (0s, 2s).
+// Contagem propositalmente baixa: o orçamento de tempo total da função é curto,
+// e é mais eficaz cair para o modelo leve do que insistir no pesado.
+async function callGroq(apiKey, systemText, userText, maxTokens, jsonMode) {
+  if (!apiKey) return { ok: false, error: "GROQ_API_KEY não configurada." };
+  let lastError = "";
+  for (const model of GROQ_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await sleep(2000);
+      let out;
+      try { out = await callGroqOnce(apiKey, systemText, userText, maxTokens, model, jsonMode); }
+      catch (e) { out = { ok: false, status: 0, error: "Rede: " + e.message }; }
+      if (out.ok) return out;
+      lastError = `[${model}] ${out.error}`;
+      if (!isRetryable(out.status, out.error)) break; // erro definitivo — vai pro próximo modelo
+    }
+  }
+  return { ok: false, error: lastError || "Groq indisponível." };
 }
 
 // ── Transport: Gemini (v1beta + JSON mode) ────────────────────────────────────
-// Uses responseMimeType:"application/json" — eliminates markdown wrapping and parse failures.
-// Models confirmed on this account: gemini-2.5-flash, gemini-2.0-flash, gemini-2.0-flash-lite
-async function callGemini(apiKey, systemText, userText, maxTokens, jsonMode) {
-  const BASE   = "https://generativelanguage.googleapis.com/v1beta/models";
-  const MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
 
-  for (const model of MODELS) {
-    const url = `${BASE}/${model}:generateContent?key=${apiKey}`;
+async function callGemini(apiKey, systemText, userText, maxTokens, jsonMode) {
+  if (!apiKey) return { ok: false, error: "GEMINI_API_KEY não configurada." };
+  const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+  let lastError = "";
+
+  for (const model of GEMINI_MODELS) {
+    // 1 tentativa por modelo: erro de quota do Gemini não se recupera dentro
+    // da mesma requisição, então insistir só queima o orçamento de tempo.
     let r, data;
     try {
-      r    = await fetch(url, {
+      r = await fetch(`${BASE}/${model}:generateContent?key=${apiKey}`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -50,21 +90,52 @@ async function callGemini(apiKey, systemText, userText, maxTokens, jsonMode) {
       });
       data = await r.json();
     } catch (e) {
-      continue; // network error — try next model
+      lastError = `[${model}] Rede: ${e.message}`;
+      continue;
     }
 
     if (!r.ok) {
-      const retry = r.status === 429 || data?.error?.status === "RESOURCE_EXHAUSTED";
-      if (!retry) return { ok: false, error: `[${model}] ${data?.error?.message || "HTTP "+r.status}` };
-      continue; // quota — try next model
+      lastError = `[${model}] ${data?.error?.message || "HTTP " + r.status}`;
+      continue; // tenta o próximo modelo — pode ser indisponibilidade só deste
     }
 
     const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-    if (!text) continue;
-    return { ok: true, text };
+    if (text) return { ok: true, text, provider: "gemini/" + model };
+    lastError = `[${model}] Resposta vazia.`;
   }
-  return { ok: false, error: "Todos os modelos Gemini falharam." };
+  return { ok: false, error: lastError || "Gemini indisponível." };
 }
+
+// ── Orquestrador: tenta os provedores na ordem configurada ────────────────────
+// Retorna { ok, text, provider } ou { ok:false, error, tried:[...] }
+async function callAI(keys, systemText, userText, maxTokens, jsonMode) {
+  const order = (process.env.AI_PROVIDER_ORDER || "groq,gemini")
+    .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  const tried = [];
+  for (const provider of order) {
+    if (provider === "groq" && keys.groq) {
+      const out = await callGroq(keys.groq, systemText, userText, maxTokens, jsonMode);
+      if (out.ok) return out;
+      tried.push("Groq: " + out.error);
+    } else if (provider === "gemini" && keys.gemini) {
+      const out = await callGemini(keys.gemini, systemText, userText, maxTokens, jsonMode);
+      if (out.ok) return out;
+      tried.push("Gemini: " + out.error);
+    }
+  }
+  return { ok: false, error: tried.join(" | ") || "Nenhum provedor de IA configurado.", tried };
+}
+
+// Extrai JSON de uma resposta que pode vir com cercas markdown ou texto extra
+function parseJsonLoose(text) {
+  if (!text) return null;
+  const clean = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+  try { return JSON.parse(clean); } catch (_) {}
+  const m = clean.match(/\{[\s\S]+\}/);
+  if (m) { try { return JSON.parse(m[0]); } catch (_) {} }
+  return null;
+}
+
 // Keep old alias so nothing else breaks
 const callClaude = callGroq;
 
@@ -110,6 +181,10 @@ function cleanBody(text) {
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────────
+// Timeout da função. O padrão do Vercel é 10s — insuficiente para a cadeia de
+// retry + degradação progressiva. Hobby permite até 60s.
+export const config = { maxDuration: 60 };
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin",  "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -453,82 +528,107 @@ export default async function handler(req, res) {
       angle: ANGLES[i % ANGLES.length],
     }));
 
-    const seqUsr = [
-      `Crie uma sequência de prospecção B2B para:`,
-      `- Empresa-alvo: ${empresa || "a empresa"}`,
-      `- Setor: ${setor || "tecnologia"}`,
-      `- Cargo do decisor: ${cargo || "C-Level / Diretor"}`,
-      nomeUsar ? `- Nome do contato: ${nomeUsar}` : null,
-      `- Dor central: ${doraPrincipal}`,
-      ``,
-      `Gere ${cadencia.length} touches com os seguintes canais e ângulos:`,
-      touchList.map((t, i) => `${i+1}. Dia ${t.day} — ${t.type.toUpperCase()} — Ângulo: ${t.angle}\n   Guia: ${t.guide}`).join("\n"),
-      ``,
-      `Retorne um JSON com este schema exato:`,
-      `{`,
-      `  "touches": [`,
-      `    { "day": 1, "type": "linkedin", "subject": "assunto aqui", "body": "mensagem completa aqui" },`,
-      `    ...`,
-      `  ]`,
-      `}`,
-      ``,
-      `Cada body deve seguir o guia do canal. Use \\n\\n para separar parágrafos.`,
-      `Não inclua texto fora do JSON.`,
-    ].filter(Boolean).join("\n");
+    // ── Geração com degradação progressiva ────────────────────────────────────
+    // Nível 1: uma chamada com todos os touches (mais rápido, melhor coesão)
+    // Nível 2: dois lotes menores (menos tokens por chamada, escapa do rate limit)
+    // Nível 3: um touch por vez (menor footprint possível, com pausas)
+    // Retorna o que conseguir — resultado parcial é melhor que erro total.
 
-    const out = await callGemini(geminiKey, seqSys, seqUsr, 8192, true); // true = JSON mode
+    const keys = { groq: groqKey, gemini: geminiKey };
+    const attemptLog = [];
 
-    // If Gemini fails (quota/billing), fall back to Groq with a simpler prompt
-    if (!out.ok) {
-      if (!groqKey) return res.status(200).json({ touches: null, error: "Gemini indisponível e GROQ_API_KEY não configurada." });
+    // Orçamento de tempo — funções serverless têm timeout rígido. Escalar para
+    // níveis mais lentos só faz sentido se ainda houver tempo hábil; caso contrário
+    // devolvemos o que já temos em vez de estourar o limite e perder tudo.
+    const startedAt = Date.now();
+    const TIME_BUDGET_MS = 45000;
+    const timeLeft = () => TIME_BUDGET_MS - (Date.now() - startedAt);
 
-      const groqSys = seqSys;
-      // Simpler user prompt for Groq — ask for one touch at a time joined in array
-      const groqUsr = seqUsr + "\n\nIMPORTANTE: Responda SOMENTE com JSON válido. Não use aspas duplas dentro dos valores — use aspas simples se necessário.";
-      const groqOut = await callGroq(groqKey, groqSys, groqUsr, 8000);
-      if (!groqOut.ok) {
-        return res.status(200).json({ touches: null, error: "Gemini e Groq indisponíveis. Tente novamente em alguns minutos." });
+    function normalizeTouches(rawList) {
+      return (rawList || []).map((t, i) => ({
+        day:     t.day     || cadencia[i]?.day  || i + 1,
+        type:    t.type    || cadencia[i]?.type || "email",
+        subject: (t.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
+        body:    (t.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
+      })).filter(t => t.body && t.body.length > 20);
+    }
+
+    // Monta o prompt de usuário para um subconjunto da cadência
+    function buildUsrFor(subset, offset) {
+      return [
+        `Crie ${subset.length} mensagem(ns) de prospecção B2B para:`,
+        `- Empresa-alvo: ${empresa || "a empresa"}`,
+        `- Setor: ${setor || "tecnologia"}`,
+        `- Cargo do decisor: ${cargo || "C-Level / Diretor"}`,
+        nomeUsar ? `- Nome do contato: ${nomeUsar}` : null,
+        `- Dor central: ${doraPrincipal}`,
+        ``,
+        `Gere exatamente ${subset.length} touch(es):`,
+        subset.map((t, i) => {
+          const gi = offset + i;
+          return `${i+1}. Dia ${t.day} — ${t.type.toUpperCase()} — Ângulo: ${ANGLES[gi % ANGLES.length]}\n   Guia: ${CHANNEL_GUIDE[t.type] || CHANNEL_GUIDE.email}`;
+        }).join("\n"),
+        ``,
+        `Retorne JSON com este schema exato:`,
+        `{"touches":[{"day":${subset[0].day},"type":"${subset[0].type}","subject":"assunto","body":"mensagem completa"}]}`,
+        ``,
+        `Cada body deve seguir o guia do canal. Use \\n\\n entre parágrafos.`,
+        `Responda APENAS com o JSON, sem texto fora dele.`,
+      ].filter(Boolean).join("\n");
+    }
+
+    async function generateSubset(subset, offset, maxTok) {
+      const usr = buildUsrFor(subset, offset);
+      const out = await callAI(keys, seqSys, usr, maxTok, true);
+      if (!out.ok) { attemptLog.push(out.error); return null; }
+      const parsed = parseJsonLoose(out.text);
+      const list = parsed?.touches || (Array.isArray(parsed) ? parsed : null);
+      if (!list?.length) { attemptLog.push("Resposta sem touches válidos."); return null; }
+      return list;
+    }
+
+    // ── Nível 1: tudo de uma vez ──
+    let rawTouches = await generateSubset(cadencia, 0, 6000);
+
+    // ── Nível 2: dois lotes ── (precisa de ~15s)
+    if ((!rawTouches || normalizeTouches(rawTouches).length < cadencia.length) && timeLeft() > 15000) {
+      const mid = Math.ceil(cadencia.length / 2);
+      const a = await generateSubset(cadencia.slice(0, mid), 0, 3500);
+      await sleep(1200); // respiro entre lotes para não estourar tokens/min
+      const b = timeLeft() > 6000 ? await generateSubset(cadencia.slice(mid), mid, 3500) : null;
+      const combined = [...(a || []), ...(b || [])];
+      if (combined.length > (rawTouches?.length || 0)) rawTouches = combined;
+    }
+
+    // ── Nível 3: um touch por vez ── (precisa de ~6s por touch restante)
+    if ((!rawTouches || normalizeTouches(rawTouches).length < cadencia.length) && timeLeft() > 12000) {
+      const collected = [];
+      for (let i = 0; i < cadencia.length; i++) {
+        if (timeLeft() < 6000) break; // sem tempo hábil — para e entrega o parcial
+        if (i > 0) await sleep(1200);
+        const one = await generateSubset([cadencia[i]], i, 1500);
+        if (one?.length) collected.push(one[0]);
       }
-      // Parse Groq response (may have markdown fences)
-      let groqParsed;
-      const groqClean = groqOut.text.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
-      try { groqParsed = JSON.parse(groqClean); } catch (_) {
-        const m = groqClean.match(/\{[\s\S]+\}/);
-        try { groqParsed = m ? JSON.parse(m[0]) : null; } catch (_) { groqParsed = null; }
-      }
-      const groqTouches = groqParsed?.touches;
-      if (!groqTouches?.length) return res.status(200).json({ touches: null, error: "Gemini indisponível (quota). " + out.error });
+      if (collected.length > (rawTouches?.length || 0)) rawTouches = collected;
+    }
+
+    const finalTouches = normalizeTouches(rawTouches);
+
+    if (!finalTouches.length) {
       return res.status(200).json({
-        touches: groqTouches.map((t, i) => ({
-          day:     t.day     || cadencia[i]?.day  || i + 1,
-          type:    t.type    || cadencia[i]?.type || "email",
-          subject: (t.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
-          body:    (t.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
-        }))
+        touches: null,
+        error: "Não foi possível gerar a sequência. Detalhe: " + (attemptLog.slice(-2).join(" | ") || "erro desconhecido"),
       });
     }
 
-    let parsed;
-    try {
-      parsed = JSON.parse(out.text);
-    } catch (_) {
-      const m = out.text.match(/\{[\s\S]+\}/);
-      try { parsed = m ? JSON.parse(m[0]) : null; } catch (_) { parsed = null; }
-    }
-
-    const rawTouches = parsed?.touches || [];
-    if (!rawTouches.length) {
-      return res.status(200).json({ touches: null, error: "Gemini retornou sequência vazia." });
-    }
-
-    const finalTouches = rawTouches.map((t, i) => ({
-      day:     t.day     || cadencia[i]?.day  || i + 1,
-      type:    t.type    || cadencia[i]?.type || "email",
-      subject: (t.subject || "").replace(/\s*[—–]\s*/g, ", ").trim(),
-      body:    (t.body   || "").replace(/\s*[—–]\s*/g, ", ").replace(/\n{3,}/g, "\n\n").trim(),
-    }));
-
-    return res.status(200).json({ touches: finalTouches });
+    // Sucesso parcial: devolve o que conseguiu e avisa quantos faltaram
+    return res.status(200).json({
+      touches: finalTouches,
+      partial: finalTouches.length < cadencia.length,
+      message: finalTouches.length < cadencia.length
+        ? `Gerados ${finalTouches.length} de ${cadencia.length} toques. Use "Recarregar" nos que faltam.`
+        : undefined,
+    });
   } catch (e) {
     return res.status(200).json({ error: "Erro interno: " + e.message });
   }
