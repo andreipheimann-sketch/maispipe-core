@@ -6121,6 +6121,9 @@ function ProspectView(props) {
   var setErrorP  = props.setErrorP;
   var _st_enriching = useState({}); var enriching = _st_enriching[0]; var setEnriching = _st_enriching[1];
   var _st_enriched  = useState({}); var enriched = _st_enriched[0]; var setEnriched = _st_enriched[1];
+  // Falha real do mapeamento por IA — distinta de "enriquecido", para não abrir
+  // conta incompleta como se o mapeamento tivesse funcionado.
+  var _st_enrichFailed = useState({}); var enrichFailed = _st_enrichFailed[0]; var setEnrichFailed = _st_enrichFailed[1];
   var _st_filter    = useState("TODOS"); var filter = _st_filter[0]; var setFilter = _st_filter[1];
   var _st_search    = useState(""); var search = _st_search[0]; var setSearch = _st_search[1];
 
@@ -6165,6 +6168,7 @@ function ProspectView(props) {
   function doEnrich(emp) {
     var key = emp.nome;
     setEnriching(function(e){ var n=Object.assign({},e); n[key]=true; return n; });
+    setEnrichFailed(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
     var domain = emp.site ? emp.site.replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0] : "";
 
     function runMapping(acc) {
@@ -6181,6 +6185,15 @@ function ProspectView(props) {
       function finish(updatedAcc) {
         setEnriched(function(e){ var n=Object.assign({},e); n[key]=updatedAcc; return n; });
         setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
+      }
+
+      // Mapeamento não completou de verdade — NUNCA trate como "enriquecido".
+      // Isso evita o botão "Ver conta mapeada" abrir uma conta com dados
+      // placeholder (fit "—", sem dores) fingindo que o mapeamento funcionou.
+      function failEnrich(reason) {
+        setEnriching(function(e){ var n=Object.assign({},e); delete n[key]; return n; });
+        setEnrichFailed(function(e){ var n=Object.assign({},e); n[key]=reason||"Não foi possível mapear esta conta."; return n; });
+        if (props.showToast) props.showToast(reason||("Falha ao mapear "+emp.nome+". Tente novamente."), "#ef4444");
       }
 
       // ── Auto-fetch LinkedIn contacts in parallel — no manual click needed after mapping ──
@@ -6242,7 +6255,7 @@ function ProspectView(props) {
       .then(function(r2){ return r2.ok ? r2.json() : null; })
       .then(function(mapped){
         _mappingInProgress.delete(nomeKeyP);
-        if (!mapped || mapped.error) { finish(acc); return; }
+        if (!mapped || mapped.error) { failEnrich(mapped && mapped.error ? ("IA: " + mapped.error) : null); return; }
 
         var est = mapped.estrategia || mapped["estratégia"] || {};
         var spinFlat = est.perguntas_spin || [];
@@ -6273,13 +6286,13 @@ function ProspectView(props) {
           storageList("acc:").then(function(ks){
             var matched = false;
             var pending = ks.length;
-            if (!pending) { finish(acc); return; }
+            if (!pending) { failEnrich("Conta não encontrada para salvar o mapeamento."); return; }
 
             ks.forEach(function(k){
               storageGet(k).then(function(stored){
                 pending--;
                 if (!stored || stored.nome.toLowerCase() !== nomeKeyP) {
-                  if (!pending && !matched) finish(acc);
+                  if (!pending && !matched) failEnrich("Conta não encontrada para salvar o mapeamento.");
                   return;
                 }
                 matched = true;
@@ -6317,7 +6330,7 @@ function ProspectView(props) {
       })
       .catch(function(){
         _mappingInProgress.delete(nomeKeyP);
-        finish(acc);
+        failEnrich("Erro de rede ao mapear a conta.");
       });
     }
 
@@ -6486,7 +6499,11 @@ function ProspectView(props) {
             {listaFiltrada.map(function(emp, idx){
               var fitStyle    = FIT_STYLE[emp.score_fit] || FIT_STYLE["MÉDIO"];
               var jaMapeada   = mappedNames.has((emp.nome||"").toLowerCase().trim());
-              var jaEnriq     = !!enriched[emp.nome];
+              var enrichedAcc = enriched[emp.nome];
+              // Só considera "enriquecida" se realmente veio conteúdo da IA — nunca
+              // um objeto placeholder (fit "—", sem dores) disfarçado de sucesso.
+              var jaEnriq     = !!(enrichedAcc && enrichedAcc.data && enrichedAcc.data.dores && (enrichedAcc.data.dores.principais||[]).length > 0);
+              var falhouEnriq = !!enrichFailed[emp.nome];
               var isEnriching = !!enriching[emp.nome];
               var isSelected  = !!selected[emp.nome];
               // Check if the already-mapped account actually has AI data
@@ -6527,6 +6544,15 @@ function ProspectView(props) {
                       <button disabled style={{flex:1,background:"#f1f5f9",color:"#94a3b8",border:"none",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"default",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                         <div style={{width:10,height:10,borderRadius:"50%",border:"2px solid #c7d2fe",borderTopColor:"#6366f1",animation:"spin .7s linear infinite"}}/>
                         <span>{"Mapeando com IA..."}</span>
+                      </button>
+                    ) : falhouEnriq ? (
+                      /* ── Mapeamento falhou de verdade — nunca abrir conta incompleta ── */
+                      <button onClick={function(){
+                        setEnrichFailed(function(e){ var n=Object.assign({},e); delete n[emp.nome]; return n; });
+                        enriquecerEmpresa(emp);
+                      }} title={enrichFailed[emp.nome]} style={{flex:1,background:"rgba(239,68,68,.08)",color:"#b91c1c",border:"1.5px solid rgba(239,68,68,.35)",borderRadius:9,padding:"8px 0",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.44-5.5"/></svg>
+                        {"Falhou — tentar de novo"}
                       </button>
                     ) : jaEnriq ? (
                       /* ── Just enriched this session — enriched[] has full data ── */
@@ -7854,7 +7880,7 @@ export default function App() {
             <div key={nav} style={{animation:"fadeUp .4s cubic-bezier(.4,0,.2,1) both"}}>
               {nav==="home"      && <HomeView accounts={accounts} onNav={setNav} setupDone={setupDone} onFinishSetup={finishSetup} onResetSetup={resetSetup} usage={usage} onChangePlan={changePlan} showToast={showToast}/>}
               {nav==="search"    && <SearchView accounts={accounts} onSave={saveAccount} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} usage={usage} onRequestCredit={requestMapCredit} onImport={importAccounts} onChangePlan={changePlan} onNav={setNav} onContactsRefresh={triggerContactsRefresh} onSetContactSearch={setPendingContactSearch}/>}
-              {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError}/>}
+              {nav==="prospect"  && <ProspectView accounts={accounts} usage={usage} onRequestCredit={requestMapCredit} onNav={setNav} onOpenAccount={function(acc){setOpenAcc(acc);}} onUpdateAccount={function(updated){setAccounts(function(prev){return prev.map(function(a){return a.id===updated.id?updated:a;});});if(openAcc&&openAcc.id===updated.id)setOpenAcc(updated);}} onContactsRefresh={triggerContactsRefresh} onSaveRaw={function(nome,results,live,att,attName,onCreated,existing){ saveAccount(nome,buildData(nome,results),live,att,attName,onCreated,existing); }} lista={prospectLista} setLista={setProspectLista} loadingP={prospectLoading} setLoadingP={setProspectLoading} errorP={prospectError} setErrorP={setProspectError} showToast={showToast}/>}
               {nav==="accounts"  && <AccountsView accounts={accounts} onOpen={setOpenAcc} onStatusChange={updateStatus} onDelete={deleteAccount} usage={usage} onImport={importAccounts} onMap={mapAccount} mappingId={mappingId} onChangePlan={changePlan}/>}
               {nav==="sequences" && <SequenceView accounts={accounts} showToast={showToast} seqRequest={seqRequest} onConsumeSeqRequest={function(){setSeqRequest(null);}} authUser={authUser}/>}
               {nav==="tasks" && <TasksView showToast={showToast} authUser={authUser}/>}
