@@ -178,7 +178,7 @@ Responda APENAS com o JSON â€” sem texto antes ou depois, sem markdown extra alÃ
         "Authorization": "Bearer " + apiKey,
       },
       body: JSON.stringify({
-        model:           "llama-3.3-70b-versatile",
+        model:           "openai/gpt-oss-120b",
         max_tokens:      4096,
         temperature:     0.7,
         response_format: { type: "json_object" },
