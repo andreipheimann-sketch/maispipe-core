@@ -14,9 +14,10 @@ function isRetryable(status, msg) {
 }
 
 // ── Transport: Groq ────────────────────────────────────────────────────────────
-// Modelos em ordem de preferência. O 8b-instant tem limite de tokens/min MUITO
-// maior no free tier — é a rede de segurança quando o 70b está saturado.
-const GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+// Modelos em ordem de preferência. O gpt-oss-20b tem limite de tokens/min MUITO
+// maior no free tier — é a rede de segurança quando o gpt-oss-120b está saturado.
+// (llama-3.3-70b-versatile e llama-3.1-8b-instant foram depreciados pela Groq em 17/jun/2026)
+const GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 
 async function callGroqOnce(apiKey, systemText, userText, maxTokens, model, jsonMode) {
   const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -63,7 +64,10 @@ async function callGroq(apiKey, systemText, userText, maxTokens, jsonMode) {
 }
 
 // ── Transport: Gemini (v1beta + JSON mode) ────────────────────────────────────
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
+// gemini-2.0-flash e gemini-2.0-flash-lite foram desligados em 01/jun/2026.
+// gemini-2.5-flash tem desligamento agendado para 16/out/2026 — mantido como
+// primeira opção enquanto durar, com 3.5/3.1 como sucessores já na lista.
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
 
 async function callGemini(apiKey, systemText, userText, maxTokens, jsonMode) {
   if (!apiKey) return { ok: false, error: "GEMINI_API_KEY não configurada." };
