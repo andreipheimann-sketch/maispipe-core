@@ -1,5 +1,6 @@
 // BUILD: 1784926756
 import { useState, useEffect, useRef } from "react";
+import PipeAgent from "./PipeAgent.jsx";
 // -- STORAGE , localStorage (persists across reloads) -------------------------
 var STORAGE_PREFIX = "bdrhelper_";
 function storageGet(key) {
@@ -7915,6 +7916,25 @@ export default function App() {
       )}
       {/* ── Mobile bottom nav ─────────────────────────────────────────────── */}
       <MobileNav nav={nav} setNav={setNav} setupDone={setupDone}/>
+      {/* ── Assistente de voz (ElevenLabs) ── */}
+      <PipeAgent
+        agentId={import.meta.env.VITE_ELEVEN_AGENT_ID}
+        userName={(authUser.nome||"").split(" ")[0]}
+        allowedViews={["home","prospect","search","accounts","contacts","sequences","tasks","biblioteca","pipeline","relatorios","integracoes"]}
+        onNavigate={function(v){ if (setupDone || v === "home") setNav(v); }}
+        getSnapshot={function(){
+          var porEtapa = {};
+          accounts.forEach(function(a){
+            var l = (STATUS_CONFIG[a.status] || {}).label || "Sem etapa";
+            porEtapa[l] = (porEtapa[l] || 0) + 1;
+          });
+          return {
+            view: nav,
+            pipeline: { total: accounts.length, porEtapa: porEtapa },
+            accounts: { total: accounts.length, mapeadas: accounts.filter(function(a){ return a.mapped; }).length }
+          };
+        }}
+      />
     </div>
     </div>
     )}
