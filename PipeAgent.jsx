@@ -81,7 +81,7 @@ const css = `
 .pp-agent__hint{margin:0;font-size:11px;color:#64748b;text-align:center}
 @keyframes pp-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes pp-pulse{0%,100%{box-shadow:0 0 0 0 rgba(15,23,42,.35)}50%{box-shadow:0 0 0 12px rgba(15,23,42,0)}}
-@media (max-width:480px){.pp-agent{right:12px;bottom:12px}.pp-agent__panel{width:calc(100vw - 24px)}}
+@media (max-width:767px){.pp-agent{right:12px;bottom:76px}.pp-agent__panel{width:calc(100vw - 24px);max-height:calc(100dvh - 190px)}}
 @media (prefers-reduced-motion:reduce){.pp-agent__panel,.pp-agent__orb[data-state="speaking"]{animation:none}}
 `;
 
@@ -124,7 +124,7 @@ function PipeAgentInner({
         return {};
       }
     };
-    const out = (v) => JSON.stringify(v ?? {});
+    const out = (v) => JSON.stringify(v ?? { aviso: 'Sem dados disponíveis agora. Sugira ao usuário abrir a tela correspondente.' });
     return {
       get_current_view: () => out({ view: snap().view ?? 'desconhecida' }),
       get_pipeline_summary: () => out(snap().pipeline),
@@ -149,9 +149,9 @@ function PipeAgentInner({
       elapsedRef.current = 0;
       setPhase((p) => (p === 'error' ? p : 'idle'));
     },
-    onMessage: ({ message, source }) => {
+    onMessage: ({ message, role, source }) => {
       if (!message) return;
-      setMessages((m) => [...m.slice(-30), { id: `${Date.now()}-${m.length}`, from: source === 'user' ? 'user' : 'agent', text: message }]);
+      setMessages((m) => [...m.slice(-30), { id: `${Date.now()}-${m.length}`, from: (role || source) === 'user' ? 'user' : 'agent', text: message }]);
     },
     onError: (e) => {
       setError(typeof e === 'string' ? e : 'A conexão com o assistente falhou. Tente de novo.');
@@ -230,7 +230,7 @@ function PipeAgentInner({
   }, [connected, end, maxSessionSeconds]);
 
   // Encerra ao desmontar
-  useEffect(() => () => { conversation.endSession?.().catch?.(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { try { conversation.endSession(); } catch { /* sessão já encerrada */ } }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll da transcrição
   useEffect(() => {
